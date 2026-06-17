@@ -76,6 +76,54 @@ specsync pull -issue 42 -slug my-feature   # override the derived slug
 the issue so a later `specsync` push updates that same issue. A dry run reads the
 issue but writes nothing.
 
+## OpenSpec Workflow (Teams)
+
+OpenSpec has become the go-to planning layer for many developers. `specsync`
+extends that model for teams working on:
+
+- large codebases
+- multi-repo planning
+- customization and integrations
+- better collaboration
+
+### Lifecycle discipline
+
+Treat OpenSpec as an active planning lifecycle, not a one-off document dump:
+
+1. `propose` — define intent in `openspec/changes/<slug>/proposal.md`
+2. `tasks` — define execution in `tasks.md`
+3. `apply` — implement and check off tasks
+4. `sync` — project and reconcile with tracker issues via `specsync`
+
+Both paths are first-class:
+
+- spec-first: author local change, then run `specsync`
+- issue-first: start from issue, run `specsync pull`, then continue with `specsync`
+
+### `.status` and stage labels
+
+OpenSpec natively gives active/archived lifecycle via folder location.
+Optionally add `<change>/.status` for richer workflow stages. `specsync` maps
+that value to a `stage:<name>` label on the projected issue.
+
+### Check-in policy (intentional and contextual)
+
+`specsync` supports two valid team patterns:
+
+- **tracked OpenSpec** (like this repo): keep `openspec/` in git for public
+  dogfooding and auditability.
+- **local OpenSpec** (common in enterprise monorepos): keep OpenSpec/Beads as
+  local planning artifacts and sync the durable collaboration surface to issues.
+
+The tool is intentionally neutral: it reduces noise and friction either way, by
+keeping issue tracking and spec planning synchronized.
+
+### OpenSpec CLI usage boundary
+
+`specsync` keeps file-based parsing as the baseline so it works even when the
+OpenSpec CLI is unavailable. Teams can optionally run OpenSpec CLI checks
+locally or in CI when they want stricter lifecycle validation.
+
 ## How it works
 
 ```
