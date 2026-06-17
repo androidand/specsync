@@ -1,0 +1,9 @@
+# Build artifacts
+/specsync
+*.exe
+
+# specsync's local ref cache — projection ids are never committed
+.specsync/
+
+# OS / editor noise
+.DS_Store
