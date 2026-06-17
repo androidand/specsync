@@ -122,6 +122,49 @@ func TestGitHubPushUpdateReconcilesLabels(t *testing.T) {
 	}
 }
 
+func TestGitHubFindRequiresExactMarker(t *testing.T) {
+	p := &GitHubProvider{run: func(_ context.Context, args ...string) (string, error) {
+		if args[0] == "issue" && args[1] == "list" {
+			// First hit is a fuzzy body match, second is the exact marker.
+			return `[
+				{"number":1,"url":"https://github.com/o/r/issues/1","body":"mentions specsync:change=issue-first-intake in prose"},
+				{"number":2,"url":"https://github.com/o/r/issues/2","body":"<!-- specsync:change=issue-first-intake -->\n\nreal marker"}
+			]`, nil
+		}
+		return "", nil
+	}}
+
+	ref, err := p.Find(context.Background(), "issue-first-intake")
+	if err != nil {
+		t.Fatalf("Find: %v", err)
+	}
+	if ref == nil {
+		t.Fatal("Find returned nil ref, want exact marker match")
+	}
+	if ref.ID != "2" {
+		t.Fatalf("ref.ID = %q, want 2", ref.ID)
+	}
+}
+
+func TestGitHubFindReturnsNilWithoutExactMarker(t *testing.T) {
+	p := &GitHubProvider{run: func(_ context.Context, args ...string) (string, error) {
+		if args[0] == "issue" && args[1] == "list" {
+			return `[
+				{"number":1,"url":"https://github.com/o/r/issues/1","body":"specsync:change=issue-first-intake appears only in text"}
+			]`, nil
+		}
+		return "", nil
+	}}
+
+	ref, err := p.Find(context.Background(), "issue-first-intake")
+	if err != nil {
+		t.Fatalf("Find: %v", err)
+	}
+	if ref != nil {
+		t.Fatalf("Find returned ref %#v, want nil without exact marker", ref)
+	}
+}
+
 // stubProvider returns a fixed ref and records nothing else.
 type stubProvider struct{ ref Ref }
 

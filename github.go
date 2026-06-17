@@ -135,7 +135,7 @@ func (p *GitHubProvider) Find(ctx context.Context, slug string) (*Ref, error) {
 	// Search the inner token (not the full HTML comment) for friendlier indexing.
 	search := fmt.Sprintf("specsync:change=%s in:body", slug)
 	out, err := p.run(ctx, "issue", "list", "--state", "all",
-		"--search", search, "--json", "number,url", "--limit", "1")
+		"--search", search, "--json", "number,url,body", "--limit", "30")
 	if err != nil {
 		return nil, err
 	}
@@ -145,14 +145,18 @@ func (p *GitHubProvider) Find(ctx context.Context, slug string) (*Ref, error) {
 	var items []struct {
 		Number int    `json:"number"`
 		URL    string `json:"url"`
+		Body   string `json:"body"`
 	}
 	if err := json.Unmarshal([]byte(out), &items); err != nil {
 		return nil, fmt.Errorf("parse gh issue list: %w", err)
 	}
-	if len(items) == 0 {
-		return nil, nil
+	want := marker(slug)
+	for _, it := range items {
+		if strings.Contains(it.Body, want) {
+			return &Ref{Provider: p.Name(), ID: fmt.Sprintf("%d", it.Number), URL: it.URL}, nil
+		}
 	}
-	return &Ref{Provider: p.Name(), ID: fmt.Sprintf("%d", items[0].Number), URL: items[0].URL}, nil
+	return nil, nil
 }
 
 func (p *GitHubProvider) close(ctx context.Context, num string) error {
