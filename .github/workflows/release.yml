@@ -26,26 +26,25 @@ jobs:
 
   # Publish the npm wrapper after the release (and its binaries) exist, so the
   # postinstall download has something to fetch. The package version is taken
-  # from the tag; publish is skipped when no NPM_TOKEN secret is configured.
+  # from the tag. Auth uses npm Trusted Publishing (OIDC) — no token secret;
+  # configure the trusted publisher for @androidand/specsync on npmjs.com.
   npm:
     needs: goreleaser
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # required for npm Trusted Publishing (OIDC) + provenance
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           registry-url: "https://registry.npmjs.org"
+      - name: Use npm with trusted publishing support
+        run: npm install -g npm@latest
       - name: Sync package version to tag
         working-directory: npm
         run: npm version --no-git-tag-version --allow-same-version "${GITHUB_REF_NAME#v}"
-      - name: Publish to npm
+      - name: Publish to npm (OIDC trusted publishing)
         working-directory: npm
-        run: |
-          if [ -z "$NODE_AUTH_TOKEN" ]; then
-            echo "NPM_TOKEN secret not set; skipping npm publish."
-            exit 0
-          fi
-          npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --provenance --access public
