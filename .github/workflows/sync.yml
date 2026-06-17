@@ -1,0 +1,33 @@
+name: Sync specs → issues
+
+# Demonstrates specsync on itself: every OpenSpec change under openspec/changes/
+# is projected to a GitHub Issue, so this repo's backlog *is* its spec set.
+# Doubles as a reference "full sync" implementation teams can copy.
+
+on:
+  workflow_dispatch: # run manually from the Actions tab
+  push:
+    branches: [main]
+    paths: ["openspec/**"] # auto-sync whenever specs change
+
+permissions:
+  contents: read
+  issues: write # specsync creates/updates issues and labels via gh
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go build -o specsync ./cmd/specsync
+      - name: Preview (dry run)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./specsync -dry-run
+      - name: Sync OpenSpec changes to issues
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./specsync

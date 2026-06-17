@@ -12,6 +12,13 @@ It is a single self-contained binary that depends only on the Go standard
 library, so it runs in any OpenSpec project regardless of that project's
 language.
 
+> **This repo dogfoods itself.** Every issue here is generated from an OpenSpec
+> change in [`openspec/changes/`](openspec/changes) by specsync — via the
+> [`Sync specs → issues`](.github/workflows/sync.yml) workflow. The backlog you
+> see *is* the spec set: open any issue to read its proposal and live task
+> checklist. That workflow is also a copy-pasteable reference for keeping your
+> own repo's specs and issues in sync.
+
 ## Why
 
 OpenSpec keeps requirements out of chat history and in reviewable spec files.
