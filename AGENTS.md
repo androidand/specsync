@@ -1,37 +1,41 @@
 # Agent Workflow
 
-This repository uses a spec-first planning model with tracker synchronization.
+This repo uses OpenSpec as the planning layer and `specsync` as the tracker-sync
+layer.
 
-## Core Philosophy
+## Principles
 
-- OpenSpec is the planning layer.
-- specsync is the sync layer between OpenSpec changes and tracker issues.
-- Beads is optional local coordination, not repository data.
+- OpenSpec is the source of planning truth.
+- Issues are the collaboration surface; `specsync` keeps them aligned with specs.
+- Beads is optional and local for personal coordination, not repository data.
 
-## Required Tools
+## Must / Must Not
 
-Agents working in this repo should use:
+- MUST plan work in `openspec/changes/<slug>/` before broad implementation.
+- MUST keep `proposal.md` and `tasks.md` accurate while working.
+- MUST run `specsync` with `-dry-run` before mutating tracker state.
+- MUST add or update tests for code behavior changes.
+- MUST NOT commit `.beads/` artifacts.
+- MUST NOT commit local `.specsync/` caches from change folders.
 
-- OpenSpec for planning and change lifecycle
-- specsync for issue projection and issue-first pull flows
-- Beads for local task coordination when useful
+## Working Paths
 
-## Data Boundaries
+- Spec-first path:
+  1. Create/update change in `openspec/changes/<slug>/`.
+  2. `specsync -dry-run -slug <slug>`.
+  3. `specsync -slug <slug>`.
 
-- Keep Beads local-only. Do not commit `.beads/` artifacts.
-- Do not commit local `.specsync/` caches from change folders.
-- Commit OpenSpec changes while active in development.
-- After completion, keep only the merged OpenSpec result and archive completed changes.
+- Issue-first path:
+  1. `specsync pull -issue <n> [-slug <slug>]`.
+  2. Refine `proposal.md` and `tasks.md`.
+  3. `specsync -dry-run -slug <slug>` then `specsync -slug <slug>`.
 
-## Working Loop
+## Completion Rule
 
-1. Create or update an OpenSpec change in `openspec/changes/<slug>/`.
-2. Keep `proposal.md` and `tasks.md` current as the source of intent and execution.
-3. Run specsync in dry-run first, then sync for real.
-4. Implement code and tests, checking off OpenSpec tasks as work is completed.
-5. Merge completed OpenSpec results and archive the change.
+- When work is complete, ensure tasks are checked, sync once more, and archive
+  the completed OpenSpec change.
 
-## Writing Style
+## Documentation Style
 
 - Keep docs concise and practical.
 - Avoid AI-bloated wording and repetition.
