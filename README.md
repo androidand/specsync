@@ -32,16 +32,18 @@ stays current) as an issue.
 ## Install
 
 ```bash
+# npm (recommended) — installs the prebuilt binary for your platform
+npm i -g @androidand/specsync
+
 # Go
 go install github.com/androidand/specsync/cmd/specsync@latest
-
-# npm (after a tagged release is published)
-npm i -g @androidand/specsync
 
 # or grab a prebuilt binary from the Releases page
 ```
 
-A Homebrew tap is on the roadmap. Releases are built for linux/darwin on amd64/arm64.
+The npm package is a thin wrapper: its postinstall downloads the matching
+prebuilt binary (linux/darwin, amd64/arm64) from the GitHub release, so there is
+no Go toolchain or build step. A Homebrew tap is on the roadmap.
 
 ## Usage
 

@@ -9,7 +9,7 @@ layer.
 - Issues are the collaboration surface; `specsync` keeps them aligned with specs.
 - Beads is optional and local for personal coordination, not repository data.
 
-## Must / Must Not
+## Rules
 
 - MUST plan work in `openspec/changes/<slug>/` before broad implementation.
 - MUST keep `proposal.md` and `tasks.md` accurate while working.
@@ -18,10 +18,10 @@ layer.
 - MUST NOT commit `.beads/` artifacts.
 - MUST NOT commit local `.specsync/` caches from change folders.
 
-## Security (Public Repo)
+## Security
 
 - This is a public repository.
-- MUST NOT commit sensitive information, credentials, tokens, keys, customer data, or internal-only URLs.
+- MUST NOT commit sensitive information, credentials, tokens, keys, personal or internal data
 - MUST scrub examples, logs, and test fixtures for secrets before commit.
 - When in doubt, treat data as sensitive and keep it out of git.
 
@@ -41,6 +41,12 @@ layer.
 
 - When work is complete, ensure tasks are checked, sync once more, and archive
   the completed OpenSpec change.
+
+## Commit Messages
+
+- Brief, concise, informative — describe the change and why.
+- MUST NOT mention people or agents (no co-author trailers, no attributions).
+- Conventional-commit prefixes (`feat:`, `fix:`, `build:`, `chore:`) are fine.
 
 ## Documentation Style
 

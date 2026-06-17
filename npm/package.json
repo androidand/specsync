@@ -1,6 +1,6 @@
 {
   "name": "@androidand/specsync",
-  "version": "0.0.0",
+  "version": "0.2.0",
   "description": "Sync OpenSpec changes with work-tracker issues — standalone CLI",
   "bin": {
     "specsync": "bin/cli.js"
