@@ -37,6 +37,39 @@ func runGH(ctx context.Context, args ...string) (string, error) {
 
 func (p *GitHubProvider) Name() string { return "github" }
 
+// Get reads an existing issue so it can be pulled into a local change. It
+// satisfies the IssueReader capability, enabling the issue-first flow.
+func (p *GitHubProvider) Get(ctx context.Context, id string) (FetchedItem, error) {
+	out, err := p.run(ctx, "issue", "view", id, "--json", "number,url,title,body,state,labels")
+	if err != nil {
+		return FetchedItem{}, err
+	}
+	var v struct {
+		Number int    `json:"number"`
+		URL    string `json:"url"`
+		Title  string `json:"title"`
+		Body   string `json:"body"`
+		State  string `json:"state"`
+		Labels []struct {
+			Name string `json:"name"`
+		} `json:"labels"`
+	}
+	if err := json.Unmarshal([]byte(out), &v); err != nil {
+		return FetchedItem{}, fmt.Errorf("parse gh issue view: %w", err)
+	}
+	item := FetchedItem{
+		ID:     fmt.Sprintf("%d", v.Number),
+		URL:    v.URL,
+		Title:  v.Title,
+		Body:   v.Body,
+		Closed: strings.EqualFold(v.State, "closed"),
+	}
+	for _, l := range v.Labels {
+		item.Labels = append(item.Labels, l.Name)
+	}
+	return item, nil
+}
+
 // marker is the durable identity anchor embedded in the issue body. The ref
 // cache is only an optimization; this marker lets Find rebuild it from scratch.
 func marker(slug string) string { return fmt.Sprintf("<!-- specsync:change=%s -->", slug) }

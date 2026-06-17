@@ -7,6 +7,10 @@ human or an orchestrator) that later gains a spec, or a spec authored first that
 needs an issue. specsync must resolve "which issue is this change" robustly
 across both, without inventing a parallel identity scheme.
 
+Issue-first scaffolding is handled by the dedicated `github-issue-pull` change.
+This change focuses on deterministic link resolution once local and tracker
+artifacts exist.
+
 ## What
 
 Add a `Linker` abstraction that resolves a change to its issue ref by consulting,

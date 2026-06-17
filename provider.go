@@ -36,3 +36,23 @@ type WorkProvider interface {
 	// returning (nil, nil) when none exists. Used to rebuild a lost cache.
 	Find(ctx context.Context, slug string) (*Ref, error)
 }
+
+// FetchedItem is an existing provider item read back so it can be projected into
+// a local OpenSpec change. It is the inbound counterpart of WorkItem.
+type FetchedItem struct {
+	ID     string
+	URL    string
+	Title  string
+	Body   string
+	Closed bool
+	Labels []string
+}
+
+// IssueReader is an optional provider capability: reading an existing item by
+// its provider id. Providers that support the issue-first pull flow implement
+// it; the core detects it via type assertion so the minimal WorkProvider
+// contract stays small.
+type IssueReader interface {
+	// Get fetches an existing item by its provider id (e.g. issue number).
+	Get(ctx context.Context, id string) (FetchedItem, error)
+}

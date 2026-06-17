@@ -59,6 +59,23 @@ specsync -openspec path/to/openspec   # point at a non-default openspec dir
 **Always `-dry-run` first** in a new repo — it makes zero API calls and never
 touches local state.
 
+### Issue-first: pull an issue into a change
+
+Work often starts on the tracker — someone files an issue first. `specsync pull`
+reads that issue and scaffolds a local OpenSpec change from it, so you can plan
+it as a spec and keep syncing:
+
+```bash
+specsync pull -issue 42              # issue 42 -> openspec/changes/<slug>/
+specsync pull -issue 42 -dry-run     # read the issue, show what would be written
+specsync pull -issue 42 -slug my-feature   # override the derived slug
+```
+
+`pull` writes `proposal.md` (from the issue body, titled by the issue) and
+`tasks.md` (from a `## Tasks` checklist when present), and links the change to
+the issue so a later `specsync` push updates that same issue. A dry run reads the
+issue but writes nothing.
+
 ## How it works
 
 ```
