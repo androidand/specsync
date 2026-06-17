@@ -2,6 +2,10 @@
 /specsync
 *.exe
 
+# npm wrapper: downloaded binary + deps (only the cli.js shim is committed)
+/npm/bin/specsync
+/npm/node_modules/
+
 # specsync's local ref cache — projection ids are never committed
 .specsync/
 

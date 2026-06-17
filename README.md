@@ -25,10 +25,16 @@ stays current) as an issue.
 ## Install
 
 ```bash
+# Go
 go install github.com/androidand/specsync/cmd/specsync@latest
+
+# npm (after a tagged release is published)
+npm i -g @androidand/specsync
+
+# or grab a prebuilt binary from the Releases page
 ```
 
-Homebrew and an `npm i -g` wrapper are on the roadmap.
+A Homebrew tap is on the roadmap. Releases are built for linux/darwin on amd64/arm64.
 
 ## Usage
 
