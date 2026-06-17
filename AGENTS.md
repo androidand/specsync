@@ -18,6 +18,13 @@ layer.
 - MUST NOT commit `.beads/` artifacts.
 - MUST NOT commit local `.specsync/` caches from change folders.
 
+## Security (Public Repo)
+
+- This is a public repository.
+- MUST NOT commit sensitive information, credentials, tokens, keys, customer data, or internal-only URLs.
+- MUST scrub examples, logs, and test fixtures for secrets before commit.
+- When in doubt, treat data as sensitive and keep it out of git.
+
 ## Working Paths
 
 - Spec-first path:
