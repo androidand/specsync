@@ -22,13 +22,11 @@
   {
     "icon": "🔭",
     "title": "Planning scan",
-    "status": "soon",
     "body": "<code>specsync scan</code> shows what already exists for an area — in-flight changes, loose issues, recent commits — before you plan."
   },
   {
     "icon": "🧾",
     "title": "Release follow-up",
-    "status": "soon",
     "body": "<code>specsync release-plan</code> reconstructs what shipped, what's loose, and an advisory bump — using OpenSpec requirement deltas as a release signal no commit-only tool can see."
   },
   {
