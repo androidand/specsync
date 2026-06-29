@@ -54,10 +54,9 @@ one issue body:
   writes.
 - Identity marker + `refs.json` caching + marker-scan rebuild; children matched
   by normalized title.
-- Create-only `Push` for v1 (creates the epic + any missing child beads; never
-  re-titles or reopens).
-- Outbound status projection (follow-up): close a child bead when its task is
-  checked, so the projection reflects done-state both ways.
+- `Push` creates the epic + any missing child beads, and projects done-state
+  outward by closing a child bead when its task is checked. Monotonic: never
+  re-titles, never reopens (mirrors the inbound union).
 
 ## Non-goals
 

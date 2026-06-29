@@ -154,11 +154,14 @@ func (p *BeadsProvider) TaskStates(ctx context.Context, slug string, _ *Ref) (ma
 	return states, nil
 }
 
-// Push ensures the change's epic bead exists and that every task has a child
-// bead under it. It is create-only: existing beads are matched by marker (epic)
-// and normalized title (children) and left in place, so re-running never
-// duplicates the graph. Status flows the other way — the agent closes beads,
-// reconcile reads them back — so Push deliberately never reopens or re-titles.
+// Push ensures the change's epic bead exists, that every task has a child bead
+// under it, and that each child's open/closed status reflects its task's
+// checkbox — projecting done-state outward the way the GitHub provider renders
+// [x] into an issue body. Existing beads are matched by marker (epic) and
+// normalized title (children), so re-running never duplicates the graph; titles
+// are never rewritten (OpenSpec owns wording). Projection is monotonic, matching
+// the inbound union: a checked task closes its open bead, but Push never reopens
+// a closed one.
 func (p *BeadsProvider) Push(ctx context.Context, item WorkItem, existing *Ref) (Ref, error) {
 	fam, err := p.family(ctx, item.Slug)
 	if err != nil {
@@ -187,24 +190,35 @@ func (p *BeadsProvider) Push(ctx context.Context, item WorkItem, existing *Ref) 
 		ref = Ref{Provider: p.Name(), ID: id, URL: beadURL(id)}
 	}
 
-	// Ensure a child bead per task, matched by normalized title.
-	have := map[string]bool{}
-	for _, b := range fam {
-		if !b.isEpic() {
-			have[normalizeTaskText(b.Title)] = true
+	// Index existing child beads by normalized title.
+	children := map[string]*bead{}
+	for i := range fam {
+		if !fam[i].isEpic() {
+			children[normalizeTaskText(fam[i].Title)] = &fam[i]
 		}
-	}
-	for _, text := range taskTitles(item) {
-		if have[text] {
-			continue
-		}
-		if _, err := p.create(ctx, text, marker(item.Slug), ref.ID); err != nil {
-			return Ref{}, err
-		}
-		have[text] = true
 	}
 
-	// An archived change closes its epic; children are the agent's to close.
+	// Ensure a child bead per task, then project done-state: a checked task
+	// closes its open bead. Newly created beads start open, so an already-checked
+	// task is created and then closed.
+	for _, t := range itemTasks(item) {
+		child := children[t.Text]
+		if child == nil {
+			id, err := p.create(ctx, t.Text, marker(item.Slug), ref.ID)
+			if err != nil {
+				return Ref{}, err
+			}
+			child = &bead{ID: id, Title: t.Text, Status: "open"}
+			children[t.Text] = child
+		}
+		if t.Checked && !child.closed() {
+			if _, err := p.run(ctx, "close", child.ID, "-r", "completed in spec"); err != nil {
+				return Ref{}, err
+			}
+		}
+	}
+
+	// An archived change closes its epic.
 	if item.Closed && (epic == nil || !epic.closed()) {
 		if _, err := p.run(ctx, "close", ref.ID, "-r", "change archived"); err != nil {
 			return Ref{}, err
@@ -236,15 +250,22 @@ func (p *BeadsProvider) epicDescription(item WorkItem) string {
 	return strings.TrimSpace(proposal) + "\n\n" + marker(item.Slug)
 }
 
-// taskTitles extracts normalized task texts from a rendered WorkItem body,
-// reusing the same body splitter and task-line parser the reconcile path uses so
-// child-bead titles match exactly what reconcile keys on.
-func taskTitles(item WorkItem) []string {
+// taskState is one task line parsed from a rendered WorkItem body: its
+// normalized text (the child-bead match key) and checkbox state.
+type taskState struct {
+	Text    string
+	Checked bool
+}
+
+// itemTasks extracts the task lines (text + checkbox state) from a rendered
+// WorkItem body, reusing the same body splitter and task-line parser the
+// reconcile path uses so child-bead titles match exactly what reconcile keys on.
+func itemTasks(item WorkItem) []taskState {
 	_, tasks, _ := splitBody(item.Body, item.Title)
-	var out []string
+	var out []taskState
 	for _, line := range strings.Split(tasks, "\n") {
-		if text, _, ok := parseTaskLine(line); ok {
-			out = append(out, text)
+		if text, checked, ok := parseTaskLine(line); ok {
+			out = append(out, taskState{Text: text, Checked: checked})
 		}
 	}
 	return out

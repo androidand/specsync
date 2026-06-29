@@ -169,3 +169,43 @@ func TestSyncReconcilesFromBeads(t *testing.T) {
 		t.Fatalf("want exactly 1 reconciled flip, got %+v", res.Items)
 	}
 }
+
+func hasCloseCall(calls [][]string, id string) bool {
+	for _, c := range calls {
+		if len(c) > 0 && c[0] == "close" {
+			for _, a := range c[1:] {
+				if a == id {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// TestBeadsPushOutboundStatusProjection covers both branches of the outbound
+// projection: a checked task whose bead is open gets closed; a checked task
+// whose bead is already closed is left alone (monotonic — no redundant close,
+// no reopen). Family fixture: "first task" closed, "second task" open.
+func TestBeadsPushOutboundStatusProjection(t *testing.T) {
+	f := &fakeBD{list: beadsFamilyJSON}
+	p := NewBeadsProviderFunc(f.run)
+
+	item := WorkItem{
+		Slug:  "c1",
+		Title: "Change One",
+		Body:  "<!-- specsync:change=c1 -->\n\n# Change One\n\nbody\n\n## Tasks\n\n- [x] first task\n- [x] second task\n",
+	}
+	if _, err := p.Push(context.Background(), item, nil); err != nil {
+		t.Fatalf("Push: %v", err)
+	}
+	if !hasCloseCall(f.calls, "bd-2") {
+		t.Errorf("a checked task's open bead must be closed:\n%v", f.calls)
+	}
+	if hasCloseCall(f.calls, "bd-1") {
+		t.Errorf("an already-closed bead must not be closed again:\n%v", f.calls)
+	}
+	if f.created != 0 {
+		t.Errorf("both children already exist; nothing to create, got %d:\n%v", f.created, f.calls)
+	}
+}
