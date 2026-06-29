@@ -41,6 +41,34 @@ function download(u, dest, cb, redirects = 0) {
     .on("error", cb);
 }
 
+// Install the specsync skill into every known global agent skill directory.
+// Non-fatal: a missing ~/.claude or ~/.codex directory is normal.
+function installSkill() {
+  const skillSrc = path.join(__dirname, "..", "skills", "specsync", "SKILL.md");
+  if (!fs.existsSync(skillSrc)) return; // shouldn't happen in a published package
+
+  const agentDirs = [
+    path.join(os.homedir(), ".claude", "skills", "specsync"),
+    path.join(os.homedir(), ".codex", "skills", "specsync"),
+    path.join(os.homedir(), ".config", "opencode", "skills", "specsync"),
+    path.join(os.homedir(), ".copilot", "skills", "specsync"),
+    path.join(os.homedir(), ".agents", "skills", "specsync"),
+  ];
+
+  const skill = fs.readFileSync(skillSrc, "utf8");
+  for (const dir of agentDirs) {
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, "SKILL.md"), skill);
+      console.log(`specsync: skill installed → ${dir}`);
+    } catch (e) {
+      // Silently skip — permission issues or read-only filesystems are non-fatal.
+    }
+  }
+}
+
+installSkill();
+
 fs.mkdirSync(binDir, { recursive: true });
 download(url, tarball, (err) => {
   if (err) {

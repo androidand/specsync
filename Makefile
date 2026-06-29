@@ -1,7 +1,7 @@
 BIN    ?= specsync
 PREFIX ?= $(HOME)/.local/bin
 
-.PHONY: build test vet install clean
+.PHONY: build test vet install clean sync-skill
 
 build:
 	go build -o $(BIN) ./cmd/specsync
@@ -19,3 +19,10 @@ install: build
 
 clean:
 	rm -f $(BIN)
+
+# Propagate the canonical skill to the two derived locations.
+# Run this whenever skills/specsync/SKILL.md changes.
+sync-skill:
+	cp skills/specsync/SKILL.md cmd/specsync/SKILL.md
+	cp skills/specsync/SKILL.md npm/skills/specsync/SKILL.md
+	cp skills/specsync/SKILL.md .claude/skills/specsync/SKILL.md

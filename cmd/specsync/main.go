@@ -30,6 +30,8 @@ func main() {
 		runTrace(args[1:])
 	case len(args) > 0 && args[0] == "release-plan":
 		runReleasePlan(args[1:])
+	case len(args) > 0 && args[0] == "install-skill":
+		runInstallSkill(args[1:])
 	case len(args) > 0 && args[0] == "sync":
 		runSync(args[1:])
 	default:
