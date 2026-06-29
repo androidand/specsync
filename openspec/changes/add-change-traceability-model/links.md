@@ -1,0 +1,2 @@
+- androidand/specsync#16
+- androidand/specsync#17
