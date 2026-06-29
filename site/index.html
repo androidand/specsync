@@ -1,0 +1,597 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>specsync</title>
+<meta name="description" content="Keep OpenSpec change specs in sync with GitHub issues — without committing planning files to git.">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:           #F8F7F4;
+  --surface:      #FFFFFF;
+  --ink:          #1A1F2E;
+  --ink-2:        #5A6175;
+  --ink-3:        #9BA3B5;
+  --accent:       #1B5E3E;
+  --accent-mid:   #2D8A5E;
+  --accent-light: #E8F5EE;
+  --rule:         #E4E1DA;
+  --dark-bg:      #1A1F2E;
+  --dark-surface: #222838;
+  --dark-ink:     #E8EAF0;
+  --dark-ink-2:   #8D96AB;
+  --dark-green:   #4EC994;
+  --dark-dim:     #4A5270;
+  --font-sans:    -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-mono:    'SF Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  --max:          760px;
+}
+
+html { font-size: 16px; }
+body {
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--ink);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── NAV ── */
+nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  max-width: var(--max);
+  margin: 0 auto;
+  padding: 1.5rem 2rem;
+}
+.nav-logo {
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--ink);
+  text-decoration: none;
+  letter-spacing: -0.02em;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.nav-badge {
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--accent);
+  background: var(--accent-light);
+  padding: 0.15rem 0.45rem;
+  border-radius: 3px;
+  letter-spacing: 0.02em;
+}
+.nav-links {
+  display: flex;
+  gap: 1.5rem;
+  align-items: center;
+}
+.nav-links a {
+  font-size: 0.875rem;
+  color: var(--ink-2);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.nav-links a:hover { color: var(--ink); }
+.nav-github {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--ink) !important;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  padding: 0.35rem 0.75rem;
+  border-radius: 6px;
+  text-decoration: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.nav-github:hover {
+  border-color: var(--ink-3);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+
+/* ── HERO ── */
+.hero {
+  max-width: var(--max);
+  margin: 0 auto;
+  padding: 4rem 2rem 5rem;
+}
+.hero-eyebrow {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 1.25rem;
+}
+.hero h1 {
+  font-size: clamp(2.25rem, 5vw, 3.25rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  text-wrap: balance;
+  color: var(--ink);
+  margin-bottom: 1.25rem;
+}
+.hero h1 em {
+  font-style: normal;
+  color: var(--accent);
+}
+.hero-sub {
+  font-size: 1.125rem;
+  color: var(--ink-2);
+  max-width: 540px;
+  line-height: 1.65;
+  margin-bottom: 2.5rem;
+}
+
+/* ── TERMINAL ── */
+.terminal {
+  background: var(--dark-bg);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(26,31,46,0.18), 0 2px 8px rgba(26,31,46,0.12);
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  line-height: 1.7;
+}
+.terminal-bar {
+  background: var(--dark-surface);
+  padding: 0.6rem 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.dot { width: 12px; height: 12px; border-radius: 50%; }
+.dot-r { background: #FF5F56; }
+.dot-y { background: #FFBD2E; }
+.dot-g { background: #27C93F; }
+.terminal-body { padding: 1.25rem 1.5rem 1.5rem; }
+.t-prompt { color: var(--dark-dim); }
+.t-cmd { color: var(--dark-ink); }
+.t-out { color: var(--dark-ink-2); }
+.t-green { color: var(--dark-green); }
+.t-line { display: block; }
+
+/* typewriter effect */
+.typewriter {
+  overflow: hidden;
+  white-space: nowrap;
+  border-right: 2px solid var(--dark-green);
+  animation: typing 1.8s steps(40) 0.3s both, blink 0.8s step-end 2.1s 4;
+}
+@keyframes typing {
+  from { width: 0; }
+  to   { width: 100%; }
+}
+@keyframes blink {
+  50% { border-color: transparent; }
+}
+.t-after {
+  animation: fadein 0.4s ease 2.2s both;
+}
+@keyframes fadein {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .typewriter { animation: none; width: 100%; border-right: none; }
+  .t-after { animation: none; }
+}
+
+/* ── DIVIDER ── */
+.divider {
+  border: none;
+  border-top: 1px solid var(--rule);
+  max-width: var(--max);
+  margin: 0 auto;
+}
+
+/* ── LIGHT SECTION ── */
+.section {
+  max-width: var(--max);
+  margin: 0 auto;
+  padding: 4.5rem 2rem;
+}
+.section-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-bottom: 0.75rem;
+}
+.section h2 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+  text-wrap: balance;
+  margin-bottom: 1rem;
+}
+.section p {
+  color: var(--ink-2);
+  max-width: 580px;
+  margin-bottom: 1rem;
+}
+.section p:last-child { margin-bottom: 0; }
+
+/* ── STEPS ── */
+.steps { display: flex; flex-direction: column; gap: 3rem; margin-top: 3rem; }
+.step { display: grid; grid-template-columns: 1fr 1fr; gap: 2.5rem; align-items: start; }
+.step:nth-child(even) .step-text { order: 2; }
+.step:nth-child(even) .step-code { order: 1; }
+.step-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+.step h3 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  margin-bottom: 0.6rem;
+}
+.step p { font-size: 0.9375rem; color: var(--ink-2); margin-bottom: 0; }
+
+/* ── CODE BLOCK ── */
+.code-block {
+  background: var(--dark-bg);
+  border-radius: 8px;
+  padding: 1.25rem 1.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  line-height: 1.75;
+  overflow-x: auto;
+}
+.c-comment { color: var(--dark-dim); }
+.c-cmd { color: var(--dark-ink); }
+.c-flag { color: #7EB8D4; }
+.c-out { color: var(--dark-green); }
+.c-dim { color: var(--dark-ink-2); }
+code { display: block; white-space: pre; }
+
+/* ── DARK SECTION ── */
+.dark-section {
+  background: var(--dark-bg);
+  color: var(--dark-ink);
+  padding: 5rem 2rem;
+}
+.dark-section-inner {
+  max-width: var(--max);
+  margin: 0 auto;
+}
+.dark-section .section-label { color: var(--dark-dim); }
+.dark-section h2 { color: var(--dark-ink); }
+.dark-section p { color: var(--dark-ink-2); }
+
+/* ── FEATURES GRID ── */
+.features {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1.25rem;
+  margin-top: 2.5rem;
+}
+.feature {
+  background: var(--dark-surface);
+  border: 1px solid rgba(255,255,255,0.05);
+  border-radius: 8px;
+  padding: 1.25rem 1.25rem 1.5rem;
+}
+.feature-icon {
+  font-size: 1.25rem;
+  margin-bottom: 0.65rem;
+  display: block;
+}
+.feature h4 {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--dark-ink);
+  margin-bottom: 0.35rem;
+  letter-spacing: -0.01em;
+}
+.feature p {
+  font-size: 0.8125rem;
+  color: var(--dark-ink-2);
+  line-height: 1.55;
+  max-width: none;
+}
+
+/* ── INSTALL ── */
+.install-section {
+  max-width: var(--max);
+  margin: 0 auto;
+  padding: 5rem 2rem;
+  text-align: center;
+}
+.install-section h2 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  margin-bottom: 0.75rem;
+}
+.install-section p {
+  color: var(--ink-2);
+  margin-bottom: 2rem;
+  font-size: 1rem;
+}
+.install-block {
+  display: inline-flex;
+  align-items: center;
+  gap: 1rem;
+  background: var(--dark-bg);
+  border-radius: 8px;
+  padding: 1rem 1.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.9375rem;
+  color: var(--dark-ink);
+  margin-bottom: 1rem;
+}
+.install-prompt { color: var(--dark-dim); }
+.install-cmd { color: var(--dark-green); }
+.install-note {
+  font-size: 0.8125rem;
+  color: var(--ink-3);
+}
+.install-note a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.install-note a:hover { text-decoration: underline; }
+
+/* ── FOOTER ── */
+footer {
+  border-top: 1px solid var(--rule);
+  padding: 2rem;
+}
+.footer-inner {
+  max-width: var(--max);
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+.footer-logo {
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--ink-2);
+  text-decoration: none;
+}
+.footer-links {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+.footer-links a {
+  font-size: 0.8125rem;
+  color: var(--ink-3);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.footer-links a:hover { color: var(--ink-2); }
+
+/* ── RESPONSIVE ── */
+@media (max-width: 640px) {
+  .step { grid-template-columns: 1fr; }
+  .step:nth-child(even) .step-text { order: 1; }
+  .step:nth-child(even) .step-code { order: 2; }
+  .hero h1 { font-size: 2rem; }
+}
+
+/* ── FOCUS ── */
+a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a class="nav-logo" href="/">
+    specsync
+    <span class="nav-badge">v0.2.1</span>
+  </a>
+  <div class="nav-links">
+    <a href="#how-it-works">How it works</a>
+    <a href="#features">Features</a>
+    <a class="nav-github" href="https://github.com/androidand/specsync" target="_blank" rel="noopener">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      GitHub
+    </a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <p class="hero-eyebrow">OpenSpec × GitHub Issues</p>
+  <h1>The spec <em>is</em> the issue.</h1>
+  <p class="hero-sub">specsync keeps your OpenSpec change specs out of git and in your issue tracker — automatically. Plan locally, sync once, collaborate everywhere.</p>
+
+  <div class="terminal" role="img" aria-label="specsync demo terminal">
+    <div class="terminal-bar">
+      <span class="dot dot-r"></span>
+      <span class="dot dot-y"></span>
+      <span class="dot dot-g"></span>
+    </div>
+    <div class="terminal-body">
+      <span class="t-line">
+        <span class="t-prompt">~ </span><span class="t-cmd typewriter">specsync -slug my-feature</span>
+      </span>
+      <span class="t-line t-after" style="animation-delay:2.2s">
+        <span class="t-out">&nbsp;&nbsp;$ gh label create specsync --force</span>
+      </span>
+      <span class="t-line t-after" style="animation-delay:2.35s">
+        <span class="t-out">&nbsp;&nbsp;$ gh issue create --title "My feature" ...</span>
+      </span>
+      <span class="t-line t-after" style="animation-delay:2.5s">&nbsp;</span>
+      <span class="t-line t-after" style="animation-delay:2.6s">
+        <span class="t-green">&nbsp;&nbsp;created&nbsp; </span><span class="t-out">https://github.com/org/repo/issues/42&nbsp;&nbsp;(my-feature)</span>
+      </span>
+      <span class="t-line t-after" style="animation-delay:2.75s">
+        <span class="t-out">&nbsp;&nbsp;specsync: 1 created, 0 updated</span>
+      </span>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- HOW IT WORKS -->
+<section class="section" id="how-it-works">
+  <p class="section-label">How it works</p>
+  <h2>Two flows. One source of truth.</h2>
+  <p>Start from a local spec or an existing issue — specsync handles both directions and keeps them in sync as work progresses.</p>
+
+  <div class="steps">
+    <!-- step 1 -->
+    <div class="step">
+      <div class="step-text">
+        <p class="step-label">Spec-first</p>
+        <h3>Write the plan, create the issue</h3>
+        <p>Author <code style="display:inline;background:var(--accent-light);color:var(--accent);padding:0.1em 0.35em;border-radius:3px;font-family:var(--font-mono);font-size:0.85em">proposal.md</code> and <code style="display:inline;background:var(--accent-light);color:var(--accent);padding:0.1em 0.35em;border-radius:3px;font-family:var(--font-mono);font-size:0.85em">tasks.md</code> locally. Run specsync once — the GitHub issue appears, body and checklist intact. No branch, no pre-existing issue required.</p>
+      </div>
+      <div class="step-code">
+        <div class="code-block"><code><span class="c-comment"># Write your spec</span>
+mkdir -p openspec/changes/my-feature
+<span class="c-comment"># ... edit proposal.md and tasks.md ...</span>
+
+<span class="c-comment"># Preview</span>
+specsync <span class="c-flag">-dry-run -slug</span> my-feature
+
+<span class="c-comment"># Create the issue</span>
+specsync <span class="c-flag">-slug</span> my-feature
+<span class="c-out">  created  github.com/org/repo/issues/42</span></code></div>
+      </div>
+    </div>
+
+    <!-- step 2 -->
+    <div class="step">
+      <div class="step-text">
+        <p class="step-label">Issue-first</p>
+        <h3>Pull an existing issue into a spec</h3>
+        <p>When the issue already exists — created manually or via your backlog MCP — pull it. specsync materialises <code style="display:inline;background:var(--accent-light);color:var(--accent);padding:0.1em 0.35em;border-radius:3px;font-family:var(--font-mono);font-size:0.85em">proposal.md</code> and <code style="display:inline;background:var(--accent-light);color:var(--accent);padding:0.1em 0.35em;border-radius:3px;font-family:var(--font-mono);font-size:0.85em">tasks.md</code> from the issue body and caches the ref — the next push updates that same issue, never creates a duplicate.</p>
+      </div>
+      <div class="step-code">
+        <div class="code-block"><code><span class="c-comment"># Pull issue #4083 into a local spec</span>
+specsync pull <span class="c-flag">-issue</span> 4083
+<span class="c-out">  specsync: pulled issue 4083 -> </span>
+<span class="c-out">  openspec/changes/streamlined-modals/</span>
+<span class="c-out">    + proposal.md</span>
+<span class="c-out">    + tasks.md</span>
+
+<span class="c-comment"># Refine locally, then push back</span>
+specsync <span class="c-flag">-slug</span> streamlined-modals</code></div>
+      </div>
+    </div>
+
+    <!-- step 3 -->
+    <div class="step">
+      <div class="step-text">
+        <p class="step-label">Cross-repo</p>
+        <h3>Link issues across repositories</h3>
+        <p>Large features span multiple repos. Use <code style="display:inline;background:var(--accent-light);color:var(--accent);padding:0.1em 0.35em;border-radius:3px;font-family:var(--font-mono);font-size:0.85em">-repo</code> to target any repo, then <code style="display:inline;background:var(--accent-light);color:var(--accent);padding:0.1em 0.35em;border-radius:3px;font-family:var(--font-mono);font-size:0.85em">specsync link</code> to cross-reference both. Each issue gets a <code style="display:inline;background:var(--accent-light);color:var(--accent);padding:0.1em 0.35em;border-radius:3px;font-family:var(--font-mono);font-size:0.85em">## Related</code> section pointing to the sibling — maintained automatically on every push.</p>
+      </div>
+      <div class="step-code">
+        <div class="code-block"><code><span class="c-comment"># Create issues in two repos</span>
+specsync <span class="c-flag">-slug</span> feature-api <span class="c-flag">-repo</span> org/api
+specsync <span class="c-flag">-slug</span> feature-ui
+
+<span class="c-comment"># Cross-link them</span>
+specsync link feature-api feature-ui
+<span class="c-out">  linked  feature-api  &lt;-&gt;  .../issues/89</span>
+<span class="c-out">  linked  feature-ui   &lt;-&gt;  .../issues/42</span>
+<span class="c-out">  specsync link: 2 specs cross-linked</span></code></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- DARK: FEATURES -->
+<div class="dark-section" id="features">
+  <div class="dark-section-inner">
+    <p class="section-label">Features</p>
+    <h2 style="font-size:1.75rem;font-weight:700;letter-spacing:-0.025em;margin-bottom:0.75rem;color:var(--dark-ink)">Everything a spec needs. Nothing it doesn't.</h2>
+    <p style="color:var(--dark-ink-2);max-width:520px">specsync is a small, focused binary. No config file, no daemon, no SDK dependency — just <code style="font-family:var(--font-mono);font-size:0.875em;color:var(--dark-green)">gh</code> under the hood.</p>
+
+    <div class="features">
+      <div class="feature">
+        <span class="feature-icon">⚡</span>
+        <h4>Auto-detect repo</h4>
+        <p>Reads the git remote — no config required. Override with <code style="font-family:var(--font-mono);font-size:0.8em;color:var(--dark-green)">-repo owner/name</code> for any other repo.</p>
+      </div>
+      <div class="feature">
+        <span class="feature-icon">🔁</span>
+        <h4>Idempotent</h4>
+        <p>Re-run freely. An identity marker in the issue body prevents duplicates even if the ref cache is lost.</p>
+      </div>
+      <div class="feature">
+        <span class="feature-icon">🔗</span>
+        <h4>Cross-repo linking</h4>
+        <p><code style="font-family:var(--font-mono);font-size:0.8em;color:var(--dark-green)">specsync link</code> writes <code style="font-family:var(--font-mono);font-size:0.8em;color:var(--dark-green)">links.md</code> and pushes a Related section to both issues automatically.</p>
+      </div>
+      <div class="feature">
+        <span class="feature-icon">📥</span>
+        <h4>Issue-first pull</h4>
+        <p>Pull any existing issue into a local spec. The ref is cached so subsequent pushes update — never duplicate.</p>
+      </div>
+      <div class="feature">
+        <span class="feature-icon">🤖</span>
+        <h4>Agent-friendly</h4>
+        <p>A Claude Code skill file ships with specsync so AI agents can plan and create linked issues without extra instructions.</p>
+      </div>
+      <div class="feature">
+        <span class="feature-icon">🔍</span>
+        <h4>Dry-run everything</h4>
+        <p>Every command accepts <code style="font-family:var(--font-mono);font-size:0.8em;color:var(--dark-green)">-dry-run</code>. Preview the full rendered body and all <code style="font-family:var(--font-mono);font-size:0.8em;color:var(--dark-green)">gh</code> calls before committing.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- INSTALL -->
+<section class="install-section">
+  <h2>Get started in one line</h2>
+  <p>Requires Node 16+ for the installer. The binary itself has no runtime dependencies.</p>
+  <div class="install-block">
+    <span class="install-prompt">$</span>
+    <span class="install-cmd">npm install -g @androidand/specsync</span>
+  </div>
+  <p class="install-note">
+    Or install with Go: <code style="font-family:var(--font-mono);font-size:0.875em">go install github.com/androidand/specsync/cmd/specsync@latest</code><br>
+    <a href="https://github.com/androidand/specsync/blob/main/README.md" target="_blank" rel="noopener">Full documentation on GitHub →</a>
+  </p>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-inner">
+    <a class="footer-logo" href="/">specsync</a>
+    <div class="footer-links">
+      <a href="https://github.com/androidand/specsync" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://www.npmjs.com/package/@androidand/specsync" target="_blank" rel="noopener">npm</a>
+      <a href="https://github.com/androidand/specsync/blob/main/README.md" target="_blank" rel="noopener">Docs</a>
+      <a href="https://github.com/androidand/specsync/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
