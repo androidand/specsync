@@ -69,7 +69,7 @@ func syncOne(ctx context.Context, prov WorkProvider, c Change, dryRun bool) (ref
 		existingPtr = &existing
 	}
 
-	ref, err = prov.Push(ctx, workItemFor(c), existingPtr)
+	ref, err = prov.Push(ctx, WorkItemFor(c), existingPtr)
 	if err != nil {
 		return Ref{}, false, err
 	}
@@ -84,20 +84,22 @@ func syncOne(ctx context.Context, prov WorkProvider, c Change, dryRun bool) (ref
 	return ref, !hadRef, nil
 }
 
-// workItemFor renders a Change into the provider-agnostic WorkItem. tasks.md is
-// folded into the body as a checklist so providers without sub-issues still
-// show task progress. Links become a "## Related" section managed by specsync.
-func workItemFor(c Change) WorkItem {
+// WorkItemFor renders a Change into the provider-agnostic WorkItem. tasks.md
+// is folded in as a checklist; links.md becomes a ## Related section using
+// "[owner/repo#N](url)" GitHub autolink format.
+func WorkItemFor(c Change) WorkItem {
 	body := c.Body
 	if strings.TrimSpace(c.TasksMarkdown) != "" {
 		body = body + "\n\n## Tasks\n\n" + c.TasksMarkdown
 	}
 	if len(c.Links) > 0 {
-		lines := make([]string, len(c.Links))
-		for i, ref := range c.Links {
-			lines[i] = "- " + ref.URL
+		var lines []string
+		for _, ref := range c.Links {
+			lines = append(lines, "- "+refLabel(ref))
 		}
-		body = body + "\n\n## Related\n\n" + strings.Join(lines, "\n")
+		if len(lines) > 0 {
+			body = body + "\n\n## Related\n\n" + strings.Join(lines, "\n")
+		}
 	}
 	return WorkItem{
 		Slug:     c.Slug,
@@ -107,4 +109,19 @@ func workItemFor(c Change) WorkItem {
 		Priority: c.Priority,
 		Closed:   c.Archived,
 	}
+}
+
+// refLabel returns "[owner/repo#N](url)" for GitHub issue URLs so GitHub
+// renders them as rich cross-references. Falls back to bare URL otherwise.
+func refLabel(ref Ref) string {
+	const prefix = "https://github.com/"
+	if strings.HasPrefix(ref.URL, prefix) {
+		rest := ref.URL[len(prefix):]
+		parts := strings.SplitN(rest, "/", 4)
+		if len(parts) == 4 && parts[2] == "issues" {
+			short := parts[0] + "/" + parts[1] + "#" + parts[3]
+			return fmt.Sprintf("[%s](%s)", short, ref.URL)
+		}
+	}
+	return ref.URL
 }
