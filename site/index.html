@@ -308,6 +308,36 @@ code { display: block; white-space: pre; }
   line-height: 1.55;
   max-width: none;
 }
+.feature code {
+  font-family: var(--font-mono);
+  font-size: 0.8em;
+  color: var(--dark-green);
+}
+
+/* ── CHANGELOG ── */
+.changelog { max-width: var(--max); margin: 0 auto; padding: 4.5rem 2rem; }
+.release { padding: 1.5rem 0; border-bottom: 1px solid var(--rule); }
+.release:last-child { border-bottom: none; }
+.release-header { display: flex; align-items: baseline; gap: 1rem; margin-bottom: 0.5rem; flex-wrap: wrap; }
+.release-tag {
+  font-family: var(--font-mono);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+}
+.release-tag:hover { text-decoration: underline; }
+.release-date { font-size: 0.8125rem; color: var(--ink-3); }
+.release-body { font-size: 0.9rem; color: var(--ink-2); line-height: 1.65; }
+.release-body p { margin-bottom: 0.5rem; }
+.release-body p:last-child { margin-bottom: 0; }
+.release-body ul { padding-left: 1.25rem; margin: 0.25rem 0; }
+.release-body li { margin-bottom: 0.15rem; }
+.release-body code { font-family: var(--font-mono); font-size: 0.85em; background: var(--accent-light); color: var(--accent); padding: 0.1em 0.3em; border-radius: 3px; }
+.release-body h4, .release-body h5 { font-size: 0.875rem; font-weight: 600; margin: 0.75rem 0 0.25rem; color: var(--ink); }
+.changelog-empty { color: var(--ink-3); font-size: 0.9rem; }
+.changelog-empty a { color: var(--accent); text-decoration: none; }
+.changelog-empty a:hover { text-decoration: underline; }
 
 /* ── INSTALL ── */
 .install-section {
@@ -407,7 +437,7 @@ a:focus-visible {
 <nav>
   <a class="nav-logo" href="/">
     specsync
-    <span class="nav-badge">v0.2.1</span>
+    <span class="nav-badge">v0.1.1</span>
   </a>
   <div class="nav-links">
     <a href="#how-it-works">How it works</a>
@@ -532,39 +562,91 @@ specsync link feature-api feature-ui
     <p style="color:var(--dark-ink-2);max-width:520px">specsync is a small, focused binary. No config file, no daemon, no SDK dependency — just <code style="font-family:var(--font-mono);font-size:0.875em;color:var(--dark-green)">gh</code> under the hood.</p>
 
     <div class="features">
-      <div class="feature">
-        <span class="feature-icon">⚡</span>
-        <h4>Auto-detect repo</h4>
-        <p>Reads the git remote — no config required. Override with <code style="font-family:var(--font-mono);font-size:0.8em;color:var(--dark-green)">-repo owner/name</code> for any other repo.</p>
-      </div>
-      <div class="feature">
-        <span class="feature-icon">🔁</span>
-        <h4>Idempotent</h4>
-        <p>Re-run freely. An identity marker in the issue body prevents duplicates even if the ref cache is lost.</p>
-      </div>
-      <div class="feature">
-        <span class="feature-icon">🔗</span>
-        <h4>Cross-repo linking</h4>
-        <p><code style="font-family:var(--font-mono);font-size:0.8em;color:var(--dark-green)">specsync link</code> writes <code style="font-family:var(--font-mono);font-size:0.8em;color:var(--dark-green)">links.md</code> and pushes a Related section to both issues automatically.</p>
-      </div>
-      <div class="feature">
-        <span class="feature-icon">📥</span>
-        <h4>Issue-first pull</h4>
-        <p>Pull any existing issue into a local spec. The ref is cached so subsequent pushes update — never duplicate.</p>
-      </div>
-      <div class="feature">
-        <span class="feature-icon">🤖</span>
-        <h4>Agent-friendly</h4>
-        <p>A Claude Code skill file ships with specsync so AI agents can plan and create linked issues without extra instructions.</p>
-      </div>
-      <div class="feature">
-        <span class="feature-icon">🔍</span>
-        <h4>Dry-run everything</h4>
-        <p>Every command accepts <code style="font-family:var(--font-mono);font-size:0.8em;color:var(--dark-green)">-dry-run</code>. Preview the full rendered body and all <code style="font-family:var(--font-mono);font-size:0.8em;color:var(--dark-green)">gh</code> calls before committing.</p>
-      </div>
+      
+    <div class="feature">
+      <span class="feature-icon">⚡</span>
+      <h4>Auto-detect repo</h4>
+      <p>Reads the git remote — no config required. Override with <code>-repo owner/name</code> for any other repo.</p>
+    </div>
+
+    <div class="feature">
+      <span class="feature-icon">🔁</span>
+      <h4>Idempotent</h4>
+      <p>Re-run freely. An identity marker in the issue body prevents duplicates even if the ref cache is lost.</p>
+    </div>
+
+    <div class="feature">
+      <span class="feature-icon">🔗</span>
+      <h4>Cross-repo linking</h4>
+      <p><code>specsync link</code> writes <code>links.md</code> and pushes a Related section to both issues automatically.</p>
+    </div>
+
+    <div class="feature">
+      <span class="feature-icon">📥</span>
+      <h4>Issue-first pull</h4>
+      <p>Pull any existing issue into a local spec. The ref is cached so subsequent pushes update — never duplicate.</p>
+    </div>
+
+    <div class="feature">
+      <span class="feature-icon">🤖</span>
+      <h4>Agent-friendly</h4>
+      <p>A Claude Code skill file ships with specsync so AI agents can plan and create linked issues without extra instructions.</p>
+    </div>
+
+    <div class="feature">
+      <span class="feature-icon">🔍</span>
+      <h4>Dry-run everything</h4>
+      <p>Every command accepts <code>-dry-run</code>. Preview the full rendered body and all <code>gh</code> calls before committing.</p>
+    </div>
     </div>
   </div>
 </div>
+
+
+        <div class="release">
+          <div class="release-header">
+            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.2.1" target="_blank" rel="noopener">v0.2.1</a>
+            <span class="release-date">Jun 29, 2026</span>
+          </div>
+          <div class="release-body"><p><h4>Changelog</h4>
+* 9eef34dff156452f8015ec2b478eb772c6501f04: refactor: replace .specsync/links.json with links.md (@androidand)
+* fbfd9ea4e06b8b7ae6f30095c58a7668a3a3e7af: feat: render Related section as [owner/repo#N](url) autolinks (@androidand)
+* b9fcbd8e4bf1e1f73d7428655bb7197a1439fb53: fix: specsync link dry-run now shows links.md content and Related preview (@androidand)</p><p></p></div>
+        </div>
+
+        <div class="release">
+          <div class="release-header">
+            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.2.0" target="_blank" rel="noopener">v0.2.0</a>
+            <span class="release-date">Jun 29, 2026</span>
+          </div>
+          <div class="release-body"><p><h4>Changelog</h4>
+* b32ef8dc2107ff021ab94269750a2290a2d20cde: feat: cross-repo issues and specsync link command (@androidand)</p><p></p></div>
+        </div>
+
+        <div class="release">
+          <div class="release-header">
+            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.1.1" target="_blank" rel="noopener">v0.1.1</a>
+            <span class="release-date">Jun 17, 2026</span>
+          </div>
+          <div class="release-body"><p><h4>Changelog</h4>
+* a38fe3dff3aa4ce71787d0fadf55065b8ddee9bd: ci: self-sync workflow — generate this repo's issues from its own OpenSpec changes (@androidand)
+* d640285f044911c4f8ec03a8fcbc3819f3d6cadd: feat: issue-first pull — materialize an OpenSpec change from a GitHub issue (@androidand)
+* 42ad84bc6edbdf75e475ef092cd8dfd5cc4e87f9: Fix exact marker resolution in GitHub find (@androidand)
+* ce75cbbc39fe3fbfba18227c505bb281155390f4: Document OpenSpec team workflow guardrails (@androidand)
+* 4bdb2b9b4077923339c65a1edd9bd937d635b5c5: Add agent workflow rules for OpenSpec/specsync/Beads (@androidand)
+* bafeb467d27aec945cd0596184c237d25a81aecd: Tighten and clarify agent workflow rules (@androidand)
+* 068573bb3af6a21211cdce55c913c7463c5dd397: Add explicit public-repo no-secrets rule (@androidand)
+* e1a4d5e1a4fcec6701d9eb8cff978af55d502146: build(npm): promote npm install, sync version to tag, auto-publish on release (@androidand)
+* d58e229e67954c1251fa8bd49f92c514248ec391: build(npm): publish via Trusted Publishing (OIDC); set version 0.1.1 (@androidand)</p><p></p></div>
+        </div>
+<hr class="divider">
+<section class="changelog">
+  <p class="section-label">Changelog</p>
+  <h2 style="font-size:1.75rem;font-weight:700;letter-spacing:-0.025em;margin-bottom:2rem">Recent releases</h2>
+  <!-- CHANGELOG -->
+</section>
+
+<hr class="divider">
 
 <!-- INSTALL -->
 <section class="install-section">

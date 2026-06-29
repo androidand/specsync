@@ -1,0 +1,32 @@
+[
+  {
+    "icon": "⚡",
+    "title": "Auto-detect repo",
+    "body": "Reads the git remote — no config required. Override with <code>-repo owner/name</code> for any other repo."
+  },
+  {
+    "icon": "🔁",
+    "title": "Idempotent",
+    "body": "Re-run freely. An identity marker in the issue body prevents duplicates even if the ref cache is lost."
+  },
+  {
+    "icon": "🔗",
+    "title": "Cross-repo linking",
+    "body": "<code>specsync link</code> writes <code>links.md</code> and pushes a Related section to both issues automatically."
+  },
+  {
+    "icon": "📥",
+    "title": "Issue-first pull",
+    "body": "Pull any existing issue into a local spec. The ref is cached so subsequent pushes update — never duplicate."
+  },
+  {
+    "icon": "🤖",
+    "title": "Agent-friendly",
+    "body": "A Claude Code skill file ships with specsync so AI agents can plan and create linked issues without extra instructions."
+  },
+  {
+    "icon": "🔍",
+    "title": "Dry-run everything",
+    "body": "Every command accepts <code>-dry-run</code>. Preview the full rendered body and all <code>gh</code> calls before committing."
+  }
+]
