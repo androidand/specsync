@@ -191,6 +191,39 @@ func (p *GitHubProvider) Find(ctx context.Context, slug string) (*Ref, error) {
 	return nil, nil
 }
 
+// SearchOpenIssues finds open issues matching a free-text query, satisfying the
+// IssueSearcher capability used by `scan`.
+func (p *GitHubProvider) SearchOpenIssues(ctx context.Context, query string) ([]FetchedItem, error) {
+	args := append([]string{"issue", "list"}, p.repoFlag()...)
+	args = append(args, "--state", "open", "--search", query, "--json", "number,title,url,body", "--limit", "50")
+	out, err := p.run(ctx, args...)
+	if err != nil {
+		return nil, err
+	}
+	if out == "" || out == "[]" {
+		return nil, nil
+	}
+	var items []struct {
+		Number int    `json:"number"`
+		Title  string `json:"title"`
+		URL    string `json:"url"`
+		Body   string `json:"body"`
+	}
+	if err := json.Unmarshal([]byte(out), &items); err != nil {
+		return nil, fmt.Errorf("parse gh issue list: %w", err)
+	}
+	var out2 []FetchedItem
+	for _, it := range items {
+		out2 = append(out2, FetchedItem{
+			ID:    fmt.Sprintf("%d", it.Number),
+			Title: it.Title,
+			URL:   it.URL,
+			Body:  it.Body,
+		})
+	}
+	return out2, nil
+}
+
 func (p *GitHubProvider) close(ctx context.Context, num string) error {
 	args := append([]string{"issue", "close", num}, p.repoFlag()...)
 	_, err := p.run(ctx, args...)

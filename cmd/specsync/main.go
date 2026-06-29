@@ -24,6 +24,12 @@ func main() {
 		runPull(args[1:])
 	case len(args) > 0 && args[0] == "link":
 		runLink(args[1:])
+	case len(args) > 0 && args[0] == "scan":
+		runScan(args[1:])
+	case len(args) > 0 && args[0] == "trace":
+		runTrace(args[1:])
+	case len(args) > 0 && args[0] == "release-plan":
+		runReleasePlan(args[1:])
 	case len(args) > 0 && args[0] == "sync":
 		runSync(args[1:])
 	default:

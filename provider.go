@@ -56,3 +56,54 @@ type IssueReader interface {
 	// Get fetches an existing item by its provider id (e.g. issue number).
 	Get(ctx context.Context, id string) (FetchedItem, error)
 }
+
+// CommitSource yields the commits reachable in a revision range, parsed as
+// Conventional Commits. It is an optional, type-asserted capability (like
+// IssueReader): the Git implementation shells out to `git log`. An empty since
+// defaults to the most recent reachable tag; an empty until defaults to HEAD.
+// When paths is non-empty, only commits touching those path globs are returned
+// (the area-scope path filter).
+type CommitSource interface {
+	Commits(ctx context.Context, since, until string, paths []string) ([]Commit, error)
+}
+
+// OpenSpecDelta is one requirement delta of an OpenSpec change, as reported by
+// `openspec show --json --deltas-only`. Operation is ADDED, MODIFIED, or REMOVED.
+type OpenSpecDelta struct {
+	Spec        string
+	Operation   string
+	Requirement string
+}
+
+// OpenSpecChange is the metadata specsync reads from the openspec CLI for a
+// change. Status is OpenSpec's task-derived status (e.g. in-progress, complete),
+// distinct from specsync's own .status convention.
+type OpenSpecChange struct {
+	Name           string
+	Status         string
+	CompletedTasks int
+	TotalTasks     int
+	Deltas         []OpenSpecDelta
+}
+
+// IssueSearcher is an optional, type-asserted provider capability: finding open
+// issues by a free-text query. `scan` uses it to surface in-area issues that
+// link to no change. Providers that cannot search simply don't implement it, and
+// scan degrades to omitting the issues section.
+type IssueSearcher interface {
+	SearchOpenIssues(ctx context.Context, query string) ([]FetchedItem, error)
+}
+
+// OpenSpecSource reads OpenSpec change metadata, completion status, and
+// requirement deltas via the `openspec` CLI's JSON output. specsync defers to
+// OpenSpec for the spec model rather than re-parsing markdown; this is the
+// optional, type-asserted capability that provides it.
+type OpenSpecSource interface {
+	// Changes lists known changes with status (no deltas — cheap, called once).
+	Changes(ctx context.Context) ([]OpenSpecChange, error)
+	// Deltas returns the requirement deltas for one change (called per in-scope change).
+	Deltas(ctx context.Context, change string) ([]OpenSpecDelta, error)
+	// HasBaseline reports whether any accepted spec exists yet; when false, all
+	// deltas are necessarily ADDED.
+	HasBaseline(ctx context.Context) (bool, error)
+}
