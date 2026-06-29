@@ -98,17 +98,31 @@ func Pull(ctx context.Context, opts PullOptions) (PullResult, error) {
 func splitBody(body, title string) (proposal, tasks string) {
 	var prop, tsk []string
 	inTasks := false
+	inRelated := false
 	for _, line := range strings.Split(body, "\n") {
 		if strings.HasPrefix(strings.TrimSpace(line), "<!-- specsync:change=") {
 			continue
 		}
-		if !inTasks && strings.TrimSpace(line) == "## Tasks" {
+		trimmed := strings.TrimSpace(line)
+		if !inTasks && !inRelated && trimmed == "## Tasks" {
 			inTasks = true
+			continue
+		}
+		// "## Related" is a managed section — strip it on pull; links.json owns it.
+		if !inTasks && !inRelated && trimmed == "## Related" {
+			inRelated = true
+			continue
+		}
+		// A new H2 ends the managed sections and returns to proposal content.
+		if (inTasks || inRelated) && strings.HasPrefix(trimmed, "## ") {
+			inTasks = false
+			inRelated = false
+			prop = append(prop, line)
 			continue
 		}
 		if inTasks {
 			tsk = append(tsk, line)
-		} else {
+		} else if !inRelated {
 			prop = append(prop, line)
 		}
 	}

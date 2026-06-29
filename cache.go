@@ -50,3 +50,33 @@ func saveRef(changeDir, provider string, ref Ref) error {
 	}
 	return nil
 }
+
+func linksCachePath(changeDir string) string {
+	return filepath.Join(changeDir, ".specsync", "links.json")
+}
+
+func loadLinks(changeDir string) ([]Ref, error) {
+	b, err := os.ReadFile(linksCachePath(changeDir))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("read links cache: %w", err)
+	}
+	var refs []Ref
+	if err := json.Unmarshal(b, &refs); err != nil {
+		return nil, fmt.Errorf("parse links cache: %w", err)
+	}
+	return refs, nil
+}
+
+func saveLinks(changeDir string, links []Ref) error {
+	if err := os.MkdirAll(filepath.Join(changeDir, ".specsync"), 0o755); err != nil {
+		return fmt.Errorf("create .specsync: %w", err)
+	}
+	b, err := json.MarshalIndent(links, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal links cache: %w", err)
+	}
+	return os.WriteFile(linksCachePath(changeDir), append(b, '\n'), 0o644)
+}

@@ -86,11 +86,18 @@ func syncOne(ctx context.Context, prov WorkProvider, c Change, dryRun bool) (ref
 
 // workItemFor renders a Change into the provider-agnostic WorkItem. tasks.md is
 // folded into the body as a checklist so providers without sub-issues still
-// show task progress.
+// show task progress. Links become a "## Related" section managed by specsync.
 func workItemFor(c Change) WorkItem {
 	body := c.Body
 	if strings.TrimSpace(c.TasksMarkdown) != "" {
 		body = body + "\n\n## Tasks\n\n" + c.TasksMarkdown
+	}
+	if len(c.Links) > 0 {
+		lines := make([]string, len(c.Links))
+		for i, ref := range c.Links {
+			lines[i] = "- " + ref.URL
+		}
+		body = body + "\n\n## Related\n\n" + strings.Join(lines, "\n")
 	}
 	return WorkItem{
 		Slug:     c.Slug,

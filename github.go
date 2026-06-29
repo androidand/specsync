@@ -12,13 +12,22 @@ import (
 // holds no GitHub SDK dependency; everything is shelled out, which keeps this
 // package free of network/auth code and easy to fake in tests by swapping run.
 type GitHubProvider struct {
+	repo string // optional "owner/name"; empty = auto-detect from git remote
 	// run executes gh and returns trimmed stdout. Overridable in tests.
 	run func(ctx context.Context, args ...string) (string, error)
 }
 
-// NewGitHubProvider returns a provider that drives the real `gh` binary.
+// NewGitHubProvider returns a provider that drives the real `gh` binary,
+// targeting the repo auto-detected from the current directory's git remote.
 func NewGitHubProvider() *GitHubProvider {
 	return &GitHubProvider{run: runGH}
+}
+
+// NewGitHubProviderWithRepo returns a provider targeting an explicit repo
+// ("owner/name") instead of the git-remote-detected one. The ref cache key
+// becomes "github:owner/name" so cross-repo refs coexist in one refs.json.
+func NewGitHubProviderWithRepo(repo string) *GitHubProvider {
+	return &GitHubProvider{repo: repo, run: runGH}
 }
 
 // NewGitHubProviderFunc returns a provider driven by the given runner instead of
@@ -35,12 +44,28 @@ func runGH(ctx context.Context, args ...string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-func (p *GitHubProvider) Name() string { return "github" }
+func (p *GitHubProvider) Name() string {
+	if p.repo != "" {
+		return "github:" + p.repo
+	}
+	return "github"
+}
+
+// repoFlag returns ["--repo", "owner/name"] when a repo override is set,
+// or nil when gh should auto-detect from the git remote.
+func (p *GitHubProvider) repoFlag() []string {
+	if p.repo != "" {
+		return []string{"--repo", p.repo}
+	}
+	return nil
+}
 
 // Get reads an existing issue so it can be pulled into a local change. It
 // satisfies the IssueReader capability, enabling the issue-first flow.
 func (p *GitHubProvider) Get(ctx context.Context, id string) (FetchedItem, error) {
-	out, err := p.run(ctx, "issue", "view", id, "--json", "number,url,title,body,state,labels")
+	args := append([]string{"issue", "view", id}, p.repoFlag()...)
+	args = append(args, "--json", "number,url,title,body,state,labels")
+	out, err := p.run(ctx, args...)
 	if err != nil {
 		return FetchedItem{}, err
 	}
@@ -95,7 +120,8 @@ func (p *GitHubProvider) Push(ctx context.Context, item WorkItem, existing *Ref)
 	}
 
 	if existing == nil {
-		args := []string{"issue", "create", "--title", item.Title, "--body", body}
+		args := append([]string{"issue", "create"}, p.repoFlag()...)
+		args = append(args, "--title", item.Title, "--body", body)
 		for _, l := range labels {
 			args = append(args, "--label", l)
 		}
@@ -111,7 +137,8 @@ func (p *GitHubProvider) Push(ctx context.Context, item WorkItem, existing *Ref)
 	}
 
 	num := existing.ID
-	args := []string{"issue", "edit", num, "--title", item.Title, "--body", body}
+	args := append([]string{"issue", "edit", num}, p.repoFlag()...)
+	args = append(args, "--title", item.Title, "--body", body)
 	add, remove, err := p.labelDelta(ctx, num, labels)
 	if err != nil {
 		return Ref{}, err
@@ -134,8 +161,9 @@ func (p *GitHubProvider) Push(ctx context.Context, item WorkItem, existing *Ref)
 func (p *GitHubProvider) Find(ctx context.Context, slug string) (*Ref, error) {
 	// Search the inner token (not the full HTML comment) for friendlier indexing.
 	search := fmt.Sprintf("specsync:change=%s in:body", slug)
-	out, err := p.run(ctx, "issue", "list", "--state", "all",
-		"--search", search, "--json", "number,url,body", "--limit", "30")
+	args := append([]string{"issue", "list"}, p.repoFlag()...)
+	args = append(args, "--state", "all", "--search", search, "--json", "number,url,body", "--limit", "30")
+	out, err := p.run(ctx, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -160,7 +188,8 @@ func (p *GitHubProvider) Find(ctx context.Context, slug string) (*Ref, error) {
 }
 
 func (p *GitHubProvider) close(ctx context.Context, num string) error {
-	_, err := p.run(ctx, "issue", "close", num)
+	args := append([]string{"issue", "close", num}, p.repoFlag()...)
+	_, err := p.run(ctx, args...)
 	return err
 }
 
@@ -168,7 +197,8 @@ func (p *GitHubProvider) close(ctx context.Context, num string) error {
 // creates the label or updates it if present.
 func (p *GitHubProvider) ensureLabels(ctx context.Context, labels []string) error {
 	for _, l := range labels {
-		if _, err := p.run(ctx, "label", "create", l, "--force"); err != nil {
+		args := append([]string{"label", "create", l, "--force"}, p.repoFlag()...)
+		if _, err := p.run(ctx, args...); err != nil {
 			return err
 		}
 	}
@@ -178,7 +208,9 @@ func (p *GitHubProvider) ensureLabels(ctx context.Context, labels []string) erro
 // labelDelta computes which managed labels to add/remove so the issue ends up
 // with exactly the desired set. Labels outside our namespace are left alone.
 func (p *GitHubProvider) labelDelta(ctx context.Context, num string, desired []string) (add, remove []string, err error) {
-	out, err := p.run(ctx, "issue", "view", num, "--json", "labels")
+	args := append([]string{"issue", "view", num}, p.repoFlag()...)
+	args = append(args, "--json", "labels")
+	out, err := p.run(ctx, args...)
 	if err != nil {
 		return nil, nil, err
 	}

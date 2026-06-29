@@ -26,6 +26,7 @@ type Change struct {
 	Title         string // first H1 of proposal.md, falling back to Slug
 	Body          string // proposal.md contents
 	TasksMarkdown string // tasks.md contents, may be ""
+	Links         []Ref  // cross-repo related issues from .specsync/links.json
 	Stage         Stage  // from .status, else derived (active/archived)
 	Priority      int    // from .specsync/priority, 0 if unset
 	Archived      bool
@@ -112,6 +113,31 @@ func LoadChange(dir string, archived bool) (*Change, error) {
 		c.Priority = atoiSafe(strings.TrimSpace(string(p)))
 	}
 
+	// Optional related issues: .specsync/links.json (managed by specsync link).
+	if links, err := loadLinks(dir); err == nil {
+		c.Links = links
+	}
+
+	return c, nil
+}
+
+// loadChangeBySlug finds a change by slug, checking active then archived dirs.
+func loadChangeBySlug(openspecDir, slug string) (*Change, error) {
+	dir := filepath.Join(openspecDir, "changes", slug)
+	c, err := LoadChange(dir, false)
+	if err != nil {
+		return nil, fmt.Errorf("load change %q: %w", slug, err)
+	}
+	if c == nil {
+		dir = filepath.Join(openspecDir, "changes", "archive", slug)
+		c, err = LoadChange(dir, true)
+		if err != nil {
+			return nil, fmt.Errorf("load archived change %q: %w", slug, err)
+		}
+	}
+	if c == nil {
+		return nil, fmt.Errorf("no change found for slug %q", slug)
+	}
 	return c, nil
 }
 
