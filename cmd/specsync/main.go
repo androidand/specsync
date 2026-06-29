@@ -38,6 +38,7 @@ func runSync(args []string) {
 	slug := fs.String("slug", "", "sync only this change (default: all changes)")
 	repo := fs.String("repo", "", "target repo as owner/name (default: auto-detect from git remote)")
 	dryRun := fs.Bool("dry-run", false, "print the gh commands and rendered issue body without executing")
+	reconcile := fs.Bool("reconcile", true, "merge issue checkbox state back into tasks.md before pushing")
 	_ = fs.Parse(args)
 
 	abs, err := filepath.Abs(*openspec)
@@ -61,9 +62,13 @@ func runSync(args []string) {
 		Provider:    provider,
 		Slug:        *slug,
 		DryRun:      *dryRun,
+		Reconcile:   *reconcile,
 	})
 	if err != nil {
 		fail(err)
+	}
+	if *dryRun && *reconcile {
+		fmt.Println("(reconcile applies on a real sync — dry-run makes no issue reads)")
 	}
 	fmt.Println()
 	for _, it := range res.Items {
@@ -72,6 +77,13 @@ func runSync(args []string) {
 			verb = "created"
 		}
 		fmt.Printf("  %-8s %s  (%s)\n", verb, it.URL, it.Slug)
+		for _, f := range it.Flips {
+			state := "unchecked"
+			if f.Checked {
+				state = "checked"
+			}
+			fmt.Printf("           ↳ reconciled from issue: %s → %s\n", f.Text, state)
+		}
 	}
 	fmt.Printf("specsync: %d created, %d updated\n", res.Created, res.Updated)
 }

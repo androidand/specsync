@@ -140,6 +140,13 @@ WorkItem                          ->  issue       (via a pluggable provider)
 - **Idempotent** — running again *updates* the same issue; it never duplicates.
 - **Body** — `proposal.md` becomes the issue body; `tasks.md` is rendered as a
   task-list checklist so the tracker shows progress.
+- **Two-way task state** — a normal sync also merges checkbox state *back* from
+  the issue into `tasks.md` (a box ticked on GitHub sticks), then pushes the
+  merged result. The merge is a monotonic union — a task is done if either side
+  marked it done — so a teammate's tick on the issue is captured without ever
+  reverting un-pushed local progress. Spec still wins task *wording* and order;
+  only the checkbox flips. Disable with `-reconcile=false`. Dry runs never read
+  or write, so reconcile applies only on real syncs.
 - **Stage** — OpenSpec has no native lifecycle beyond active/archived, which
   specsync derives from the folder location. Write a richer stage name into
   `<change>/.status` and it becomes a `stage:<name>` label.

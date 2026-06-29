@@ -12,6 +12,7 @@ type Options struct {
 	Provider    WorkProvider // target tracker
 	Slug        string       // if set, only this change is synced
 	DryRun      bool         // when true, never persist refs to the cache
+	Reconcile   bool         // when true, merge issue checkbox state into tasks.md before pushing
 }
 
 // Result reports what a sync run did.
@@ -26,6 +27,7 @@ type ItemResult struct {
 	Slug    string
 	URL     string
 	Created bool
+	Flips   []TaskFlip // task states merged in from the issue (reconcile)
 }
 
 // Sync projects every OpenSpec change into the provider, idempotently. It is
@@ -44,7 +46,7 @@ func Sync(ctx context.Context, opts Options) (Result, error) {
 		if opts.Slug != "" && c.Slug != opts.Slug {
 			continue
 		}
-		ref, created, err := syncOne(ctx, opts.Provider, c, opts.DryRun)
+		ref, created, flips, err := syncOne(ctx, opts.Provider, c, opts.DryRun, opts.Reconcile)
 		if err != nil {
 			return res, fmt.Errorf("sync %s: %w", c.Slug, err)
 		}
@@ -53,15 +55,15 @@ func Sync(ctx context.Context, opts Options) (Result, error) {
 		} else {
 			res.Updated++
 		}
-		res.Items = append(res.Items, ItemResult{Slug: c.Slug, URL: ref.URL, Created: created})
+		res.Items = append(res.Items, ItemResult{Slug: c.Slug, URL: ref.URL, Created: created, Flips: flips})
 	}
 	return res, nil
 }
 
-func syncOne(ctx context.Context, prov WorkProvider, c Change, dryRun bool) (ref Ref, created bool, err error) {
+func syncOne(ctx context.Context, prov WorkProvider, c Change, dryRun, reconcile bool) (ref Ref, created bool, flips []TaskFlip, err error) {
 	refs, err := loadRefs(c.Dir)
 	if err != nil {
-		return Ref{}, false, err
+		return Ref{}, false, nil, err
 	}
 	existing, hadRef := refs[prov.Name()]
 	var existingPtr *Ref
@@ -69,19 +71,32 @@ func syncOne(ctx context.Context, prov WorkProvider, c Change, dryRun bool) (ref
 		existingPtr = &existing
 	}
 
+	// Inbound half of two-way sync: merge issue checkbox state into tasks.md
+	// before rendering. Skipped on dry-run to honor the zero-API-call contract
+	// (the dry-runner has no real issue to read). Reusing the resolved ref for
+	// the push avoids a second marker lookup.
+	if reconcile && !dryRun {
+		resolved, f, rerr := reconcileTaskState(ctx, prov, &c, existingPtr)
+		if rerr != nil {
+			return Ref{}, false, nil, rerr
+		}
+		existingPtr = resolved
+		flips = f
+	}
+
 	ref, err = prov.Push(ctx, WorkItemFor(c), existingPtr)
 	if err != nil {
-		return Ref{}, false, err
+		return Ref{}, false, nil, err
 	}
 	if dryRun {
 		// A dry run must never mutate local state, or it poisons the cache with
 		// a placeholder ref (e.g. issue #0) that breaks the next real run.
-		return ref, !hadRef, nil
+		return ref, !hadRef, nil, nil
 	}
 	if err := saveRef(c.Dir, prov.Name(), ref); err != nil {
-		return Ref{}, false, err
+		return Ref{}, false, nil, err
 	}
-	return ref, !hadRef, nil
+	return ref, !hadRef, flips, nil
 }
 
 // WorkItemFor renders a Change into the provider-agnostic WorkItem. tasks.md

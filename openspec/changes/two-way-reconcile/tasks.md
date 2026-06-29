@@ -1,0 +1,12 @@
+- [x] Read current task-list checkbox state from an issue (reuse `IssueReader.Get` + `splitBody` to isolate the `## Tasks` section — `parseIssueTaskStates`)
+- [x] Match issue task lines to `tasks.md` tasks by normalized text (`parseTaskLine` + `normalizeTaskText`)
+- [x] Merge issue→spec state into `tasks.md` (flip `[ ]`/`[x]` only); leave wording, order, and `[~]`/`[>]` markers untouched (`mergeTaskState` / `setTaskChecked`)
+- [x] Skip state for tasks absent from `tasks.md` (removed with the task; no orphan re-add)
+- [x] Sequence in sync: read issue state → merge into tasks.md on disk → render → push the merged result (`syncOne`, gated by `Options.Reconcile`)
+- [x] Preserved/managed sections untouched: reconcile only rewrites checkbox chars in `tasks.md`; `proposal.md` (incl. a future `## Original ask`) is never read or written
+- [x] Tests: issue tick survives sync; un-pushed local progress is not reverted; dry-run makes no reads and no writes
+- [ ] Document the layered reconcile policy in the **skill** (README done) — who-wins table
+- [x] Build, vet, test (36 pass); rebuild binary; smoke-test `-dry-run` reconcile note
+- [ ] Follow-up: promote merge to true 3-way (stored base state) so *un-checking* via the issue propagates — v1 is monotonic union, documented as a deliberate limitation
+- [ ] Follow-up: wording-change-in-spec + state-change-on-issue can't co-apply under text matching (the match breaks); revisit with a stable task id if it matters
+- [ ] Decide whether to flip `-reconcile` to default for the CI workflow (currently default-on in the CLI; library `Options.Reconcile` defaults off)
