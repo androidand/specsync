@@ -22,10 +22,11 @@ type LinkedPair struct {
 	Ref  Ref    // the issue ref to update
 }
 
-// Link records cross-references between specs in their .specsync/links.json
-// files and returns the pairs so the caller can sync each with the correct
-// provider. It never writes to GitHub itself — syncing is left to the caller
-// so provider selection (repo override, dry-runner) stays in one place.
+// Link records cross-references between specs in their links.md files (at the
+// change-dir root, replacing the former .specsync/links.json) and returns the
+// pairs so the caller can sync each with the correct provider. It never writes to
+// GitHub itself — syncing is left to the caller so provider selection (repo
+// override, dry-runner) stays in one place.
 func Link(opts LinkOptions) ([]LinkedPair, error) {
 	if len(opts.Slugs) < 2 {
 		return nil, fmt.Errorf("link: at least 2 slugs required")

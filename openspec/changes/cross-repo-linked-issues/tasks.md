@@ -1,0 +1,13 @@
+- [x] Add `repo string` field to `GitHubProvider`; update `Name()` to return `github:owner/repo` when set; add `repoFlag()` helper; thread `--repo` through all `gh` calls (Push, Find, Get, ensureLabels, labelDelta, close)
+- [x] Add `NewGitHubProviderWithRepo(repo string)` constructor
+- [x] Add `Links []Ref` to `Change`; read `.specsync/links.json` in `LoadChange`
+- [x] Add `loadLinks` / `saveLinks` to `cache.go`
+- [x] Add `loadChangeBySlug` helper to `change.go`
+- [x] Render `## Related` section in `workItemFor` when `c.Links` is non-empty
+- [x] Strip `## Related` in `splitBody` (like Tasks — managed section, not stored in proposal.md)
+- [x] Implement `Link(ctx, LinkOptions) ([]LinkedPair, error)` in `link.go`
+- [x] Add `-repo` flag to `runSync` in `main.go`; pass `NewGitHubProviderWithRepo` when set
+- [x] Add `link` subcommand to `main.go`; call `Link` then sync each returned pair
+- [x] Update dry-runner to handle `--repo` flag transparently
+- [x] Update skill file to document `-repo` and `link` subcommand with agent-ready examples
+- [x] Build, install (`make install` or `go install`), smoke-test with `-dry-run`

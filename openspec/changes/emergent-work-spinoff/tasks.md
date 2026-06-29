@@ -1,0 +1,10 @@
+- [ ] Add `spinoff` subcommand to `cmd/specsync/main.go`; flags `-from <slug>`, `-task <n>` or positional free text, `-repo`, `-kind bug|followup|task`, `-slug`, `-dry-run`
+- [ ] Slug derivation from discovery text (reuse the deriver `pull` already uses)
+- [ ] Scaffold writer in `spinoff.go`: seed `proposal.md` with discovery text + provenance line; create empty `tasks.md` (reuse `pull`'s change-writing path)
+- [ ] Mark originating parent task as moved (`- [>] moved: <child-slug>`), depends on `living-plan` task-state vocabulary
+- [ ] Record typed parent↔child link (`spawned-from`/`blocks`/`relates`), depends on `beads-memory-bridge` typed links
+- [ ] `-kind` maps to an issue label on the child
+- [ ] Dry-run: print the new folder path, seeded proposal, link, and label; write nothing, call no API
+- [ ] Tests: spinoff from task index vs free text; parent task marked moved; child proposal carries provenance; cross-repo spinoff sets repo key; dry-run is inert
+- [ ] Document `spinoff` in the skill + README with the three invocation forms
+- [ ] Build, install, smoke-test `specsync spinoff -from <x> -dry-run`

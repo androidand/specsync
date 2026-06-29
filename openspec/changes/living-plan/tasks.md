@@ -1,0 +1,12 @@
+- [ ] Extend tasks.md parser to recognize `- [~] dropped: <reason>` and `- [>] moved: <slug-or-#>` alongside `[ ]`/`[x]`
+- [ ] Render live checklist from `[ ]`/`[x]` only; exclude dropped/moved from progress count
+- [ ] Render a compact "Plan changes" footer in the issue body (`+N added · M done · K dropped · J moved`)
+- [ ] Add `## Original ask` as a preserved section: `pull` seeds it from the first issue body; treated as read-only on sync (never overwritten on push or re-pull, only rendered)
+- [ ] Verify push/re-pull round-trips leave `## Original ask` byte-identical; intent changes go in appended "Revised scope:" notes, not edits to the block
+- [ ] Add `## Discoveries` as a managed section: rendered into the issue, stripped in `splitBody` on pull (like `## Tasks` / `## Related`)
+- [ ] Add `specsync note -slug <slug> "<text>"` to append a line to `## Discoveries`
+- [ ] Track "added" count: derive from tasks present that were not in the originating issue/pull baseline (or a simple `+` author marker) — keep it lightweight
+- [ ] Dry-run for `note`: show the would-append line, write nothing
+- [ ] Tests: dropped/moved excluded from progress; footer counts; `## Discoveries` round-trips (rendered, then stripped on pull); `note` append is idempotent-safe
+- [ ] Document the task-state vocabulary, `## Discoveries`, and `specsync note` in the skill + README
+- [ ] Build, install, smoke-test rendering with a mixed-state tasks.md via `-dry-run`

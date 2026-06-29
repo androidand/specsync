@@ -1,0 +1,11 @@
+- [ ] Define retention policy resolution: `-retain move|prune` flag → `.specsync/config` → significance heuristic; add a small config reader (no new format, plain keys)
+- [ ] Add significance signal: `<change>/significant` marker recognized in `LoadChange`; heuristic fallback (has `design.md` or task count > threshold)
+- [ ] Add `Close`/label verification to the GitHub provider if not already covered; ensure `spec:archived` label is created idempotently
+- [ ] Implement `Archive(ctx, ArchiveOptions)` in a new `archive.go`: final push, unchecked-task check (refuse without `-force`), close + `spec:archived`, then apply retention
+- [ ] Retention `move`: relocate folder to `openspec/changes/archive/<slug>/`; preserve `.specsync/refs.json` so the marker→issue link survives
+- [ ] Retention `prune`: remove the local change folder after confirming the issue is closed and current
+- [ ] Add `archive` subcommand to `cmd/specsync/main.go`; wire flags (`-slug`, `-retain`, `-force`, `-dry-run`)
+- [ ] Dry-run: print the would-do plan (push diff, close, label, move/prune target) with zero mutations
+- [ ] Tests: archive with unchecked tasks blocked; `move` vs `prune` retention; significance heuristic; dry-run makes no API calls and no file changes
+- [ ] Update the specsync skill + README lifecycle section to document `specsync archive` and the retention/curation model
+- [ ] Build, install, smoke-test `specsync archive -slug <x> -dry-run`

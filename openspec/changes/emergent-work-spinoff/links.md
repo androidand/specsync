@@ -1,0 +1,2 @@
+- living-plan
+- beads-memory-bridge
