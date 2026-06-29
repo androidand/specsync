@@ -200,7 +200,7 @@ func runLink(args []string) {
 // targeting repo (auto-detect when empty).
 func makeProvider(repo string, dryRun bool) specsync.WorkProvider {
 	if dryRun {
-		return specsync.NewGitHubProviderFunc(dryRunner)
+		return specsync.NewGitHubProviderFuncWithRepo(repo, dryRunner)
 	}
 	if repo != "" {
 		return specsync.NewGitHubProviderWithRepo(repo)

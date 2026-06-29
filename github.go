@@ -36,6 +36,10 @@ func NewGitHubProviderFunc(run func(ctx context.Context, args ...string) (string
 	return &GitHubProvider{run: run}
 }
 
+func NewGitHubProviderFuncWithRepo(repo string, run func(ctx context.Context, args ...string) (string, error)) *GitHubProvider {
+	return &GitHubProvider{repo: repo, run: run}
+}
+
 func runGH(ctx context.Context, args ...string) (string, error) {
 	out, err := exec.CommandContext(ctx, "gh", args...).CombinedOutput()
 	if err != nil {
