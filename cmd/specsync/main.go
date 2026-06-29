@@ -45,8 +45,9 @@ func runSync(args []string) {
 	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
 	slug := fs.String("slug", "", "sync only this change (default: all changes)")
 	repo := fs.String("repo", "", "target repo as owner/name (default: auto-detect from git remote)")
-	dryRun := fs.Bool("dry-run", false, "print the gh commands and rendered issue body without executing")
-	reconcile := fs.Bool("reconcile", true, "merge issue checkbox state back into tasks.md before pushing")
+	providerName := fs.String("provider", "github", "work provider: github (default, human-facing) or beads (agent-facing)")
+	dryRun := fs.Bool("dry-run", false, "print the provider commands and rendered body without executing")
+	reconcile := fs.Bool("reconcile", true, "merge external task state back into tasks.md before pushing")
 	_ = fs.Parse(args)
 
 	abs, err := filepath.Abs(*openspec)
@@ -54,13 +55,15 @@ func runSync(args []string) {
 		fail(err)
 	}
 
-	provider := makeProvider(*repo, *dryRun)
+	provider := makeProvider(*repo, *dryRun, *providerName)
 	if *dryRun {
-		fmt.Println("DRY RUN — no GitHub calls are made")
-		if *repo != "" {
-			fmt.Printf("target: %s\n", *repo)
-		} else {
-			fmt.Println("target: auto-detected from the current repo's git remote")
+		fmt.Printf("DRY RUN — no %s calls are made\n", *providerName)
+		if *providerName == "github" {
+			if *repo != "" {
+				fmt.Printf("target: %s\n", *repo)
+			} else {
+				fmt.Println("target: auto-detected from the current repo's git remote")
+			}
 		}
 		fmt.Println()
 	}
@@ -117,7 +120,7 @@ func runPull(args []string) {
 
 	res, err := specsync.Pull(context.Background(), specsync.PullOptions{
 		OpenSpecDir: abs,
-		Provider:    makeProvider(*repo, false),
+		Provider:    makeProvider(*repo, false, "github"),
 		IssueID:     *issue,
 		Slug:        *slug,
 		DryRun:      *dryRun,
@@ -207,7 +210,7 @@ func runLink(args []string) {
 
 	// Real run: sync each spec with the provider matching its repo.
 	for _, p := range pairs {
-		provider := makeProvider(p.Repo, false)
+		provider := makeProvider(p.Repo, false, "github")
 		_, err := specsync.Sync(context.Background(), specsync.Options{
 			OpenSpecDir: abs,
 			Provider:    provider,
@@ -221,16 +224,26 @@ func runLink(args []string) {
 	fmt.Printf("specsync link: %d specs cross-linked\n", len(pairs))
 }
 
-// makeProvider returns a dry-runner for dry runs, or the real GitHub provider
-// targeting repo (auto-detect when empty).
-func makeProvider(repo string, dryRun bool) specsync.WorkProvider {
-	if dryRun {
-		return specsync.NewGitHubProviderFuncWithRepo(repo, dryRunner)
+// makeProvider builds the selected work provider, substituting a dry-runner that
+// prints commands instead of executing them when dryRun is set. github
+// (default) targets repo (auto-detect when empty); beads drives the local `bd`
+// graph and ignores repo.
+func makeProvider(repo string, dryRun bool, provider string) specsync.WorkProvider {
+	switch provider {
+	case "beads":
+		if dryRun {
+			return specsync.NewBeadsProviderFunc(beadsDryRunner)
+		}
+		return specsync.NewBeadsProvider()
+	default: // github
+		if dryRun {
+			return specsync.NewGitHubProviderFuncWithRepo(repo, dryRunner)
+		}
+		if repo != "" {
+			return specsync.NewGitHubProviderWithRepo(repo)
+		}
+		return specsync.NewGitHubProvider()
 	}
-	if repo != "" {
-		return specsync.NewGitHubProviderWithRepo(repo)
-	}
-	return specsync.NewGitHubProvider()
 }
 
 func printPreview(name, content string) {
@@ -272,6 +285,42 @@ func dryRunner(_ context.Context, args ...string) (string, error) {
 		return "https://github.com/<owner>/<repo>/issues/0", nil
 	case len(args) >= 2 && args[0] == "issue" && args[1] == "view":
 		return `{"labels":[]}`, nil
+	default:
+		return "", nil
+	}
+}
+
+// beadsDryRunner prints the bd commands that would run instead of executing
+// them, returning canned output so Push proceeds through its create path: an
+// empty list (no existing family) and a placeholder id for creates.
+func beadsDryRunner(_ context.Context, args ...string) (string, error) {
+	var inline []string
+	var desc string
+	for i := 0; i < len(args); i++ {
+		if (args[i] == "-d" || args[i] == "--description") && i+1 < len(args) {
+			desc = args[i+1]
+			inline = append(inline, args[i], "«see below»")
+			i++
+			continue
+		}
+		inline = append(inline, args[i])
+	}
+	fmt.Println("  $ bd " + shellJoin(inline))
+	if desc != "" {
+		fmt.Println("    ┌─ description ─────────────")
+		for _, line := range strings.Split(desc, "\n") {
+			fmt.Println("    │ " + line)
+		}
+		fmt.Println("    └───────────────────────────")
+	}
+
+	switch {
+	case len(args) >= 1 && args[0] == "list":
+		return "[]", nil // pretend no existing beads
+	case len(args) >= 1 && args[0] == "create":
+		return "bd-dryrun", nil
+	case len(args) >= 1 && args[0] == "show":
+		return "[]", nil
 	default:
 		return "", nil
 	}

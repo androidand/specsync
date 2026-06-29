@@ -5,9 +5,18 @@ layer.
 
 ## Principles
 
-- OpenSpec is the source of planning truth.
-- Issues are the collaboration surface; `specsync` keeps them aligned with specs.
-- Beads is optional and local for personal coordination, not repository data.
+- OpenSpec is the single source of planning truth.
+- `specsync` is a tracker-agnostic sync engine: it projects an OpenSpec change
+  into whatever tracker a project uses (GitHub by default; Beads and others
+  behind the `WorkProvider` interface) and reconciles task state back. One source
+  of truth, many projections — state never flows tracker-to-tracker.
+- `specsync` only synchronizes. It is not a memory store (long-term memory, if a
+  tracker offers it, is that tracker's concern — e.g. Beads' own `bd prime`
+  session hook handles its memory; specsync never reads or writes it), not a
+  control plane (it owns no orchestration), and it runs invoke-and-exit (no
+  daemon, no background state).
+- Trackers/issues are projections and the collaboration surface; `specsync` keeps
+  them aligned with the spec.
 
 ## Rules
 

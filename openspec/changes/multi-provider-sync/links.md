@@ -1,0 +1,3 @@
+- pluggable-providers
+- beads-provider
+- cross-repo-linked-issues

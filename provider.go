@@ -57,6 +57,22 @@ type IssueReader interface {
 	Get(ctx context.Context, id string) (FetchedItem, error)
 }
 
+// TaskStateReader is an optional, type-asserted provider capability: report the
+// external done-state of a change's tasks, keyed by normalized task text. It
+// exists because not every provider models tasks as checkboxes inside one item
+// body. The GitHub provider does (one issue, a "## Tasks" checklist), so it
+// needs no TaskStateReader — reconcile reads its body via IssueReader and parses
+// the checkboxes. Beads instead models one bead per task, so done-state lives in
+// per-bead open/closed status; it implements TaskStateReader to surface that.
+//
+// reconcile prefers a TaskStateReader when present and otherwise falls back to
+// the IssueReader+body-parse path, then feeds the resulting map through the same
+// merge. existing is the resolved ref (may be nil); a nil/empty result means
+// "no external state yet" and reconcile becomes a no-op.
+type TaskStateReader interface {
+	TaskStates(ctx context.Context, slug string, existing *Ref) (map[string]bool, error)
+}
+
 // CommitSource yields the commits reachable in a revision range, parsed as
 // Conventional Commits. It is an optional, type-asserted capability (like
 // IssueReader): the Git implementation shells out to `git log`. An empty since

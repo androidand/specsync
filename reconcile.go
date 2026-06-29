@@ -34,11 +34,10 @@ func reconcileTaskState(ctx context.Context, prov WorkProvider, c *Change, exist
 	if strings.TrimSpace(c.TasksMarkdown) == "" {
 		return existing, nil, nil
 	}
-	reader, ok := prov.(IssueReader)
-	if !ok {
-		return existing, nil, nil // provider can't read issues; nothing to merge
-	}
 
+	// Resolve the ref once, rebuilding it from the identity marker if the cache
+	// lacks it. Both the state-source paths below and the caller's subsequent
+	// push reuse it, so a marker lookup never happens twice.
 	ref := existing
 	if ref == nil {
 		found, ferr := prov.Find(ctx, c.Slug)
@@ -47,15 +46,11 @@ func reconcileTaskState(ctx context.Context, prov WorkProvider, c *Change, exist
 		}
 		ref = found
 	}
-	if ref == nil {
-		return existing, nil, nil // no issue yet — first push, nothing to reconcile
-	}
 
-	item, err := reader.Get(ctx, ref.ID)
+	states, err := externalTaskStates(ctx, prov, c.Slug, ref)
 	if err != nil {
 		return ref, nil, err
 	}
-	states := parseIssueTaskStates(item.Body)
 	if len(states) == 0 {
 		return ref, nil, nil
 	}
@@ -69,6 +64,30 @@ func reconcileTaskState(ctx context.Context, prov WorkProvider, c *Change, exist
 		return ref, nil, err
 	}
 	return ref, flips, nil
+}
+
+// externalTaskStates obtains task done-state from whichever capability the
+// provider supports, returning it keyed by normalized task text so the shared
+// mergeTaskState can consume it unchanged. A TaskStateReader (Beads: one bead
+// per task, status is the state) is preferred; otherwise an IssueReader's body
+// carries the rendered "## Tasks" checklist (GitHub) and parseIssueTaskStates
+// reads it. A provider with neither capability — or a GitHub issue that does not
+// exist yet (ref == nil) — yields no state, making reconcile a no-op. This is
+// the single point where state acquisition differs across providers; the merge,
+// the flip detection, and the tasks.md write are all shared below.
+func externalTaskStates(ctx context.Context, prov WorkProvider, slug string, ref *Ref) (map[string]bool, error) {
+	if tsr, ok := prov.(TaskStateReader); ok {
+		return tsr.TaskStates(ctx, slug, ref)
+	}
+	reader, ok := prov.(IssueReader)
+	if !ok || ref == nil {
+		return nil, nil
+	}
+	item, err := reader.Get(ctx, ref.ID)
+	if err != nil {
+		return nil, err
+	}
+	return parseIssueTaskStates(item.Body), nil
 }
 
 // parseIssueTaskStates extracts the ## Tasks checkbox state from an issue body,
