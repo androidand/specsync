@@ -454,7 +454,7 @@ a:focus-visible {
   <a class="nav-logo" href="/">
     specsync
     <span class="nav-badge"><!-- VERSION:start -->
-v0.3.0
+v0.4.0
 <!-- VERSION:end --></span>
   </a>
   <div class="nav-links">
@@ -592,6 +592,11 @@ specsync link feature-api feature-ui
         <p>Re-run freely. An identity marker in the issue body prevents duplicates even if the ref cache is lost.</p>
       </div>
       <div class="feature">
+        <span class="feature-icon">🧩</span>
+        <h4>Tracker-agnostic</h4>
+        <p>Not just GitHub. Project an OpenSpec change onto a <a href="https://github.com/steveyegge/beads" target="_blank" rel="noopener">Beads</a> task graph with <code>-provider beads</code> — the <code>WorkProvider</code> interface keeps the tracker your choice.</p>
+      </div>
+      <div class="feature">
         <span class="feature-icon">🔗</span>
         <h4>Cross-repo linking</h4>
         <p><code>specsync link</code> writes <code>links.md</code> and pushes a Related section to both issues automatically.</p>
@@ -670,6 +675,27 @@ specsync link feature-api feature-ui
   <!-- CHANGELOG:start -->
         <div class="release">
           <div class="release-header">
+            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.3.0" target="_blank" rel="noopener">v0.3.0</a>
+            <span class="release-date">Jun 29, 2026</span>
+          </div>
+          <div class="release-body"><p><h4>Changelog</h4>
+* e0b06312c35b78ecb7ea610fb756bece92e787b2: feat: add promotional site under site/ (@androidand)
+* ce79c32f22ee8dd93c018dad97bc2cb0d75ba4f7: feat(site): dynamic features from features.json, changelog from GitHub releases (@androidand)
+* a25384e1f7e53e2b3d8552c49ba36df87cf1b0af: fix: dry-run preview now shows --repo on every gh command (@androidand)
+* 2bff301924d03fca094eeb30ee0d7a757b2aefb5: feat: dry-run banner names the target repo (@androidand)
+* 1fe9eea56acff9126848a7b655ef6c70db7e8320: docs(openspec): add traceability graph foundation + two lenses (@androidand)
+* ebea2d1e4ac0093afa68b3f203145bac2e85eca0: docs(openspec): cross-link the three traceability changes (@androidand)
+* c9878db73fbfce0ccd8ef33b0405de488fe5b899: feat: two-way task-state reconcile (@androidand)
+* edaa75daabb19e18b892ab7509bae4a4de5cf38b: docs(openspec): tighten the two load-bearing seams + trim scope (@androidand)
+* d92ab8e6af9e0eea3b8edbcdff7c8d93f1dbe46a: docs: fix stale links.json reference in Link doc comment (@androidand)
+* e9b6000515f4d7187e116b522005441fa3b2d039: docs(openspec): gate monorepo per-package bump on deferred package config (@androidand)
+* b9bc335dd27c249bf63abf18215403ccfe1915a9: feat: traceability graph, planning scan, and release follow-up (@androidand)
+* 982265b928c790c26ffcbdc715feb8fb937fd768: docs(openspec): plan link-by-issue-reference (@androidand)
+* b5129bf3c72b10593639f2fdd57a687c3fb5b0e1: feat(site): truthful version + features, idempotent build (@androidand)
+* 58499028ff10b14f5dab9145f91c890e5f3dddec: feat(site): graduate scan and release-plan from soon (shipping in v0.3.0) (@androidand)</p><p></p></div>
+        </div>
+        <div class="release">
+          <div class="release-header">
             <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.2.1" target="_blank" rel="noopener">v0.2.1</a>
             <span class="release-date">Jun 29, 2026</span>
           </div>
@@ -685,22 +711,6 @@ specsync link feature-api feature-ui
           </div>
           <div class="release-body"><p><h4>Changelog</h4>
 * b32ef8dc2107ff021ab94269750a2290a2d20cde: feat: cross-repo issues and specsync link command (@androidand)</p><p></p></div>
-        </div>
-        <div class="release">
-          <div class="release-header">
-            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.1.1" target="_blank" rel="noopener">v0.1.1</a>
-            <span class="release-date">Jun 17, 2026</span>
-          </div>
-          <div class="release-body"><p><h4>Changelog</h4>
-* a38fe3dff3aa4ce71787d0fadf55065b8ddee9bd: ci: self-sync workflow — generate this repo's issues from its own OpenSpec changes (@androidand)
-* d640285f044911c4f8ec03a8fcbc3819f3d6cadd: feat: issue-first pull — materialize an OpenSpec change from a GitHub issue (@androidand)
-* 42ad84bc6edbdf75e475ef092cd8dfd5cc4e87f9: Fix exact marker resolution in GitHub find (@androidand)
-* ce75cbbc39fe3fbfba18227c505bb281155390f4: Document OpenSpec team workflow guardrails (@androidand)
-* 4bdb2b9b4077923339c65a1edd9bd937d635b5c5: Add agent workflow rules for OpenSpec/specsync/Beads (@androidand)
-* bafeb467d27aec945cd0596184c237d25a81aecd: Tighten and clarify agent workflow rules (@androidand)
-* 068573bb3af6a21211cdce55c913c7463c5dd397: Add explicit public-repo no-secrets rule (@androidand)
-* e1a4d5e1a4fcec6701d9eb8cff978af55d502146: build(npm): promote npm install, sync version to tag, auto-publish on release (@androidand)
-* d58e229e67954c1251fa8bd49f92c514248ec391: build(npm): publish via Trusted Publishing (OIDC); set version 0.1.1 (@androidand)</p><p></p></div>
         </div>
 <!-- CHANGELOG:end -->
 </section>
