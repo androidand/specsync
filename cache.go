@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // The ref cache lives under <change>/.specsync/ which is gitignored, satisfying
@@ -51,32 +52,30 @@ func saveRef(changeDir, provider string, ref Ref) error {
 	return nil
 }
 
-func linksCachePath(changeDir string) string {
-	return filepath.Join(changeDir, ".specsync", "links.json")
+// saveLinksToMD writes links.md in the change dir root. Each ref becomes a
+// "- owner/repo#N" line (or bare URL when the shorthand can't be derived).
+// links.md is the human- and agent-readable source of relationship truth;
+// it is loaded by LoadChange on every sync so the Related section stays current.
+func saveLinksToMD(changeDir string, refs []Ref) error {
+	var sb strings.Builder
+	for _, r := range refs {
+		sb.WriteString("- ")
+		sb.WriteString(ghShortEntry(r.URL))
+		sb.WriteByte('\n')
+	}
+	return os.WriteFile(filepath.Join(changeDir, "links.md"), []byte(sb.String()), 0o644)
 }
 
-func loadLinks(changeDir string) ([]Ref, error) {
-	b, err := os.ReadFile(linksCachePath(changeDir))
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("read links cache: %w", err)
+// ghShortEntry converts a GitHub issue URL to "owner/repo#N" shorthand.
+// Falls back to the original URL for non-GitHub or unexpected shapes.
+func ghShortEntry(url string) string {
+	const prefix = "https://github.com/"
+	if !strings.HasPrefix(url, prefix) {
+		return url
 	}
-	var refs []Ref
-	if err := json.Unmarshal(b, &refs); err != nil {
-		return nil, fmt.Errorf("parse links cache: %w", err)
+	rest := url[len(prefix):]
+	if i := strings.Index(rest, "/issues/"); i >= 0 {
+		return rest[:i] + "#" + rest[i+8:]
 	}
-	return refs, nil
-}
-
-func saveLinks(changeDir string, links []Ref) error {
-	if err := os.MkdirAll(filepath.Join(changeDir, ".specsync"), 0o755); err != nil {
-		return fmt.Errorf("create .specsync: %w", err)
-	}
-	b, err := json.MarshalIndent(links, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal links cache: %w", err)
-	}
-	return os.WriteFile(linksCachePath(changeDir), append(b, '\n'), 0o644)
+	return url
 }

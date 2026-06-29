@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -26,7 +27,7 @@ type Change struct {
 	Title         string // first H1 of proposal.md, falling back to Slug
 	Body          string // proposal.md contents
 	TasksMarkdown string // tasks.md contents, may be ""
-	Links         []Ref  // cross-repo related issues from .specsync/links.json
+	Links         []Ref  // resolved related issue refs from links.md
 	Stage         Stage  // from .status, else derived (active/archived)
 	Priority      int    // from .specsync/priority, 0 if unset
 	Archived      bool
@@ -37,18 +38,18 @@ type Change struct {
 func LoadChanges(openspecDir string) ([]Change, error) {
 	changesDir := filepath.Join(openspecDir, "changes")
 
-	active, err := loadChangeDir(changesDir, false)
+	active, err := loadChangeDir(changesDir, false, openspecDir)
 	if err != nil {
 		return nil, err
 	}
-	archived, err := loadChangeDir(filepath.Join(changesDir, "archive"), true)
+	archived, err := loadChangeDir(filepath.Join(changesDir, "archive"), true, openspecDir)
 	if err != nil {
 		return nil, err
 	}
 	return append(active, archived...), nil
 }
 
-func loadChangeDir(dir string, archived bool) ([]Change, error) {
+func loadChangeDir(dir string, archived bool, openspecDir string) ([]Change, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -61,7 +62,7 @@ func loadChangeDir(dir string, archived bool) ([]Change, error) {
 		if !e.IsDir() || e.Name() == "archive" {
 			continue
 		}
-		c, err := LoadChange(filepath.Join(dir, e.Name()), archived)
+		c, err := LoadChange(filepath.Join(dir, e.Name()), archived, openspecDir)
 		if err != nil {
 			return nil, err
 		}
@@ -72,9 +73,10 @@ func loadChangeDir(dir string, archived bool) ([]Change, error) {
 	return out, nil
 }
 
-// LoadChange reads a single change folder. It returns (nil, nil) when the folder
-// has no proposal.md and so is not a real change.
-func LoadChange(dir string, archived bool) (*Change, error) {
+// LoadChange reads a single change folder. openspecDir is used to resolve
+// slug-based entries in links.md; pass "" when not known (slug entries are
+// skipped). Returns (nil, nil) when the folder has no proposal.md.
+func LoadChange(dir string, archived bool, openspecDir string) (*Change, error) {
 	body, err := os.ReadFile(filepath.Join(dir, "proposal.md"))
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -100,8 +102,7 @@ func LoadChange(dir string, archived bool) (*Change, error) {
 		c.TasksMarkdown = string(tasks)
 	}
 
-	// Optional richer stage: a single line in <change>/.status. Vanilla OpenSpec
-	// projects omit this and keep the active/archived default.
+	// Optional richer stage: a single line in <change>/.status.
 	if st, err := os.ReadFile(filepath.Join(dir, ".status")); err == nil {
 		if s := strings.TrimSpace(string(st)); s != "" {
 			c.Stage = Stage(s)
@@ -113,10 +114,8 @@ func LoadChange(dir string, archived bool) (*Change, error) {
 		c.Priority = atoiSafe(strings.TrimSpace(string(p)))
 	}
 
-	// Optional related issues: .specsync/links.json (managed by specsync link).
-	if links, err := loadLinks(dir); err == nil {
-		c.Links = links
-	}
+	// Optional related issues: links.md (human/agent/machine-writable).
+	c.Links = parseLinksMD(dir, openspecDir)
 
 	return c, nil
 }
@@ -124,13 +123,13 @@ func LoadChange(dir string, archived bool) (*Change, error) {
 // loadChangeBySlug finds a change by slug, checking active then archived dirs.
 func loadChangeBySlug(openspecDir, slug string) (*Change, error) {
 	dir := filepath.Join(openspecDir, "changes", slug)
-	c, err := LoadChange(dir, false)
+	c, err := LoadChange(dir, false, openspecDir)
 	if err != nil {
 		return nil, fmt.Errorf("load change %q: %w", slug, err)
 	}
 	if c == nil {
 		dir = filepath.Join(openspecDir, "changes", "archive", slug)
-		c, err = LoadChange(dir, true)
+		c, err = LoadChange(dir, true, openspecDir)
 		if err != nil {
 			return nil, fmt.Errorf("load archived change %q: %w", slug, err)
 		}
@@ -139,6 +138,109 @@ func loadChangeBySlug(openspecDir, slug string) (*Change, error) {
 		return nil, fmt.Errorf("no change found for slug %q", slug)
 	}
 	return c, nil
+}
+
+// reShorthand matches "owner/repo#N" GitHub shorthand references.
+var reShorthand = regexp.MustCompile(`^[A-Za-z0-9_.\-]+/[A-Za-z0-9_.\-]+#\d+$`)
+
+// parseLinksMD reads links.md from changeDir and resolves each entry to a Ref.
+// Unresolvable slug entries (sibling not yet synced) are silently skipped;
+// they appear automatically once the sibling is synced and LoadChange re-runs.
+// Supported line formats:
+//
+//	- https://github.com/owner/repo/issues/N   (full URL)
+//	- owner/repo#N                             (GitHub shorthand)
+//	- some-slug                                (sibling slug, resolved via refs.json)
+//	- some-slug repo:owner/name                (sibling slug + explicit repo hint)
+func parseLinksMD(changeDir, openspecDir string) []Ref {
+	b, err := os.ReadFile(filepath.Join(changeDir, "links.md"))
+	if err != nil {
+		return nil
+	}
+	var refs []Ref
+	for _, rawLine := range strings.Split(string(b), "\n") {
+		line := strings.TrimSpace(rawLine)
+		if !strings.HasPrefix(line, "- ") {
+			continue
+		}
+		entry := strings.TrimSpace(line[2:])
+		if entry == "" {
+			continue
+		}
+		if ref := resolveEntry(entry, openspecDir); ref != nil {
+			refs = append(refs, *ref)
+		}
+	}
+	return refs
+}
+
+func resolveEntry(entry, openspecDir string) *Ref {
+	// Full URL.
+	if strings.HasPrefix(entry, "https://") || strings.HasPrefix(entry, "http://") {
+		return refFromURL(entry)
+	}
+
+	// GitHub shorthand: owner/repo#N.
+	if reShorthand.MatchString(entry) {
+		idx := strings.LastIndex(entry, "#")
+		repoPath := entry[:idx]
+		num := entry[idx+1:]
+		url := "https://github.com/" + repoPath + "/issues/" + num
+		return &Ref{Provider: "github:" + repoPath, ID: num, URL: url}
+	}
+
+	// Slug with optional "repo:owner/name" hint.
+	slug := entry
+	repoHint := ""
+	if idx := strings.Index(entry, " repo:"); idx > 0 {
+		slug = strings.TrimSpace(entry[:idx])
+		repoHint = strings.TrimSpace(entry[idx+6:])
+	}
+
+	if openspecDir == "" {
+		return nil // can't resolve slugs without knowing where siblings live
+	}
+
+	// Try to resolve via the sibling's ref cache.
+	for _, dir := range []string{
+		filepath.Join(openspecDir, "changes", slug),
+		filepath.Join(openspecDir, "changes", "archive", slug),
+	} {
+		refs, err := loadRefs(dir)
+		if err != nil || len(refs) == 0 {
+			continue
+		}
+		// Prefer the repo-hinted key, fall back to plain "github" or first found.
+		if repoHint != "" {
+			if ref, ok := refs["github:"+repoHint]; ok {
+				r := ref
+				return &r
+			}
+		}
+		_, ref := firstRef(refs)
+		r := ref
+		return &r
+	}
+	return nil // not yet synced — will resolve on the next push after sibling syncs
+}
+
+// refFromURL builds a Ref from a full GitHub issue URL, or a bare-URL Ref for
+// non-GitHub links.
+func refFromURL(url string) *Ref {
+	const prefix = "https://github.com/"
+	if strings.HasPrefix(url, prefix) {
+		rest := url[len(prefix):]
+		if i := strings.Index(rest, "/issues/"); i >= 0 {
+			repo := rest[:i]
+			num := rest[i+8:]
+			// Trim any trailing path segments.
+			if j := strings.IndexByte(num, '/'); j >= 0 {
+				num = num[:j]
+			}
+			return &Ref{Provider: "github:" + repo, ID: num, URL: url}
+		}
+	}
+	return &Ref{URL: url}
 }
 
 func firstHeading(md, fallback string) string {

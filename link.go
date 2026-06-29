@@ -65,7 +65,7 @@ func Link(opts LinkOptions) ([]LinkedPair, error) {
 		}
 
 		if !opts.DryRun {
-			if err := saveLinks(e.change.Dir, links); err != nil {
+			if err := saveLinksToMD(e.change.Dir, links); err != nil {
 				return nil, fmt.Errorf("save links for %s: %w", e.change.Slug, err)
 			}
 		}

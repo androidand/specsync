@@ -25,6 +25,7 @@ type PullResult struct {
 	IssueURL string
 	Proposal string
 	Tasks    string
+	Links    []string // URLs from the ## Related section, for dry-run display
 }
 
 // Pull materializes a local OpenSpec change from an existing issue. The change
@@ -59,13 +60,14 @@ func Pull(ctx context.Context, opts PullOptions) (PullResult, error) {
 		return PullResult{}, fmt.Errorf("could not derive a slug from issue %s; pass -slug", opts.IssueID)
 	}
 
-	proposal, tasks := splitBody(item.Body, item.Title)
+	proposal, tasks, relatedURLs := splitBody(item.Body, item.Title)
 	res := PullResult{
 		Slug:     slug,
 		Dir:      filepath.Join(opts.OpenSpecDir, "changes", slug),
 		IssueURL: item.URL,
 		Proposal: proposal,
 		Tasks:    tasks,
+		Links:    relatedURLs,
 	}
 
 	if opts.DryRun {
@@ -83,6 +85,18 @@ func Pull(ctx context.Context, opts PullOptions) (PullResult, error) {
 			return PullResult{}, fmt.Errorf("write tasks: %w", err)
 		}
 	}
+	// Preserve Related links as links.md so the next push renders them.
+	if len(relatedURLs) > 0 {
+		var refs []Ref
+		for _, u := range relatedURLs {
+			if r := refFromURL(u); r != nil {
+				refs = append(refs, *r)
+			}
+		}
+		if err := saveLinksToMD(res.Dir, refs); err != nil {
+			return PullResult{}, fmt.Errorf("write links.md: %w", err)
+		}
+	}
 	// Link the change to the source issue so the next push updates it.
 	ref := Ref{Provider: opts.Provider.Name(), ID: item.ID, URL: item.URL}
 	if err := saveRef(res.Dir, opts.Provider.Name(), ref); err != nil {
@@ -91,11 +105,11 @@ func Pull(ctx context.Context, opts PullOptions) (PullResult, error) {
 	return res, nil
 }
 
-// splitBody separates an issue body into proposal and tasks markdown. It drops
-// the specsync identity marker and the "## Tasks" heading that push inserts, and
-// guarantees the proposal opens with an H1 derived from the issue title. This is
-// the inverse of the body rendering in workItemFor + GitHubProvider.renderBody.
-func splitBody(body, title string) (proposal, tasks string) {
+// splitBody separates an issue body into proposal, tasks, and related-issue
+// URLs. It drops the specsync identity marker and the managed sections
+// (## Tasks, ## Related), and guarantees the proposal opens with an H1
+// derived from the issue title. This is the inverse of WorkItemFor rendering.
+func splitBody(body, title string) (proposal, tasks string, relatedURLs []string) {
 	var prop, tsk []string
 	inTasks := false
 	inRelated := false
@@ -108,7 +122,6 @@ func splitBody(body, title string) (proposal, tasks string) {
 			inTasks = true
 			continue
 		}
-		// "## Related" is a managed section — strip it on pull; links.json owns it.
 		if !inTasks && !inRelated && trimmed == "## Related" {
 			inRelated = true
 			continue
@@ -120,9 +133,18 @@ func splitBody(body, title string) (proposal, tasks string) {
 			prop = append(prop, line)
 			continue
 		}
-		if inTasks {
+		switch {
+		case inTasks:
 			tsk = append(tsk, line)
-		} else if !inRelated {
+		case inRelated:
+			// Collect URLs from "- [label](url)" or "- url" entries.
+			if strings.HasPrefix(trimmed, "- ") {
+				entry := strings.TrimSpace(trimmed[2:])
+				if u := extractURL(entry); u != "" {
+					relatedURLs = append(relatedURLs, u)
+				}
+			}
+		default:
 			prop = append(prop, line)
 		}
 	}
@@ -142,7 +164,24 @@ func splitBody(body, title string) (proposal, tasks string) {
 	if tasks != "" {
 		tasks += "\n"
 	}
-	return proposal, tasks
+	return proposal, tasks, relatedURLs
+}
+
+// extractURL pulls the href out of "[label](url)" or returns the string as-is
+// if it looks like a bare URL.
+func extractURL(s string) string {
+	if strings.HasPrefix(s, "[") {
+		if i := strings.Index(s, "]("); i >= 0 {
+			rest := s[i+2:]
+			if j := strings.Index(rest, ")"); j >= 0 {
+				return rest[:j]
+			}
+		}
+	}
+	if strings.HasPrefix(s, "https://") || strings.HasPrefix(s, "http://") {
+		return s
+	}
+	return ""
 }
 
 // startsWithH1 reports whether the first non-blank line is a markdown H1.
