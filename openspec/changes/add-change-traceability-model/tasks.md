@@ -31,7 +31,8 @@
 - [ ] Define a `Scope` value covering all three: a change, a revision range, and an area (paths and/or topic)
 - [ ] Resolve change↔commit edges from commit issue/PR refs and the existing `specsync:change=` marker / `links.md`
 - [ ] Resolve change↔workitem edges from existing `Ref`s (reuse current cache/marker logic)
-- [ ] Resolve change/issue/commit/PR by area (paths via git, topic via text match) so `scan` and `release-plan` share the resolver
+- [ ] Resolve change/issue/commit/PR by area so `scan` and `release-plan` share the resolver: paths = shell globs via `git log -- <glob>`, topic = case-insensitive substring over change titles/proposals + issue titles/bodies; order exact-path, then topic, then recency (tie: commit date DESC, then slug)
+- [ ] Source PR nodes from resolved references (commit footer/branch, linked-issue refs); record `pr-body` provenance only when a body is actually read via `gh` (best-effort), else carry the reference's provenance
 - [ ] Report unresolved relationships as gaps; never fabricate a link
 - [ ] Tests: synthetic changes + canned commits/refs assert edges, provenance, gap reporting, and all three scopes
 

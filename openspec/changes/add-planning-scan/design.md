@@ -37,8 +37,9 @@ The fast path is deterministic and free:
 
 - **paths** → `git log -- <globs>` yields commits touching the area, which link
   (via the trace engine) to changes/issues/PRs;
-- **topic** → text match over `openspec` change titles/proposals and open issue
-  titles/bodies (via `gh search`/`openspec list`).
+- **topic** → case-insensitive substring over `openspec` change titles/proposals
+  and open issue titles/bodies (via `gh search`/`openspec list`) — never fuzzy or
+  semantic, so the result set is reproducible.
 
 A semantic code-symbol graph (Graphify) is slower, token-expensive, and
 non-deterministic — the wrong tool for a tight planning loop. It stays an

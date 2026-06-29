@@ -6,7 +6,8 @@
 
 ## Resolution (over the trace engine)
 - [ ] Paths → commits via `git log -- <globs>` → linked changes/issues/PRs through the trace graph
-- [ ] Topic → text match over `openspec` change titles/proposals and open issue titles/bodies (`gh`/`openspec list`)
+- [ ] Topic → case-insensitive substring over `openspec` change titles/proposals and open issue titles/bodies (`gh`/`openspec list`)
+- [ ] "Open issues in area, no linked change": in-area = title/body contains an area path or matches the topic, or referenced by a commit touching an area path; no-linked-change = no `specsync:change=` marker AND no trace edge to an in-flight change
 - [ ] Deterministic ranking: exact path matches, then topic matches, then recency; stable order for clean `--json` diffs
 - [ ] Carry provenance on every result; never invent a connection
 

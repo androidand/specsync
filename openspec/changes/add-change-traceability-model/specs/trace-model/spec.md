@@ -33,6 +33,36 @@ and outbound (release) consumers share one resolver.
 - **WHEN** a trace is requested for an area (a path glob and/or a topic string)
 - **THEN** the trace includes the changes, issues, commits, and PRs that touch those paths or match the topic
 
+### Requirement: Area matching is deterministic and ordered
+When resolving an area scope, specsync SHALL match by deterministic rules only,
+never by semantic similarity or an LLM. A path entry is a shell glob matched
+against changed files via `git log -- <glob>`; a topic entry is a
+case-insensitive substring matched against OpenSpec change titles and proposal
+text and against issue titles and bodies. Results SHALL be ordered exact-path
+matches first, then topic matches, then by recency, breaking ties by commit date
+descending and then by slug, so repeated runs are byte-identical.
+
+#### Scenario: Topic is a substring, not a semantic match
+- **WHEN** an area topic is `modal` and a change's proposal contains the word `modal`
+- **THEN** that change is included
+- **AND** a change about `dialog` with no `modal` substring is not included
+
+#### Scenario: Stable ordering across runs
+- **WHEN** two changes match the same topic with the same recency
+- **THEN** they are ordered by slug, so repeated runs and `--json` output diff cleanly
+
+### Requirement: Source pull-request nodes from resolved references
+specsync SHALL add a pull-request node only when a PR is named by resolved
+evidence — a commit footer or branch name, or a reference on the linked issue.
+Reading a PR body to enrich the node requires the `gh` CLI and is best-effort;
+the `pr-body` provenance SHALL be recorded only when a PR body was actually read,
+otherwise the node carries the provenance of the reference that surfaced it.
+
+#### Scenario: PR known only by a commit reference
+- **WHEN** a commit footer references a pull request and `gh` is unavailable
+- **THEN** the PR appears as a node linked from that commit
+- **AND** its provenance is the commit footer, not a PR body
+
 ### Requirement: Never fabricate links
 specsync SHALL only record links it can resolve from real evidence; an
 unresolved relationship SHALL be reported as a gap, not invented.

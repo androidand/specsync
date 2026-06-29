@@ -120,14 +120,17 @@ deliberately light — detect the common tools, otherwise report "custom" or
 "none." The point is not an adapter framework; it is one honest line in the
 report that keeps specsync visibly in its lane:
 
-| Tool | Evidence | Note |
-|---|---|---|
-| release-please | `release-please-config.json`, manifest | |
-| changesets | `.changeset/config.json` | conceptually aligned with OpenSpec (records intent) |
-| release-it | `.release-it.*`, `package.json#release-it` | |
-| semantic-release | `.releaserc*`, `package.json#release` | |
-| standard-version | `.versionrc*` / dep | legacy/ad-hoc, not recommended |
-| custom / none | `scripts.release`, Makefile target, or nothing | bump stays advisory |
+Detection is neutral: name the tool and the responsibilities it owns; specsync
+takes no position on which tool is better.
+
+| Tool | Evidence |
+|---|---|
+| release-please | `release-please-config.json`, manifest |
+| changesets | `.changeset/config.json` |
+| release-it | `.release-it.*`, `package.json#release-it` |
+| semantic-release | `.releaserc*`, `package.json#release` |
+| standard-version | `.versionrc*` / dep |
+| custom / none | `scripts.release`, Makefile target, or nothing (bump stays advisory) |
 
 For this repo the detector reports goreleaser + manual tags (custom) and
 GitHub-generated notes — a useful self-test that specsync defers correctly.

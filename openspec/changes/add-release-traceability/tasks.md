@@ -8,7 +8,7 @@
 - [ ] Define `ReleaseImpact` (none|patch|minor|major) + `Reasons []string`
 - [ ] Map commit types (`feat`→minor, `fix`→patch, others→none); promote to major on `!`/`BREAKING CHANGE:`
 - [ ] Derive impact from OpenSpec requirement deltas (`REMOVED`→major, `ADDED`→minor, `MODIFIED`→patch) — the differentiating signal, sourced via the openspec CLI
-- [ ] **The join:** determine contributing changes by walking git history for completions/archives in `[since,until]`; read active-change deltas via `openspec show`, reconstruct archived-change deltas at their archive ref — do NOT treat HEAD's working-tree deltas as the whole signal
+- [ ] **The join:** find contributing changes by walking git history in `[since,until]`; archive commit = the commit that moves a change out of `changes/`; read active-change deltas via `openspec show`, read archived-change delta headers (ADDED/MODIFIED/REMOVED) via `git show <archive>^:<path>` (the one direct-markdown read, since the CLI can't target a past ref) — do NOT treat HEAD's working-tree deltas as the whole signal
 - [ ] Pre-baseline semantics: with no accepted baseline, all deltas are `ADDED` (spec signal ≤ minor); note the missing baseline in output
 - [ ] Combine as the maximum across signals; attach a human reason per contributing signal
 - [ ] Fixed default mapping (no config overrides yet); tests per signal, the combination, the git-join, and the pre-baseline case
@@ -16,7 +16,7 @@
 ## Release-tool detection (adapter, `releasetool.go`)
 - [ ] Filesystem probes for release-please, changesets, release-it, semantic-release, standard-version, custom, none
 - [ ] Return a light descriptor (name, detected, evidence, responsibilities owned); never import or invoke the tool
-- [ ] Note changesets as OpenSpec-aligned, standard-version as legacy; tests over fixture trees
+- [ ] Neutral reporting only — name the tool and what it owns, no editorializing on which tool is better; tests over fixture trees
 
 ## The report (core + `cmd/specsync`)
 - [ ] `trace` subcommand: raw resolved graph (`--change`, `--since`, `--until`, `--json`)

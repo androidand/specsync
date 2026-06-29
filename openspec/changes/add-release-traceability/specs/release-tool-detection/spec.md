@@ -36,12 +36,3 @@ or execute the release tool.
 #### Scenario: Detection is inert
 - **WHEN** detection runs
 - **THEN** no release-tool command is executed and no dependency on it is added
-
-### Requirement: Position standard-version and changesets
-specsync SHALL report `standard-version` as a legacy/ad-hoc workflow rather than
-a recommended path, and MAY note that `changesets` aligns conceptually with
-OpenSpec because both record release intent.
-
-#### Scenario: Standard-version labelled legacy
-- **WHEN** standard-version is detected
-- **THEN** the report labels it as legacy/ad-hoc

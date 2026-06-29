@@ -39,24 +39,32 @@ markdown itself.
 ### Requirement: Compute release deltas as a join with git history
 specsync SHALL determine which changes' deltas count toward a release range by
 joining git history with OpenSpec state: the changes completed or archived within
-`[since, until]`. For a still-active change it SHALL read deltas via `openspec
-show`; for a change archived within the range it SHALL reconstruct deltas from the
-change's spec files at the git ref where it existed. specsync SHALL NOT treat the
-working-tree deltas at `HEAD` as the whole release signal.
+`[since, until]`. A change is archived within the range when a commit in the range
+moves its directory out of `changes/` (into `changes/archive/` or by folding it
+into `specs/`); that commit is its archive commit. For a still-active change
+specsync SHALL read deltas via `openspec show --json --deltas-only`. For a change
+archived within the range specsync SHALL read the delta operation headers
+(`ADDED`/`MODIFIED`/`REMOVED`) from the change's own spec-delta files via `git
+show <archive-commit>^:<path>`, since `openspec show` can only target the working
+tree. specsync SHALL NOT treat the working-tree deltas at `HEAD` as the whole
+release signal. This historical read of delta headers is the one place specsync
+reads spec markdown directly rather than deferring to the `openspec` CLI, because
+the CLI cannot resolve a past git ref.
 
 #### Scenario: Current unreleased work since the last tag
 - **WHEN** the range is "since the last tag" and the contributing changes are still active
 - **THEN** their deltas are read directly via `openspec show --json --deltas-only`
 
 #### Scenario: A historical range spanning an archive
-- **WHEN** the range includes a commit that archived a change
-- **THEN** that change's deltas are reconstructed as of its archive, not from the current tree
+- **WHEN** the range includes a commit that moved a change out of `changes/`
+- **THEN** that commit is treated as the change's archive commit
+- **AND** its deltas are read from the change's spec-delta files at the archive commit's parent, not from the current tree
 
 ### Requirement: Define delta semantics before the first baseline
-Until a project has archived its first change (no accepted baseline), specsync
-SHALL treat every requirement delta as `ADDED` and SHALL NOT infer `MODIFIED` or
-`REMOVED`. In that state the spec-delta signal contributes at most `minor`; a
-`major` can come only from a commit breaking marker.
+specsync SHALL, until a project has archived its first change (no accepted
+baseline), treat every requirement delta as `ADDED` and SHALL NOT infer
+`MODIFIED` or `REMOVED`. In that state the spec-delta signal contributes at most
+`minor`; a `major` can come only from a commit breaking marker.
 
 #### Scenario: Pre-baseline project
 - **WHEN** `openspec list --specs` reports no accepted specs

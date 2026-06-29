@@ -20,6 +20,22 @@ same files.
 - **THEN** the scan reports that nothing exists here yet
 - **AND** does not invent a relationship
 
+### Requirement: Identify open issues in the area with no linked change
+specsync SHALL list an open issue under "no linked change" when it both falls in
+the area and has no linked change. An issue falls in the area when its title or
+body contains an area path or matches the area topic, or it is referenced by a
+commit that touched an area path. An issue has no linked change when it carries no
+issue-body `specsync:change=<slug>` marker and has no edge to any in-flight change
+in the resolved trace.
+
+#### Scenario: An in-area issue with no spec
+- **WHEN** an open issue's body references a file under the scanned area and the issue carries no `specsync:change=` marker
+- **THEN** `scan` lists it under open issues with no linked change
+
+#### Scenario: An in-area issue already linked is not relisted there
+- **WHEN** an open issue in the area carries a `specsync:change=<slug>` marker for an in-flight change
+- **THEN** it appears under that change, not under "no linked change"
+
 ### Requirement: Deterministic and read-only, no inference
 `scan` SHALL be deterministic and read-only, sourcing only from `openspec`,
 `git`, and `gh`, and SHALL NOT invoke an LLM, build a semantic code graph, or
