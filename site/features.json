@@ -20,6 +20,18 @@
     "body": "Pull any existing issue into a local spec. The ref is cached so subsequent pushes update — never duplicate."
   },
   {
+    "icon": "🔭",
+    "title": "Planning scan",
+    "status": "soon",
+    "body": "<code>specsync scan</code> shows what already exists for an area — in-flight changes, loose issues, recent commits — before you plan."
+  },
+  {
+    "icon": "🧾",
+    "title": "Release follow-up",
+    "status": "soon",
+    "body": "<code>specsync release-plan</code> reconstructs what shipped, what's loose, and an advisory bump — using OpenSpec requirement deltas as a release signal no commit-only tool can see."
+  },
+  {
     "icon": "🤖",
     "title": "Agent-friendly",
     "body": "A Claude Code skill file ships with specsync so AI agents can plan and create linked issues without extra instructions."
