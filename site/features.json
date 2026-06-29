@@ -10,6 +10,11 @@
     "body": "Re-run freely. An identity marker in the issue body prevents duplicates even if the ref cache is lost."
   },
   {
+    "icon": "🧩",
+    "title": "Tracker-agnostic",
+    "body": "Not just GitHub. Project an OpenSpec change onto a <a href=\"https://github.com/steveyegge/beads\" target=\"_blank\" rel=\"noopener\">Beads</a> task graph with <code>-provider beads</code> — the <code>WorkProvider</code> interface keeps the tracker your choice."
+  },
+  {
     "icon": "🔗",
     "title": "Cross-repo linking",
     "body": "<code>specsync link</code> writes <code>links.md</code> and pushes a Related section to both issues automatically."
