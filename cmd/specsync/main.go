@@ -48,6 +48,11 @@ func runSync(args []string) {
 	provider := makeProvider(*repo, *dryRun)
 	if *dryRun {
 		fmt.Println("DRY RUN — no GitHub calls are made")
+		if *repo != "" {
+			fmt.Printf("target: %s\n", *repo)
+		} else {
+			fmt.Println("target: auto-detected from the current repo's git remote")
+		}
 		fmt.Println()
 	}
 
