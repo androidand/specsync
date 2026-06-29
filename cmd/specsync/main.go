@@ -117,9 +117,8 @@ func runPull(args []string) {
 	}
 }
 
-// runLink writes .specsync/links.json for each slug (recording the other's
-// issue URL) and then syncs each spec so the "## Related" section appears in
-// both GitHub issues.
+// runLink writes links.md for each slug (recording the other's issue URL) and
+// then syncs each spec so the "## Related" section appears in both GitHub issues.
 //
 // Usage: specsync link [flags] <slug1> <slug2> [slug3...]
 func runLink(args []string) {
@@ -138,11 +137,6 @@ func runLink(args []string) {
 		fail(err)
 	}
 
-	if *dryRun {
-		fmt.Println("DRY RUN — no files or GitHub calls will be modified")
-		fmt.Println()
-	}
-
 	pairs, err := specsync.Link(specsync.LinkOptions{
 		OpenSpecDir: abs,
 		Slugs:       slugs,
@@ -152,14 +146,47 @@ func runLink(args []string) {
 		fail(err)
 	}
 
-	// Sync each spec with the provider matching its repo.
+	if *dryRun {
+		fmt.Println("DRY RUN — no files or GitHub calls will be modified")
+		fmt.Println()
+		for i, p := range pairs {
+			fmt.Printf("  %s/links.md would contain:\n", p.Slug)
+			for j, other := range pairs {
+				if j != i {
+					fmt.Printf("    - %s\n", other.Ref.URL)
+				}
+			}
+			// Render the Related section preview by loading the change and
+			// injecting the would-be links directly, bypassing disk.
+			c, err := specsync.LoadChange(p.Dir, false, abs)
+			if err == nil && c != nil {
+				c.Links = nil
+				for j, other := range pairs {
+					if j != i {
+						c.Links = append(c.Links, other.Ref)
+					}
+				}
+				item := specsync.WorkItemFor(*c)
+				if idx := strings.Index(item.Body, "\n\n## Related\n\n"); idx >= 0 {
+					fmt.Printf("\n  Related section in %s issue:\n", p.Slug)
+					for _, line := range strings.Split(item.Body[idx+2:], "\n") {
+						fmt.Println("    " + line)
+					}
+				}
+			}
+			fmt.Println()
+		}
+		fmt.Printf("specsync link: would cross-link %d specs\n", len(pairs))
+		return
+	}
+
+	// Real run: sync each spec with the provider matching its repo.
 	for _, p := range pairs {
-		provider := makeProvider(p.Repo, *dryRun)
+		provider := makeProvider(p.Repo, false)
 		_, err := specsync.Sync(context.Background(), specsync.Options{
 			OpenSpecDir: abs,
 			Provider:    provider,
 			Slug:        p.Slug,
-			DryRun:      *dryRun,
 		})
 		if err != nil {
 			fail(fmt.Errorf("sync %s after link: %w", p.Slug, err))
