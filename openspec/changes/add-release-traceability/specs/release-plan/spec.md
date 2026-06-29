@@ -52,9 +52,15 @@ for bumping, tagging, changelog, and publishing; the printed bump is advisory.
 - **AND** marks specsync's bump as advisory only
 
 ### Requirement: Per-package report in a monorepo
-When packages are configured, specsync SHALL compute and print a separate
+Package configuration is deferred (see `release-impact`: no configuration file
+yet); until it exists specsync SHALL report a single whole-repo bump. When
+packages are later configured, specsync SHALL compute and print a separate
 advisory bump per package based on the artifacts whose paths match it.
 
+#### Scenario: No package configuration yet
+- **WHEN** no packages are configured
+- **THEN** specsync reports one whole-repo advisory bump, not per-package bumps
+
 #### Scenario: Two packages, different bumps
-- **WHEN** commits touch package A with a `feat` and package B with only `chore`
+- **WHEN** packages are configured and commits touch package A with a `feat` and package B with only `chore`
 - **THEN** package A is advised `minor` and package B `none`
