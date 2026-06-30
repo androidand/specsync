@@ -7,9 +7,11 @@ description: Plan and synchronize OpenSpec changes with GitHub Issues using the 
 
 OpenSpec files are the source of planning truth. GitHub Issues are the collaboration projection. Always dry-run before writing.
 
+specsync handles **tracker sync** (OpenSpec ↔ GitHub/Beads). Use the **OPSX workflow** (`/opsx:*` commands) for the local change lifecycle: creating, managing, and archiving changes.
+
 ## Prerequisites
 
-- **OpenSpec CLI** — install: `npm install -g @fission-ai/openspec@latest`. Initialize a project with `openspec init --tools <tools>` (e.g. `--tools opencode`).
+- **OpenSpec CLI** — install: `npm install -g @fission-ai/openspec@latest`. Initialize with `openspec init --tools <tools>` (e.g. `--tools opencode`).
 - **GitHub CLI** — needed for `gh issue list` and specsync's GitHub operations.
 
 ## Command reference
@@ -85,51 +87,27 @@ Writes this skill file into the known global agent dirs. `--all` covers every su
 specsync trace [-change <slug>] [-since <ref>] [-until <ref>] [-json] [-openspec <dir>]
 ```
 
-## OpenSpec CLI commands
-
-specsync handles tracker sync. The `openspec` CLI manages the local change lifecycle.
-
-### List changes
-
-```
-openspec list [--json]
-```
-
-Shows all changes with task completion. `--json` for programmatic use.
-
-### Show a change
-
-```
-openspec show <slug>
-```
-
-Displays the change's proposal and status.
-
-### Archive a completed change
-
-```
-openspec archive <slug> [-y] [--skip-specs]
-```
-
-Moves the change to `openspec/changes/archive/` and updates main specs. Use `-y` to skip confirmation.
-
 ## Workflow
 
 ### Spec-first (plan → issue)
 
-1. `openspec list` — see existing changes.
+1. `/opsx:propose <title>` — create the change with planning artifacts.
 2. `specsync scan -json <path...> [topic]` — confirm no duplicate change exists.
-3. Create or refine `openspec/changes/<slug>/` with at least `proposal.md` and `tasks.md`.
-4. `specsync -dry-run -slug <slug>` — inspect the inferred title, body, labels, and checklist.
-5. `specsync -slug <slug>` — only when tracker mutation is authorized.
+3. `specsync -dry-run -slug <slug>` — inspect the inferred title, body, labels, and checklist.
+4. `specsync -slug <slug>` — only when tracker mutation is authorized.
 
 ### Issue-first (issue → spec)
 
 1. `gh issue list --state open` — find an issue to work on.
 2. `specsync pull -issue <n> -dry-run [-slug <slug>]` — preview generated files.
 3. `specsync pull -issue <n> [-slug <slug>]` — write files locally.
-4. Refine `proposal.md` and `tasks.md`.
+4. Refine artifacts with `/opsx:continue` or edit directly.
 5. `specsync -dry-run -slug <slug>` then `specsync -slug <slug>`.
+
+### Implement
+
+1. `/opsx:apply` — work through tasks, checking them off.
+2. `specsync -slug <slug>` — sync checkbox state to the tracker.
 
 ### Complete a change
 
