@@ -7,6 +7,11 @@ description: Plan and synchronize OpenSpec changes with GitHub Issues using the 
 
 OpenSpec files are the source of planning truth. GitHub Issues are the collaboration projection. Always dry-run before writing.
 
+## Prerequisites
+
+- **OpenSpec CLI** — install: `npm install -g @fission-ai/openspec@latest`. Initialize a project with `openspec init --tools <tools>` (e.g. `--tools opencode`).
+- **GitHub CLI** — needed for `gh issue list` and specsync's GitHub operations.
+
 ## Command reference
 
 ### Sync a change to GitHub Issues
@@ -80,11 +85,39 @@ Writes this skill file into the known global agent dirs. `--all` covers every su
 specsync trace [-change <slug>] [-since <ref>] [-until <ref>] [-json] [-openspec <dir>]
 ```
 
+## OpenSpec CLI commands
+
+specsync handles tracker sync. The `openspec` CLI manages the local change lifecycle.
+
+### List changes
+
+```
+openspec list [--json]
+```
+
+Shows all changes with task completion. `--json` for programmatic use.
+
+### Show a change
+
+```
+openspec show <slug>
+```
+
+Displays the change's proposal and status.
+
+### Archive a completed change
+
+```
+openspec archive <slug> [-y] [--skip-specs]
+```
+
+Moves the change to `openspec/changes/archive/` and updates main specs. Use `-y` to skip confirmation.
+
 ## Workflow
 
 ### Spec-first (plan → issue)
 
-1. Read the repository's OpenSpec conventions and any active task board.
+1. `openspec list` — see existing changes.
 2. `specsync scan -json <path...> [topic]` — confirm no duplicate change exists.
 3. Create or refine `openspec/changes/<slug>/` with at least `proposal.md` and `tasks.md`.
 4. `specsync -dry-run -slug <slug>` — inspect the inferred title, body, labels, and checklist.
@@ -102,7 +135,7 @@ specsync trace [-change <slug>] [-since <ref>] [-until <ref>] [-json] [-openspec
 
 1. Ensure all tasks are checked in `tasks.md`.
 2. `specsync -slug <slug>` — final sync.
-3. `openspec archive <slug>` — move to completed.
+3. `openspec archive <slug> -y` — move to completed.
 
 ## Safety rules
 
