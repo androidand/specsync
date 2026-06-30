@@ -9,5 +9,9 @@
 # specsync's local ref cache — projection ids are never committed
 .specsync/
 
+# Skein runtime state — machine-local, never merged
+.skein/
+logs/
+
 # OS / editor noise
 .DS_Store

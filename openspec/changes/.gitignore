@@ -1,0 +1,5 @@
+# Skein runtime state — machine-local, never merged (skein-bqup).
+# Any two checkouts diverge on these by construction; tracking them
+# guarantees worktree merge aborts. Ignore the entire .skein/ subtree
+# under any change directory so new runtime files can never slip in.
+*/.skein/
