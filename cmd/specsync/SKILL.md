@@ -92,10 +92,17 @@ specsync trace [-change <slug>] [-since <ref>] [-until <ref>] [-json] [-openspec
 
 ### Issue-first (issue → spec)
 
-1. `specsync pull -issue <n> -dry-run [-slug <slug>]` — preview generated files.
-2. `specsync pull -issue <n> [-slug <slug>]` — write files locally.
-3. Refine `proposal.md` and `tasks.md`.
-4. `specsync -dry-run -slug <slug>` then `specsync -slug <slug>`.
+1. `gh issue list --state open` — find an issue to work on.
+2. `specsync pull -issue <n> -dry-run [-slug <slug>]` — preview generated files.
+3. `specsync pull -issue <n> [-slug <slug>]` — write files locally.
+4. Refine `proposal.md` and `tasks.md`.
+5. `specsync -dry-run -slug <slug>` then `specsync -slug <slug>`.
+
+### Complete a change
+
+1. Ensure all tasks are checked in `tasks.md`.
+2. `specsync -slug <slug>` — final sync.
+3. `openspec archive <slug>` — move to completed.
 
 ## Safety rules
 
