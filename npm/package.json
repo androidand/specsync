@@ -2,6 +2,17 @@
   "name": "@androidand/specsync",
   "version": "0.4.0",
   "description": "Sync OpenSpec changes with work-tracker issues — standalone CLI",
+  "keywords": [
+    "openspec",
+    "github-issues",
+    "spec-driven",
+    "issue-tracker",
+    "sync",
+    "cli",
+    "planning"
+  ],
+  "author": "androidand",
+  "bugs": "https://github.com/androidand/specsync/issues",
   "bin": {
     "specsync": "bin/cli.js"
   },
