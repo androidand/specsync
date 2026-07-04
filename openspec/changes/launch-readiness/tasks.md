@@ -2,31 +2,31 @@
 
 ## 1. Safe, mechanical fixes (agent can do unsupervised)
 
-- [ ] 1.1 Add npm metadata to `npm/package.json`: `"keywords"` (e.g. `openspec`,
+- [x] 1.1 Add npm metadata to `npm/package.json`: `"keywords"` (e.g. `openspec`,
       `github-issues`, `spec-driven`, `issue-tracker`, `sync`, `cli`,
       `planning`), `"author": "androidand"`, and
       `"bugs": "https://github.com/androidand/specsync/issues"`. JSON only;
       do not bump `version`.
-- [ ] 1.2 README: document every shipped subcommand in the Usage section —
+- [x] 1.2 README: document every shipped subcommand in the Usage section —
       `scan`, `trace`, `link`, `release-plan`, `install-skill` — with one-line
       descriptions and one example each, matching the flags in
       `cmd/specsync/main.go` and `.github/copilot-instructions.md` (note:
       `scan` flags come before positional args). Also document
       `-provider beads`.
-- [ ] 1.3 README: add a short "Requirements" subsection under Install: no Go
+- [x] 1.3 README: add a short "Requirements" subsection under Install: no Go
       toolchain needed for npm/binary installs; the GitHub provider shells out
       to an authenticated `gh` CLI; Node >= 16 for the npm wrapper;
       linux/darwin on amd64/arm64 only (no Windows binary today).
-- [ ] 1.4 README: add badges at the top — npm version
+- [x] 1.4 README: add badges at the top — npm version
       (`@androidand/specsync`), CI status (`.github/workflows/ci.yml`), and
       license — using plain shields.io URLs.
-- [ ] 1.5 Add version reporting to the binary: a `version` subcommand and
+- [x] 1.5 Add version reporting to the binary: a `version` subcommand and
       `-version` flag in `cmd/specsync/main.go` printing a package-level
       `var version = "dev"`, and inject the real value in `.goreleaser.yaml`
       ldflags (`-X main.version={{ .Version }}`). Add a test that the
       subcommand path is wired (see `cmd` switch at `cmd/specsync/main.go:22`).
-- [ ] 1.6 Run `go vet ./...` and `go test ./...`; both must pass before
-      committing.
+- [x] 1.6 Run `go vet ./...` and `go test ./...`; both must pass before
+      committing. (vet clean; 58 tests pass, incl. 2 new version-flag tests)
 
 ## 2. Fixes needing a running app or human judgment
 
