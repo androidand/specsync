@@ -1,5 +1,9 @@
 # specsync
 
+[![npm](https://img.shields.io/npm/v/%40androidand%2Fspecsync)](https://www.npmjs.com/package/@androidand/specsync)
+[![CI](https://img.shields.io/github/actions/workflow/status/androidand/specsync/ci.yml?branch=main&label=CI)](https://github.com/androidand/specsync/actions/workflows/ci.yml)
+[![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 **Make your OpenSpec changes and your issue tracker the same thing.**
 
 `specsync` projects [OpenSpec](https://openspec.dev) changes into an external work
@@ -45,6 +49,16 @@ The npm package is a thin wrapper: its postinstall downloads the matching
 prebuilt binary (linux/darwin, amd64/arm64) from the GitHub release, so there is
 no Go toolchain or build step. A Homebrew tap is on the roadmap.
 
+### Requirements
+
+- **No Go toolchain** for the npm or prebuilt-binary installs — the binary is
+  self-contained (Go stdlib only).
+- **`gh` CLI, authenticated** — the default GitHub provider shells out to `gh`;
+  check with `gh auth status`.
+- **Node >= 16** — only for the npm wrapper's install shim.
+- **Platforms**: linux and macOS (darwin) on amd64/arm64. No Windows binary
+  today.
+
 ## Usage
 
 Run it from a repo that has an `openspec/` directory, with `gh` authenticated for
@@ -60,6 +74,34 @@ specsync -openspec path/to/openspec   # point at a non-default openspec dir
 
 **Always `-dry-run` first** in a new repo — it makes zero API calls and never
 touches local state.
+
+All subcommands, at a glance:
+
+```bash
+specsync [sync]          # project changes -> issues (default command)
+specsync pull            # pull an issue into a local change
+specsync scan            # what already exists in an area?
+specsync trace           # print the raw spec<->commit<->issue link graph
+specsync link            # cross-link two or more changes
+specsync release-plan    # shipped changes + advisory semver bump
+specsync install-skill   # install the bundled agent skill
+specsync version         # print the binary version
+```
+
+Flags come **before** positional arguments (standard Go flag parsing):
+`specsync scan -json cmd/ auth`, not `specsync scan cmd/ auth -json`.
+
+### Choosing a provider: `-provider beads`
+
+The default provider is `github` — human-facing issues via the `gh` CLI. Pass
+`-provider beads` to project the same changes into a local
+[Beads](https://github.com/steveyegge/beads) graph via the `bd` CLI instead
+(agent-facing; ignores `-repo`):
+
+```bash
+specsync -dry-run -provider beads    # preview the bd commands
+specsync -provider beads -slug X     # project one change into the beads graph
+```
 
 ### Issue-first: pull an issue into a change
 
@@ -77,6 +119,64 @@ specsync pull -issue 42 -slug my-feature   # override the derived slug
 `tasks.md` (from a `## Tasks` checklist when present), and links the change to
 the issue so a later `specsync` push updates that same issue. A dry run reads the
 issue but writes nothing.
+
+### `scan` — what already exists here?
+
+Run before planning new work. Give it an area — one or more paths and/or a
+free-text topic (required) — and it lists related OpenSpec changes, open issues
+with no linked change, and recent commits touching that area:
+
+```bash
+specsync scan cmd/ auth          # area = the cmd/ path + the topic "auth"
+specsync scan -json pkg/api      # machine-readable, for a planning agent
+```
+
+### `link` — cross-link changes
+
+Records each change's issue URL in the others' `links.md` and re-syncs them so
+a `## Related` section appears in every linked issue:
+
+```bash
+specsync link -dry-run slug-a slug-b   # preview links.md + Related sections
+specsync link slug-a slug-b            # write links and update both issues
+```
+
+### `trace` — the raw link graph
+
+Prints the resolved trace graph — changes, commits, issues, and the links
+between them — for debugging or scripting:
+
+```bash
+specsync trace -change my-feature      # scope to one change
+specsync trace -since v0.3.0 -json     # commits since a tag, as JSON
+```
+
+### `release-plan` — advisory follow-up report
+
+Read-only report over a revision range (default: latest tag → `HEAD`): shipped
+changes, loose ends, archive candidates, and an advisory semver bump. It
+detects your release tool (e.g. goreleaser) and defers to it — the bump is
+advice, not action:
+
+```bash
+specsync release-plan                  # since the latest tag
+specsync release-plan -since v0.3.0 -json
+```
+
+### `install-skill` — install the agent skill
+
+Installs the bundled specsync `SKILL.md` into agent skill directories so
+coding agents know how to drive the tool:
+
+```bash
+specsync install-skill --all           # every known agent directory
+specsync install-skill --claude-code   # or: --codex --opencode --copilot --agents
+```
+
+### `version`
+
+`specsync version` (also `-version` / `--version`) prints the binary version.
+Release builds stamp the real version; source builds print `dev`.
 
 ## OpenSpec Workflow (Teams)
 
