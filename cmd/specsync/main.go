@@ -14,12 +14,17 @@ import (
 	"github.com/androidand/specsync"
 )
 
+// version is the binary version, stamped at release time via -ldflags "-X main.version=...".
+var version = "dev"
+
 func main() {
 	// Subcommands: "pull" reads an issue into a local change; "link" cross-links
 	// two or more specs; the default (no subcommand, or "sync") projects changes
 	// outward to issues.
 	args := os.Args[1:]
 	switch {
+	case len(args) > 0 && isVersionArg(args[0]):
+		fmt.Println("specsync " + version)
 	case len(args) > 0 && args[0] == "pull":
 		runPull(args[1:])
 	case len(args) > 0 && args[0] == "link":
@@ -37,6 +42,11 @@ func main() {
 	default:
 		runSync(args)
 	}
+}
+
+// isVersionArg reports whether the first CLI arg requests the binary version.
+func isVersionArg(arg string) bool {
+	return arg == "version" || arg == "-version" || arg == "--version"
 }
 
 // runSync projects every OpenSpec change into the tracker (spec -> issue).
