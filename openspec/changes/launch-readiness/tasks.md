@@ -30,16 +30,40 @@
 
 ## 2. Fixes needing a running app or human judgment
 
-- [ ] 2.1 Verify the npm install path end-to-end in a scratch directory:
+- [x] 2.1 Verify the npm install path end-to-end in a scratch directory:
       `npm i -g @androidand/specsync` on this machine, confirm the postinstall
       downloads the v0.4.0 binary and `specsync -dry-run` runs in a repo with
       an `openspec/` dir. Fix README wording if any step surprises.
-- [ ] 2.2 Read the rewritten README start-to-finish as a stranger from npm:
+      (Verified sandboxed, non-global, in
+      `/private/tmp/.../scratchpad/specsync-npm-test`: `npm install
+      @androidand/specsync` downloaded the darwin/arm64 v0.4.0 binary via
+      postinstall; `specsync -dry-run` and `specsync -dry-run -slug X` both
+      ran correctly against a scratch `openspec/changes/example-change/`.
+      Noted, not a README bug: the published v0.4.0 binary predates the
+      Task-1.5 `version` subcommand, so `specsync version` on that binary
+      falls through to a real sync attempt instead of printing a version —
+      this resolves itself once a new version is tagged/released (owner task
+      3.4), no doc fix applies here.)
+- [x] 2.2 Read the rewritten README start-to-finish as a stranger from npm:
       can you install and sync your first change using only the README? Adjust
       ordering/wording where you stumble.
-- [ ] 2.3 Rebuild the site (`cd site && node build.sh`) and commit the result
+      (Fresh-eyes review found the Usage section never told a newcomer how to
+      get an `openspec/` dir in the first place, buried the `gh auth login`
+      prerequisite past the point it'd bite, and showed a non-dry-run example
+      before the "always dry-run first" warning. Fixed by adding an
+      openspec.dev/`openspec init` pointer and a `gh auth login` hint inline
+      at the top of Usage, and moving the dry-run warning before its code
+      block. Minor sequencing nits about the dogfooding callout and the
+      `-provider beads` subsection placement were judged non-blocking and
+      left as-is per minimal-edit instructions.)
+- [x] 2.3 Rebuild the site (`cd site && node build.sh`) and commit the result
       only if the diff is a truthful regeneration (version/changelog regions
       between the markers); otherwise leave it.
+      (Ran `node build.sh`; diff confined to the CHANGELOG marker region only
+      (2 hunks, lines 675-719) — added the v0.4.0 release entry and dropped
+      the oldest v0.2.0 entry per the script's `slice(0, 3)` window. VERSION
+      and FEATURES regions produced no diff. Committed as a truthful
+      regeneration.)
 
 ## 3. Blockers needing the owner
 
