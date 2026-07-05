@@ -61,8 +61,13 @@ no Go toolchain or build step. A Homebrew tap is on the roadmap.
 
 ## Usage
 
-Run it from a repo that has an `openspec/` directory, with `gh` authenticated for
-that repo's `origin`:
+Run it from a repo that has an `openspec/` directory (no OpenSpec yet? see
+[openspec.dev](https://openspec.dev) — `openspec init` scaffolds one), with
+`gh` authenticated for that repo's `origin` (`gh auth login` if `gh auth
+status` fails).
+
+**Always `-dry-run` first** in a new repo — it makes zero API calls and never
+touches local state:
 
 ```bash
 specsync -dry-run            # preview the gh commands + rendered issue bodies (safe)
@@ -71,9 +76,6 @@ specsync                     # create/update issues for every change
 specsync -slug X             # sync just one change
 specsync -openspec path/to/openspec   # point at a non-default openspec dir
 ```
-
-**Always `-dry-run` first** in a new repo — it makes zero API calls and never
-touches local state.
 
 All subcommands, at a glance:
 
