@@ -16,6 +16,7 @@ type Stage string
 
 const (
 	StageActive   Stage = "active"   // default: a change living under changes/
+	StageComplete Stage = "complete" // every task checked, not yet archived
 	StageArchived Stage = "archived" // change moved under changes/archive/
 )
 
@@ -28,7 +29,7 @@ type Change struct {
 	Body          string // proposal.md contents
 	TasksMarkdown string // tasks.md contents, may be ""
 	Links         []Ref  // resolved related issue refs from links.md
-	Stage         Stage  // from .status, else derived (active/archived)
+	Stage         Stage  // .status override, else derived (active/complete/archived)
 	Priority      int    // from .specsync/priority, 0 if unset
 	Archived      bool
 }
@@ -102,6 +103,15 @@ func LoadChange(dir string, archived bool, openspecDir string) (*Change, error) 
 		c.TasksMarkdown = string(tasks)
 	}
 
+	// Derive completion from the task list: a change whose every task is checked
+	// has finished its work but is not yet archived. Surfacing that as its own
+	// stage lets trackers stop showing the change as active the moment the last
+	// box is ticked, with no manual step. Archiving (a filesystem fact) still
+	// wins, and an explicit .status below is the ultimate override.
+	if !archived && tasksComplete(c.TasksMarkdown) {
+		c.Stage = StageComplete
+	}
+
 	// Optional richer stage: a single line in <change>/.status.
 	if st, err := os.ReadFile(filepath.Join(dir, ".status")); err == nil {
 		if s := strings.TrimSpace(string(st)); s != "" {
@@ -148,10 +158,10 @@ var reShorthand = regexp.MustCompile(`^[A-Za-z0-9_.\-]+/[A-Za-z0-9_.\-]+#\d+$`)
 // they appear automatically once the sibling is synced and LoadChange re-runs.
 // Supported line formats:
 //
-//	- https://github.com/owner/repo/issues/N   (full URL)
-//	- owner/repo#N                             (GitHub shorthand)
-//	- some-slug                                (sibling slug, resolved via refs.json)
-//	- some-slug repo:owner/name                (sibling slug + explicit repo hint)
+//   - https://github.com/owner/repo/issues/N   (full URL)
+//   - owner/repo#N                             (GitHub shorthand)
+//   - some-slug                                (sibling slug, resolved via refs.json)
+//   - some-slug repo:owner/name                (sibling slug + explicit repo hint)
 func parseLinksMD(changeDir, openspecDir string) []Ref {
 	b, err := os.ReadFile(filepath.Join(changeDir, "links.md"))
 	if err != nil {
@@ -241,6 +251,27 @@ func refFromURL(url string) *Ref {
 		}
 	}
 	return &Ref{URL: url}
+}
+
+// tasksComplete reports whether the tasks markdown has at least one task line
+// and every task line is checked. It reuses parseTaskLine so it counts exactly
+// the "- [ ]"/"- [x]" lines reconcile does — other checkbox markers (living
+// plan's [~]/[>]) and prose are ignored. An empty or task-less list is not
+// "complete": there is nothing to have finished.
+func tasksComplete(md string) bool {
+	if strings.TrimSpace(md) == "" {
+		return false
+	}
+	any := false
+	for _, line := range strings.Split(md, "\n") {
+		if _, checked, ok := parseTaskLine(line); ok {
+			if !checked {
+				return false
+			}
+			any = true
+		}
+	}
+	return any
 }
 
 func firstHeading(md, fallback string) string {

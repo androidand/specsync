@@ -249,9 +249,13 @@ WorkItem                          ->  issue       (via a pluggable provider)
   reverting un-pushed local progress. Spec still wins task *wording* and order;
   only the checkbox flips. Disable with `-reconcile=false`. Dry runs never read
   or write, so reconcile applies only on real syncs.
-- **Stage** — OpenSpec has no native lifecycle beyond active/archived, which
-  specsync derives from the folder location. Write a richer stage name into
-  `<change>/.status` and it becomes a `stage:<name>` label.
+- **Stage** — each issue gets a `stage:<stage>` label, derived automatically:
+  `active` while any task is unchecked, `complete` once every task is checked
+  (before archiving), and `archived` once the change moves under
+  `changes/archive/`. So finishing the last task flips the issue out of
+  `stage:active` on the next sync — no manual bookkeeping. Add `-close-completed`
+  to also close the issue on completion. Write a richer stage name into
+  `<change>/.status` to override the derived value.
 - **Local cache** — projection ids live in a gitignored `<change>/.specsync/`
   directory, never in git.
 

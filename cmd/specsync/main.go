@@ -58,6 +58,7 @@ func runSync(args []string) {
 	providerName := fs.String("provider", "github", "work provider: github (default, human-facing) or beads (agent-facing)")
 	dryRun := fs.Bool("dry-run", false, "print the provider commands and rendered body without executing")
 	reconcile := fs.Bool("reconcile", true, "merge external task state back into tasks.md before pushing")
+	closeCompleted := fs.Bool("close-completed", false, "close the tracker item once every task in a change is checked")
 	_ = fs.Parse(args)
 
 	abs, err := filepath.Abs(*openspec)
@@ -79,11 +80,12 @@ func runSync(args []string) {
 	}
 
 	res, err := specsync.Sync(context.Background(), specsync.Options{
-		OpenSpecDir: abs,
-		Provider:    provider,
-		Slug:        *slug,
-		DryRun:      *dryRun,
-		Reconcile:   *reconcile,
+		OpenSpecDir:    abs,
+		Provider:       provider,
+		Slug:           *slug,
+		DryRun:         *dryRun,
+		Reconcile:      *reconcile,
+		CloseCompleted: *closeCompleted,
 	})
 	if err != nil {
 		fail(err)
@@ -204,7 +206,7 @@ func runLink(args []string) {
 						c.Links = append(c.Links, other.Ref)
 					}
 				}
-				item := specsync.WorkItemFor(*c)
+				item := specsync.WorkItemFor(*c, false)
 				if idx := strings.Index(item.Body, "\n\n## Related\n\n"); idx >= 0 {
 					fmt.Printf("\n  Related section in %s issue:\n", p.Slug)
 					for _, line := range strings.Split(item.Body[idx+2:], "\n") {

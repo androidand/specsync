@@ -8,11 +8,12 @@ import (
 
 // Options configures a sync run.
 type Options struct {
-	OpenSpecDir string       // path to the openspec/ directory
-	Provider    WorkProvider // target tracker
-	Slug        string       // if set, only this change is synced
-	DryRun      bool         // when true, never persist refs to the cache
-	Reconcile   bool         // when true, merge issue checkbox state into tasks.md before pushing
+	OpenSpecDir    string       // path to the openspec/ directory
+	Provider       WorkProvider // target tracker
+	Slug           string       // if set, only this change is synced
+	DryRun         bool         // when true, never persist refs to the cache
+	Reconcile      bool         // when true, merge issue checkbox state into tasks.md before pushing
+	CloseCompleted bool         // when true, a change whose every task is checked projects as closed
 }
 
 // Result reports what a sync run did.
@@ -46,7 +47,7 @@ func Sync(ctx context.Context, opts Options) (Result, error) {
 		if opts.Slug != "" && c.Slug != opts.Slug {
 			continue
 		}
-		ref, created, flips, err := syncOne(ctx, opts.Provider, c, opts.DryRun, opts.Reconcile)
+		ref, created, flips, err := syncOne(ctx, opts.Provider, c, opts.DryRun, opts.Reconcile, opts.CloseCompleted)
 		if err != nil {
 			return res, fmt.Errorf("sync %s: %w", c.Slug, err)
 		}
@@ -60,7 +61,7 @@ func Sync(ctx context.Context, opts Options) (Result, error) {
 	return res, nil
 }
 
-func syncOne(ctx context.Context, prov WorkProvider, c Change, dryRun, reconcile bool) (ref Ref, created bool, flips []TaskFlip, err error) {
+func syncOne(ctx context.Context, prov WorkProvider, c Change, dryRun, reconcile, closeCompleted bool) (ref Ref, created bool, flips []TaskFlip, err error) {
 	refs, err := loadRefs(c.Dir)
 	if err != nil {
 		return Ref{}, false, nil, err
@@ -84,7 +85,7 @@ func syncOne(ctx context.Context, prov WorkProvider, c Change, dryRun, reconcile
 		flips = f
 	}
 
-	ref, err = prov.Push(ctx, WorkItemFor(c), existingPtr)
+	ref, err = prov.Push(ctx, WorkItemFor(c, closeCompleted), existingPtr)
 	if err != nil {
 		return Ref{}, false, nil, err
 	}
@@ -101,8 +102,10 @@ func syncOne(ctx context.Context, prov WorkProvider, c Change, dryRun, reconcile
 
 // WorkItemFor renders a Change into the provider-agnostic WorkItem. tasks.md
 // is folded in as a checklist; links.md becomes a ## Related section using
-// "[owner/repo#N](url)" GitHub autolink format.
-func WorkItemFor(c Change) WorkItem {
+// "[owner/repo#N](url)" GitHub autolink format. When closeCompleted is set, a
+// change in the complete stage (every task checked, not yet archived) also
+// projects as closed, so finishing the last task can retire the issue.
+func WorkItemFor(c Change, closeCompleted bool) WorkItem {
 	body := c.Body
 	if strings.TrimSpace(c.TasksMarkdown) != "" {
 		body = body + "\n\n## Tasks\n\n" + c.TasksMarkdown
@@ -122,7 +125,7 @@ func WorkItemFor(c Change) WorkItem {
 		Body:     body,
 		Stage:    c.Stage,
 		Priority: c.Priority,
-		Closed:   c.Archived,
+		Closed:   c.Archived || (closeCompleted && c.Stage == StageComplete),
 	}
 }
 
