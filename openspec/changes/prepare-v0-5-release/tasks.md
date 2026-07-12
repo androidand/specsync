@@ -4,7 +4,7 @@
 - [x] Remove or qualify roadmap, “soon”, and unsupported behavior claims
 - [x] Run `gofmt -w` on reported formatting drift and verify a clean formatting check
 - [x] Run `go test ./...`, `go test -race ./...`, `go vet ./...`, and a GoReleaser snapshot/check
-- [ ] Pack and smoke-test the npm tarball, including installed skill and binary version
+- [x] Pack and smoke-test the npm tarball, including installed skill and binary version
 - [x] Produce concise v0.5.1 recovery release notes from shipped behavior
-- [ ] Tag `v0.5.1` only after dependencies and all release checks pass
-- [ ] Verify GitHub release assets before allowing npm publication
+- [x] Tag `v0.5.1` only after dependencies and all release checks pass
+- [x] Verify GitHub release assets before allowing npm publication
