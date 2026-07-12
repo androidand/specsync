@@ -17,7 +17,8 @@
     "specsync": "bin/cli.js"
   },
   "scripts": {
-    "postinstall": "node scripts/postinstall.js"
+    "postinstall": "node scripts/postinstall.js",
+    "test": "node --test test/*.test.js"
   },
   "files": [
     "bin/",

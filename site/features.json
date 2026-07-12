@@ -37,11 +37,16 @@
   {
     "icon": "🤖",
     "title": "Agent-friendly",
-    "body": "A Claude Code skill file ships with specsync so AI agents can plan and create linked issues without extra instructions."
+    "body": "A bundled skill installs for Claude Code, Codex, OpenCode, Copilot, or any agentskills.io-compatible <code>.agents</code> directory."
   },
   {
     "icon": "🔍",
-    "title": "Dry-run everything",
-    "body": "Every command accepts <code>-dry-run</code>. Preview the full rendered body and all <code>gh</code> calls before committing."
+    "title": "Preview writes",
+    "body": "<code>sync</code>, <code>pull</code>, and <code>link</code> support <code>-dry-run</code>. Read-only inspection commands need no preview mode."
+  },
+  {
+    "icon": "🎯",
+    "title": "Auto-lifecycle",
+    "body": "<code>stage:active</code> while work remains; auto-flips to <code>stage:complete</code> when all tasks are checked. Optional <code>-close-completed</code> keeps the issue open/closed state aligned — completion closes it, new work reopens it."
   }
 ]

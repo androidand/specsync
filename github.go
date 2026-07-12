@@ -143,7 +143,7 @@ func (p *GitHubProvider) Push(ctx context.Context, item WorkItem, existing *Ref)
 	num := existing.ID
 	args := append([]string{"issue", "edit", num}, p.repoFlag()...)
 	args = append(args, "--title", item.Title, "--body", body)
-	add, remove, err := p.labelDelta(ctx, num, labels)
+	add, remove, currentlyClosed, err := p.labelDelta(ctx, num, labels)
 	if err != nil {
 		return Ref{}, err
 	}
@@ -156,8 +156,11 @@ func (p *GitHubProvider) Push(ctx context.Context, item WorkItem, existing *Ref)
 	if _, err := p.run(ctx, args...); err != nil {
 		return Ref{}, err
 	}
-	if item.Closed {
+	if item.ManageClosed && item.Closed && !currentlyClosed {
 		return *existing, p.close(ctx, num)
+	}
+	if item.ManageClosed && !item.Closed && currentlyClosed {
+		return *existing, p.reopen(ctx, num)
 	}
 	return *existing, nil
 }
@@ -230,6 +233,12 @@ func (p *GitHubProvider) close(ctx context.Context, num string) error {
 	return err
 }
 
+func (p *GitHubProvider) reopen(ctx context.Context, num string) error {
+	args := append([]string{"issue", "reopen", num}, p.repoFlag()...)
+	_, err := p.run(ctx, args...)
+	return err
+}
+
 // ensureLabels makes every desired label exist. --force is idempotent: it
 // creates the label or updates it if present.
 func (p *GitHubProvider) ensureLabels(ctx context.Context, labels []string) error {
@@ -244,20 +253,21 @@ func (p *GitHubProvider) ensureLabels(ctx context.Context, labels []string) erro
 
 // labelDelta computes which managed labels to add/remove so the issue ends up
 // with exactly the desired set. Labels outside our namespace are left alone.
-func (p *GitHubProvider) labelDelta(ctx context.Context, num string, desired []string) (add, remove []string, err error) {
+func (p *GitHubProvider) labelDelta(ctx context.Context, num string, desired []string) (add, remove []string, closed bool, err error) {
 	args := append([]string{"issue", "view", num}, p.repoFlag()...)
-	args = append(args, "--json", "labels")
+	args = append(args, "--json", "labels,state")
 	out, err := p.run(ctx, args...)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, false, err
 	}
 	var v struct {
+		State  string `json:"state"`
 		Labels []struct {
 			Name string `json:"name"`
 		} `json:"labels"`
 	}
 	if err := json.Unmarshal([]byte(out), &v); err != nil {
-		return nil, nil, fmt.Errorf("parse labels: %w", err)
+		return nil, nil, false, fmt.Errorf("parse labels: %w", err)
 	}
 	current := map[string]bool{}
 	for _, l := range v.Labels {
@@ -275,7 +285,7 @@ func (p *GitHubProvider) labelDelta(ctx context.Context, num string, desired []s
 			remove = append(remove, name)
 		}
 	}
-	return add, remove, nil
+	return add, remove, strings.EqualFold(v.State, "closed"), nil
 }
 
 func desiredLabels(item WorkItem) []string {

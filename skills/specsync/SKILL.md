@@ -19,13 +19,16 @@ specsync handles **tracker sync** (OpenSpec ↔ GitHub/Beads). Use the **OPSX wo
 ### Sync a change to GitHub Issues
 
 ```
-specsync [-dry-run] [-slug <slug>] [-repo owner/name] [-reconcile=false] [-openspec <dir>]
+specsync [-dry-run] [-slug <slug>] [-repo owner/name] [-reconcile=false] [-close-completed] [-openspec <dir>]
 ```
 
 - Without `-slug`: syncs **every** change in `openspec/changes/`. Always pass `-slug` when one change is in scope.
 - `-dry-run`: prints the `gh` commands and rendered issue body; makes no GitHub calls. Reconcile reads are also skipped in dry-run mode.
-- `-reconcile` (default true): on a real sync, reads the issue's checkbox state and writes it back into `tasks.md` before pushing. Pass `-reconcile=false` only to force a one-way projection.
+- `-reconcile` (default true): on a real sync, reads the issue's checkbox state and writes it back into `tasks.md` before pushing. The merge is a monotonic union (checked wins), so a lagging issue can never *uncheck* local progress. Pass `-reconcile=false` only to force a one-way projection.
+- `-close-completed` (default false): keep tracker open/closed state aligned with completion. Completing every task closes the item; adding new unchecked work reopens it. Without the flag, completion updates `stage:complete` but leaves tracker state alone. An explicit `.status` overrides task-derived stage, so only `.status` value `complete` closes with this flag.
 - `-repo owner/name`: override auto-detected repo from `git remote`.
+
+**Lifecycle stages.** specsync labels each issue `stage:<stage>`. The stage is derived automatically: `active` while any task is unchecked, `complete` once every task is checked (before archiving), and `archived` once the change moves under `changes/archive/`. A `.status` file in the change folder overrides the derived stage. This means finishing the last task flips the issue out of `stage:active` on the next sync — no manual bookkeeping.
 
 ### Pull an issue into a local change
 

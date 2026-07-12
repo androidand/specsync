@@ -454,7 +454,7 @@ a:focus-visible {
   <a class="nav-logo" href="/">
     specsync
     <span class="nav-badge"><!-- VERSION:start -->
-v0.4.0
+v0.5.1
 <!-- VERSION:end --></span>
   </a>
   <div class="nav-links">
@@ -619,12 +619,17 @@ specsync link feature-api feature-ui
       <div class="feature">
         <span class="feature-icon">🤖</span>
         <h4>Agent-friendly</h4>
-        <p>A Claude Code skill file ships with specsync so AI agents can plan and create linked issues without extra instructions.</p>
+        <p>A bundled skill installs for Claude Code, Codex, OpenCode, Copilot, or any agentskills.io-compatible <code>.agents</code> directory.</p>
       </div>
       <div class="feature">
         <span class="feature-icon">🔍</span>
-        <h4>Dry-run everything</h4>
-        <p>Every command accepts <code>-dry-run</code>. Preview the full rendered body and all <code>gh</code> calls before committing.</p>
+        <h4>Preview writes</h4>
+        <p><code>sync</code>, <code>pull</code>, and <code>link</code> support <code>-dry-run</code>. Read-only inspection commands need no preview mode.</p>
+      </div>
+      <div class="feature">
+        <span class="feature-icon">🎯</span>
+        <h4>Auto-lifecycle</h4>
+        <p><code>stage:active</code> while work remains; auto-flips to <code>stage:complete</code> when all tasks are checked. Optional <code>-close-completed</code> keeps the issue open/closed state aligned — completion closes it, new work reopens it.</p>
       </div>
 <!-- FEATURES:end -->
     </div>
@@ -675,6 +680,35 @@ specsync link feature-api feature-ui
   <!-- CHANGELOG:start -->
         <div class="release">
           <div class="release-header">
+            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.5.0" target="_blank" rel="noopener">v0.5.0</a>
+            <span class="release-date">Jul 13, 2026</span>
+          </div>
+          <div class="release-body"><p><h4>Changelog</h4>
+* ee7664b94567d7e292b99cb399f4c45be34006c4: feat(sync): derive a "complete" stage from task completion + optional auto-close (@androidand)</p><p></p></div>
+        </div>
+        <div class="release">
+          <div class="release-header">
+            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.4.1" target="_blank" rel="noopener">v0.4.1</a>
+            <span class="release-date">Jul 6, 2026</span>
+          </div>
+          <div class="release-body"><p><h4>Changelog</h4>
+* 1e05a1c164be705c23ed315342aa29fd48448487: chore(site): rebuild at v0.4.0 (@androidand)
+* ca5ae79aa12a475ce2b548c515be46482fc41e58: chore: ignore .skein/ and logs/ runtime state; track changes/.gitignore (@androidand)
+* d4327e9db0a17d296eda872a6234cee506abb1e8: docs: add gh issue list and openspec archive to skill workflow (@androidand)
+* 7272da8809384af4583dc7c608ae32a52584b237: spec: specsync Go library (pkg/specsync) — GH #25 (@androidand)
+* af119790c86f125357a5db61075604681c39e4f6: docs: add OpenSpec CLI commands and prerequisites to skill (@androidand)
+* 52882a564d087ab99da3bcd74ac58a359e6dbcca: chore: integrate OPSX into specsync skill (@androidand)
+* 233a54a81fbe67877d229311b9bedd83f191530e: docs(openspec): plan launch-readiness — README surface, npm metadata, audit record (@androidand)
+* e0e54298050c10b62e6d2255f950151f57a9ea8d: chore(npm): add keywords, author, bugs to package metadata (@androidand)
+* 12fbda70bfe45fe24deffcea51225624a26d8a64: feat(cli): version subcommand and -version/--version flags (@androidand)
+* f9001bbc2cd2655cc9080e8ea85f4f03b2577403: docs(readme): document full CLI surface, requirements, badges (@androidand)
+* 4ee97ea28e6fcfac30581fd47cf488bee3e35235: docs(openspec): check off launch-readiness section-1 tasks (@androidand)
+* cb4c87afbb816334bfcf05713ef281592924c9d2: docs(readme): fix first-sync stumbling blocks found in stranger read-through (@androidand)
+* 0157a851c31a6c308fbd8549e23e11793003b01f: chore(site): rebuild at v0.4.0 (@androidand)
+* aa95e61222aad64fcf56de4a1d4749935f089c43: docs(openspec): check off launch-readiness section-2 tasks (@androidand)</p><p></p></div>
+        </div>
+        <div class="release">
+          <div class="release-header">
             <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.4.0" target="_blank" rel="noopener">v0.4.0</a>
             <span class="release-date">Jun 30, 2026</span>
           </div>
@@ -684,37 +718,6 @@ specsync link feature-api feature-ui
 * 19c851298ea19536dc889b0fcc166c5f5e24ee5d: feat: add Beads as a tracker-agnostic work provider (@androidand)
 * c3d9dad9bd2f02583597c703067dfbc258f4e63b: feat: project task done-state outward to beads (close on check) (@androidand)
 * 0cf3db083a5a596f4b7976b700900041300e3843: chore(release): v0.4.0 — tracker-agnostic Beads provider (@androidand)</p><p></p></div>
-        </div>
-        <div class="release">
-          <div class="release-header">
-            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.3.0" target="_blank" rel="noopener">v0.3.0</a>
-            <span class="release-date">Jun 29, 2026</span>
-          </div>
-          <div class="release-body"><p><h4>Changelog</h4>
-* e0b06312c35b78ecb7ea610fb756bece92e787b2: feat: add promotional site under site/ (@androidand)
-* ce79c32f22ee8dd93c018dad97bc2cb0d75ba4f7: feat(site): dynamic features from features.json, changelog from GitHub releases (@androidand)
-* a25384e1f7e53e2b3d8552c49ba36df87cf1b0af: fix: dry-run preview now shows --repo on every gh command (@androidand)
-* 2bff301924d03fca094eeb30ee0d7a757b2aefb5: feat: dry-run banner names the target repo (@androidand)
-* 1fe9eea56acff9126848a7b655ef6c70db7e8320: docs(openspec): add traceability graph foundation + two lenses (@androidand)
-* ebea2d1e4ac0093afa68b3f203145bac2e85eca0: docs(openspec): cross-link the three traceability changes (@androidand)
-* c9878db73fbfce0ccd8ef33b0405de488fe5b899: feat: two-way task-state reconcile (@androidand)
-* edaa75daabb19e18b892ab7509bae4a4de5cf38b: docs(openspec): tighten the two load-bearing seams + trim scope (@androidand)
-* d92ab8e6af9e0eea3b8edbcdff7c8d93f1dbe46a: docs: fix stale links.json reference in Link doc comment (@androidand)
-* e9b6000515f4d7187e116b522005441fa3b2d039: docs(openspec): gate monorepo per-package bump on deferred package config (@androidand)
-* b9bc335dd27c249bf63abf18215403ccfe1915a9: feat: traceability graph, planning scan, and release follow-up (@androidand)
-* 982265b928c790c26ffcbdc715feb8fb937fd768: docs(openspec): plan link-by-issue-reference (@androidand)
-* b5129bf3c72b10593639f2fdd57a687c3fb5b0e1: feat(site): truthful version + features, idempotent build (@androidand)
-* 58499028ff10b14f5dab9145f91c890e5f3dddec: feat(site): graduate scan and release-plan from soon (shipping in v0.3.0) (@androidand)</p><p></p></div>
-        </div>
-        <div class="release">
-          <div class="release-header">
-            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.2.1" target="_blank" rel="noopener">v0.2.1</a>
-            <span class="release-date">Jun 29, 2026</span>
-          </div>
-          <div class="release-body"><p><h4>Changelog</h4>
-* 9eef34dff156452f8015ec2b478eb772c6501f04: refactor: replace .specsync/links.json with links.md (@androidand)
-* fbfd9ea4e06b8b7ae6f30095c58a7668a3a3e7af: feat: render Related section as [owner/repo#N](url) autolinks (@androidand)
-* b9fcbd8e4bf1e1f73d7428655bb7197a1439fb53: fix: specsync link dry-run now shows links.md content and Related preview (@androidand)</p><p></p></div>
         </div>
 <!-- CHANGELOG:end -->
 </section>

@@ -1,0 +1,5 @@
+- [x] Move the completion lifecycle documentation into canonical `skills/specsync/SKILL.md`
+- [x] Regenerate `cmd/specsync/SKILL.md`, `npm/skills/specsync/SKILL.md`, and `.claude/skills/specsync/SKILL.md`
+- [x] Add a test or CI check that fails when generated skill copies differ from the canonical file
+- [x] Verify the npm release workflow packages the canonical, current skill
+- [x] Run `make sync-skill`, `go test ./...`, and `npm pack --dry-run`

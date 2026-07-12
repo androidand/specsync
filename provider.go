@@ -5,12 +5,13 @@ import "context"
 // WorkItem is the provider-agnostic projection of a Change. Providers render it
 // into their own issue/card shape.
 type WorkItem struct {
-	Slug     string
-	Title    string
-	Body     string // proposal plus rendered tasks; the provider prepends identity
-	Stage    Stage
-	Priority int
-	Closed   bool // archived changes project as closed items
+	Slug         string
+	Title        string
+	Body         string // proposal plus rendered tasks; the provider prepends identity
+	Stage        Stage
+	Priority     int
+	Closed       bool // desired state when ManageClosed is true
+	ManageClosed bool // provider must enforce the desired open/closed state
 }
 
 // Ref is the disposable binding between a Change and its projection in one

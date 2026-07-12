@@ -1,0 +1,10 @@
+- [x] Correct the “every command accepts dry-run” claim to name the commands that actually support it
+- [x] Update agent-skill copy to name Claude Code, Codex, OpenCode, Copilot, and Agents
+- [x] Add the verified `stage:complete` and optional close/reopen lifecycle to README and site features
+- [x] Remove or qualify roadmap, “soon”, and unsupported behavior claims
+- [x] Run `gofmt -w` on reported formatting drift and verify a clean formatting check
+- [x] Run `go test ./...`, `go test -race ./...`, `go vet ./...`, and a GoReleaser snapshot/check
+- [ ] Pack and smoke-test the npm tarball, including installed skill and binary version
+- [x] Produce concise v0.5.1 recovery release notes from shipped behavior
+- [ ] Tag `v0.5.1` only after dependencies and all release checks pass
+- [ ] Verify GitHub release assets before allowing npm publication

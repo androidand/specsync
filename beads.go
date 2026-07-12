@@ -218,9 +218,17 @@ func (p *BeadsProvider) Push(ctx context.Context, item WorkItem, existing *Ref) 
 		}
 	}
 
-	// An archived change closes its epic.
+	// Lifecycle-managed projections keep the epic's open/closed state aligned.
 	if item.Closed && (epic == nil || !epic.closed()) {
-		if _, err := p.run(ctx, "close", ref.ID, "-r", "change archived"); err != nil {
+		reason := "change complete"
+		if item.Stage == StageArchived {
+			reason = "change archived"
+		}
+		if _, err := p.run(ctx, "close", ref.ID, "-r", reason); err != nil {
+			return Ref{}, err
+		}
+	} else if item.ManageClosed && epic != nil && epic.closed() {
+		if _, err := p.run(ctx, "reopen", ref.ID); err != nil {
 			return Ref{}, err
 		}
 	}

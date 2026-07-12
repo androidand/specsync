@@ -103,21 +103,7 @@ func LoadChange(dir string, archived bool, openspecDir string) (*Change, error) 
 		c.TasksMarkdown = string(tasks)
 	}
 
-	// Derive completion from the task list: a change whose every task is checked
-	// has finished its work but is not yet archived. Surfacing that as its own
-	// stage lets trackers stop showing the change as active the moment the last
-	// box is ticked, with no manual step. Archiving (a filesystem fact) still
-	// wins, and an explicit .status below is the ultimate override.
-	if !archived && tasksComplete(c.TasksMarkdown) {
-		c.Stage = StageComplete
-	}
-
-	// Optional richer stage: a single line in <change>/.status.
-	if st, err := os.ReadFile(filepath.Join(dir, ".status")); err == nil {
-		if s := strings.TrimSpace(string(st)); s != "" {
-			c.Stage = Stage(s)
-		}
-	}
+	refreshStage(c)
 
 	// Optional priority: <change>/.specsync/priority (gitignored, local).
 	if p, err := os.ReadFile(filepath.Join(dir, ".specsync", "priority")); err == nil {
@@ -272,6 +258,24 @@ func tasksComplete(md string) bool {
 		}
 	}
 	return any
+}
+
+// refreshStage derives lifecycle from the change's current task state, then
+// applies filesystem facts and the explicit .status override. Sync calls this
+// again after inbound reconciliation so one invocation projects the resulting
+// state rather than the state loaded before checkbox merging.
+func refreshStage(c *Change) {
+	c.Stage = StageActive
+	if c.Archived {
+		c.Stage = StageArchived
+	} else if tasksComplete(c.TasksMarkdown) {
+		c.Stage = StageComplete
+	}
+	if st, err := os.ReadFile(filepath.Join(c.Dir, ".status")); err == nil {
+		if s := strings.TrimSpace(string(st)); s != "" {
+			c.Stage = Stage(s)
+		}
+	}
 }
 
 func firstHeading(md, fallback string) string {

@@ -84,6 +84,7 @@ func syncOne(ctx context.Context, prov WorkProvider, c Change, dryRun, reconcile
 		existingPtr = resolved
 		flips = f
 	}
+	refreshStage(&c)
 
 	ref, err = prov.Push(ctx, WorkItemFor(c, closeCompleted), existingPtr)
 	if err != nil {
@@ -120,12 +121,13 @@ func WorkItemFor(c Change, closeCompleted bool) WorkItem {
 		}
 	}
 	return WorkItem{
-		Slug:     c.Slug,
-		Title:    c.Title,
-		Body:     body,
-		Stage:    c.Stage,
-		Priority: c.Priority,
-		Closed:   c.Archived || (closeCompleted && c.Stage == StageComplete),
+		Slug:         c.Slug,
+		Title:        c.Title,
+		Body:         body,
+		Stage:        c.Stage,
+		Priority:     c.Priority,
+		Closed:       c.Archived || (closeCompleted && c.Stage == StageComplete),
+		ManageClosed: c.Archived || closeCompleted,
 	}
 }
 

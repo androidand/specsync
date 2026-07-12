@@ -122,6 +122,26 @@ func TestGitHubPushUpdateReconcilesLabels(t *testing.T) {
 	}
 }
 
+func TestGitHubPushReopensManagedActiveIssue(t *testing.T) {
+	var calls [][]string
+	p := &GitHubProvider{run: func(_ context.Context, args ...string) (string, error) {
+		calls = append(calls, args)
+		if args[0] == "issue" && args[1] == "view" {
+			return `{"state":"CLOSED","labels":[{"name":"stage:complete"}]}`, nil
+		}
+		return "", nil
+	}}
+	_, err := p.Push(context.Background(), WorkItem{
+		Slug: "my-change", Title: "T", Stage: StageActive, ManageClosed: true,
+	}, &Ref{Provider: "github", ID: "7"})
+	if err != nil {
+		t.Fatalf("Push: %v", err)
+	}
+	if findCall(calls, "issue", "reopen", "7") == nil {
+		t.Fatalf("expected managed active issue to reopen; calls: %v", calls)
+	}
+}
+
 func TestGitHubFindRequiresExactMarker(t *testing.T) {
 	p := &GitHubProvider{run: func(_ context.Context, args ...string) (string, error) {
 		if args[0] == "issue" && args[1] == "list" {

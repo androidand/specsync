@@ -209,3 +209,54 @@ func TestBeadsPushOutboundStatusProjection(t *testing.T) {
 		t.Errorf("both children already exist; nothing to create, got %d:\n%v", f.created, f.calls)
 	}
 }
+
+func TestBeadsPushReopensManagedActiveEpic(t *testing.T) {
+	closedEpic := strings.Replace(beadsFamilyJSON, `"status":"open","issue_type":"epic"`, `"status":"closed","issue_type":"epic"`, 1)
+	f := &fakeBD{list: closedEpic}
+	p := NewBeadsProviderFunc(f.run)
+	item := beadsWorkItem()
+	item.Stage = StageActive
+	item.ManageClosed = true
+
+	if _, err := p.Push(context.Background(), item, nil); err != nil {
+		t.Fatalf("Push: %v", err)
+	}
+	if findBDCall(f.calls, "reopen", "bd-epic") == nil {
+		t.Fatalf("expected managed active epic to reopen; calls: %v", f.calls)
+	}
+}
+
+func TestBeadsArchivedEpicUsesArchivedReason(t *testing.T) {
+	f := &fakeBD{list: beadsFamilyJSON}
+	p := NewBeadsProviderFunc(f.run)
+	item := beadsWorkItem()
+	item.Stage = StageArchived
+	item.Closed = true
+	item.ManageClosed = true
+
+	if _, err := p.Push(context.Background(), item, nil); err != nil {
+		t.Fatalf("Push: %v", err)
+	}
+	call := findBDCall(f.calls, "close", "bd-epic")
+	if call == nil || !hasFlagVal(call, "-r", "change archived") {
+		t.Fatalf("expected archived close reason; calls: %v", f.calls)
+	}
+}
+
+func findBDCall(calls [][]string, prefix ...string) []string {
+	for _, call := range calls {
+		if len(call) < len(prefix) {
+			continue
+		}
+		match := true
+		for i := range prefix {
+			if call[i] != prefix[i] {
+				match = false
+			}
+		}
+		if match {
+			return call
+		}
+	}
+	return nil
+}

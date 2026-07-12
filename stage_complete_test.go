@@ -150,3 +150,46 @@ func TestSyncClosesCompletedIssue(t *testing.T) {
 		t.Error("expected issue close call for the completed change")
 	}
 }
+
+func TestSyncCompletesAfterReconcileInOnePass(t *testing.T) {
+	root := t.TempDir()
+	seedChange(t, root, "last-task", "- [ ] ship it\n")
+	prov := &fakeIssueProvider{
+		ref:  Ref{Provider: "github", ID: "7", URL: "https://github.com/o/r/issues/7"},
+		body: "# Last task\n\n## Tasks\n\n- [x] ship it\n",
+	}
+	_, err := Sync(context.Background(), Options{
+		OpenSpecDir: root, Provider: prov, Slug: "last-task", Reconcile: true, CloseCompleted: true,
+	})
+	if err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	if prov.pushed.Stage != StageComplete || !prov.pushed.Closed || !prov.pushed.ManageClosed {
+		t.Fatalf("one-pass projection = stage %q, closed %v, managed %v; want complete/true/true", prov.pushed.Stage, prov.pushed.Closed, prov.pushed.ManageClosed)
+	}
+}
+
+func TestWorkItemLifecycleManagement(t *testing.T) {
+	cases := []struct {
+		name             string
+		stage            Stage
+		archived         bool
+		closeCompleted   bool
+		wantClosed       bool
+		wantManageClosed bool
+	}{
+		{name: "default sync leaves active issue state alone", stage: StageActive},
+		{name: "managed active reopens", stage: StageActive, closeCompleted: true, wantManageClosed: true},
+		{name: "managed complete closes", stage: StageComplete, closeCompleted: true, wantClosed: true, wantManageClosed: true},
+		{name: "explicit complete closes", stage: StageComplete, closeCompleted: true, wantClosed: true, wantManageClosed: true},
+		{name: "archive always closes", stage: StageArchived, archived: true, wantClosed: true, wantManageClosed: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			item := WorkItemFor(Change{Slug: "s", Title: "T", Stage: tc.stage, Archived: tc.archived}, tc.closeCompleted)
+			if item.Closed != tc.wantClosed || item.ManageClosed != tc.wantManageClosed {
+				t.Fatalf("closed/manage = %v/%v, want %v/%v", item.Closed, item.ManageClosed, tc.wantClosed, tc.wantManageClosed)
+			}
+		})
+	}
+}

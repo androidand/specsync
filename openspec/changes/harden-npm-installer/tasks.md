@@ -1,0 +1,7 @@
+- [x] Add failing tests for HTTP error, redirect limit, checksum mismatch, extraction failure, and successful install
+- [x] Download `checksums.txt` for the matching release and verify the archive SHA-256 before extraction
+- [x] Exit non-zero on supported-platform download, verification, or extraction failure
+- [x] Preserve a clear fallback message for unsupported platforms
+- [x] Ensure temporary archives are removed on both success and failure
+- [x] Smoke-test `npm pack` contents and a local install against release-shaped fixtures
+- [x] Document supported OS, architecture, Node version, and failure behavior

@@ -1,0 +1,7 @@
+- [x] Add failing test: final GitHub checkbox reconciles, labels `stage:complete`, and closes in one sync
+- [x] Add failing test: a new unchecked local task returns a completed projection to `stage:active` and reopens it
+- [x] Cover GitHub and Beads provider open/closed transitions
+- [x] Recompute derived lifecycle stage after reconciliation without overriding `.status` or archived state
+- [x] Implement explicit provider reopen behavior when lifecycle returns to active
+- [x] Clarify `-close-completed` behavior for `.status` overrides in tests and docs
+- [x] Run `gofmt`, `go test ./...`, `go test -race ./...`, and `go vet ./...`

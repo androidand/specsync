@@ -14,17 +14,17 @@ func TestMergeTaskStateUnion(t *testing.T) {
 		"- [x] already done locally",
 		"- [ ] only local task",
 		"  - [ ] indented subtask",
-		"- [~] dropped: superseded",  // living-plan marker: must be untouched
-		"- [>] moved: other-slug",    // living-plan marker: must be untouched
+		"- [~] dropped: superseded", // living-plan marker: must be untouched
+		"- [>] moved: other-slug",   // living-plan marker: must be untouched
 		"not a task line",
 	}, "\n")
 
 	issue := map[string]bool{
-		"first task":              true,  // ticked on the issue -> should flip local
-		"already done locally":    false, // issue lags; union must NOT revert local
-		"indented subtask":        true,  // matches across indentation
-		"dropped: superseded":     true,  // ignored: not a [ ]/[x] line
-		"task only on the issue":  true,  // no local match -> ignored
+		"first task":             true,  // ticked on the issue -> should flip local
+		"already done locally":   false, // issue lags; union must NOT revert local
+		"indented subtask":       true,  // matches across indentation
+		"dropped: superseded":    true,  // ignored: not a [ ]/[x] line
+		"task only on the issue": true,  // no local match -> ignored
 	}
 
 	merged, flips := mergeTaskState(local, issue)

@@ -47,7 +47,7 @@ go install github.com/androidand/specsync/cmd/specsync@latest
 
 The npm package is a thin wrapper: its postinstall downloads the matching
 prebuilt binary (linux/darwin, amd64/arm64) from the GitHub release, so there is
-no Go toolchain or build step. A Homebrew tap is on the roadmap.
+no Go toolchain or build step.
 
 ### Requirements
 
@@ -58,6 +58,12 @@ no Go toolchain or build step. A Homebrew tap is on the roadmap.
 - **Node >= 16** — only for the npm wrapper's install shim.
 - **Platforms**: linux and macOS (darwin) on amd64/arm64. No Windows binary
   today.
+
+The npm installer verifies the downloaded archive against the release SHA-256
+checksums before extracting it. On a supported platform, download, checksum, or
+extraction failures fail the npm installation instead of leaving a successful
+but unusable `specsync` command. Unsupported platforms should use the Go install
+command or download a compatible release binary directly.
 
 ## Usage
 
@@ -89,6 +95,10 @@ specsync release-plan    # shipped changes + advisory semver bump
 specsync install-skill   # install the bundled agent skill
 specsync version         # print the binary version
 ```
+
+**Dry-run flags** — `sync`, `pull`, and `link` support `-dry-run`. Beads can be
+previewed through `specsync -dry-run -provider beads`. `scan`, `trace`, and
+`release-plan` are read-only commands and do not take a dry-run flag.
 
 Flags come **before** positional arguments (standard Go flag parsing):
 `specsync scan -json cmd/ auth`, not `specsync scan cmd/ auth -json`.
@@ -175,6 +185,9 @@ specsync install-skill --all           # every known agent directory
 specsync install-skill --claude-code   # or: --codex --opencode --copilot --agents
 ```
 
+The `--agents` flag installs the generic agentskills.io-compatible `.agents`
+copy. OpenCode has its own `--opencode` destination.
+
 ### `version`
 
 `specsync version` (also `-version` / `--version`) prints the binary version.
@@ -254,25 +267,12 @@ WorkItem                          ->  issue       (via a pluggable provider)
   (before archiving), and `archived` once the change moves under
   `changes/archive/`. So finishing the last task flips the issue out of
   `stage:active` on the next sync — no manual bookkeeping. Add `-close-completed`
-  to also close the issue on completion. Write a richer stage name into
-  `<change>/.status` to override the derived value.
+  to keep the issue's open/closed state aligned too: completion closes it and
+  new unchecked work reopens it. Write a richer stage name into
+  `<change>/.status` to override the derived value; an explicit `complete`
+  closes with the flag, while any other explicit stage remains open.
 - **Local cache** — projection ids live in a gitignored `<change>/.specsync/`
   directory, never in git.
-
-## Roadmap
-
-Tracked as OpenSpec changes in this repo's own `openspec/changes/` — dogfooding
-the tool on itself:
-
-- **Pluggable providers** — a `WorkProvider` interface so the same engine can
-  target raw `gh`, an MCP work-management server, or self-hosted trackers
-  (Vikunja, Plane, Forgejo) without changing the core.
-- **Spec↔issue linker** — resolve the link from branch name / marker / cache /
-  MCP relations, so both issue-first and spec-first flows work.
-- **Epic & sub-issue projection** — model an epic issue whose sub-issues each
-  become a focused spec.
-- **Distribution** — Homebrew tap and an `npm` wrapper for one-line global
-  install.
 
 ## License
 
