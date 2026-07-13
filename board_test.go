@@ -122,6 +122,19 @@ func defaultFake() *fakeBoard {
 	}
 }
 
+// stockFake mirrors an unmodified GitHub board, whose Status options are
+// "Todo" / "In Progress" / "Done" — note the capital P, which the default
+// mapping ("In progress") must match case-insensitively.
+func stockFake() *fakeBoard {
+	f := defaultFake()
+	f.options = []struct{ id, name string }{
+		{"OPT_TODO", "Todo"},
+		{"OPT_PROG", "In Progress"},
+		{"OPT_DONE", "Done"},
+	}
+	return f
+}
+
 func activeRef() Ref       { return Ref{Provider: "github", ID: "5", URL: "https://github.com/o/r/issues/5"} }
 func activeItem() WorkItem { return WorkItem{Slug: "s", Title: "T", Stage: StageActive} }
 
@@ -168,6 +181,73 @@ func TestBoardMapsActiveStatusToOptionAndSets(t *testing.T) {
 	}
 	if f.mutated("add") {
 		t.Fatalf("issue already on board: must not add again")
+	}
+}
+
+// A stock GitHub board names its option "In Progress" (capital P) while the
+// built-in default is "In progress": matching must be case-insensitive, resolve
+// to the real option (not fall back positionally to "Todo"), and report the
+// board's canonical casing.
+func TestBoardStockCasingMatchesCaseInsensitively(t *testing.T) {
+	f := stockFake()
+	f.onBoardItemID = "ITEM_1"
+	plan := project(t, f, orgTarget(), activeRef(), activeItem(), false)
+	if plan.StatusName != "In Progress" {
+		t.Fatalf("active stage on a stock board should map to \"In Progress\", got %q", plan.StatusName)
+	}
+	if !f.mutated("setStatus") {
+		t.Fatalf("expected a Status update mutation")
+	}
+	// The mutation must target the In Progress option, not the positional Todo.
+	var sawOption string
+	for _, call := range f.calls {
+		for _, a := range call {
+			if strings.HasPrefix(a, "optionId=") {
+				sawOption = strings.TrimPrefix(a, "optionId=")
+			}
+		}
+	}
+	if sawOption != "OPT_PROG" {
+		t.Fatalf("setStatus used option %q, want OPT_PROG", sawOption)
+	}
+}
+
+// Canonical-name resolution means no spurious rewrite when the board already
+// carries the desired Status in its own casing.
+func TestBoardStockCasingNoWriteWhenAlreadyCorrect(t *testing.T) {
+	f := stockFake()
+	f.onBoardItemID = "ITEM_1"
+	f.currentStatus = "In Progress"
+	project(t, f, orgTarget(), activeRef(), activeItem(), false)
+	if f.mutated("setStatus") {
+		t.Fatalf("must not write Status when it already matches (case-insensitively)")
+	}
+}
+
+// managedStatusNames must recognize stock-cased values as specsync-managed:
+// "Done" (archived default) on a stock board is overwritable, not human-set.
+func TestBoardStockCasingManagedStatusOverwritten(t *testing.T) {
+	f := stockFake()
+	f.onBoardItemID = "ITEM_1"
+	f.currentStatus = "Done"
+	plan := project(t, f, orgTarget(), activeRef(), activeItem(), false)
+	if !f.mutated("setStatus") {
+		t.Fatalf("expected to overwrite a specsync-managed Status on a stock board")
+	}
+	if plan.StatusName != "In Progress" {
+		t.Fatalf("StatusName = %q, want In Progress", plan.StatusName)
+	}
+}
+
+// A configured mapping with different casing than the board resolves too.
+func TestBoardConfiguredMappingIsCaseInsensitive(t *testing.T) {
+	f := stockFake()
+	f.onBoardItemID = "ITEM_1"
+	target := orgTarget()
+	target.StatusMapping = map[Stage]string{StageActive: "in progress"}
+	plan := project(t, f, target, activeRef(), activeItem(), false)
+	if plan.StatusName != "In Progress" {
+		t.Fatalf("configured \"in progress\" should resolve to board option \"In Progress\", got %q", plan.StatusName)
 	}
 }
 

@@ -62,6 +62,7 @@ func runSync(args []string) {
 	closeCompleted := fs.Bool("close-completed", false, "close the tracker item once every task in a change is checked")
 	project := fs.String("project", "", "target GitHub Projects board as owner/number (default: $SPECSYNC_PROJECT; unset = no board)")
 	assignee := fs.String("assignee", "", "board assignee login (default: the acting viewer, \"me\")")
+	statusMap := fs.String("status-map", "", "stage→Status overrides as stage=Name pairs, e.g. \"active=In Progress,archived=Done\" (default: $SPECSYNC_STATUS_MAP)")
 	_ = fs.Parse(args)
 
 	abs, err := filepath.Abs(*openspec)
@@ -69,7 +70,7 @@ func runSync(args []string) {
 		fail(err)
 	}
 
-	target, err := boardTarget(*project, *assignee)
+	target, err := boardTarget(*project, *assignee, *statusMap)
 	if err != nil {
 		fail(err)
 	}
@@ -138,6 +139,7 @@ func runPull(args []string) {
 	dryRun := fs.Bool("dry-run", false, "show what would be written without touching disk")
 	project := fs.String("project", "", "target GitHub Projects board as owner/number (default: $SPECSYNC_PROJECT; unset = no board)")
 	assignee := fs.String("assignee", "", "board assignee login (default: the acting viewer, \"me\")")
+	statusMap := fs.String("status-map", "", "stage→Status overrides as stage=Name pairs, e.g. \"active=In Progress,archived=Done\" (default: $SPECSYNC_STATUS_MAP)")
 	_ = fs.Parse(args)
 
 	if strings.TrimSpace(*issue) == "" {
@@ -147,7 +149,7 @@ func runPull(args []string) {
 	if err != nil {
 		fail(err)
 	}
-	target, err := boardTarget(*project, *assignee)
+	target, err := boardTarget(*project, *assignee, *statusMap)
 	if err != nil {
 		fail(err)
 	}
@@ -294,8 +296,14 @@ func makeProvider(repo string, dryRun bool, provider string) specsync.WorkProvid
 
 // boardTarget parses the -project flag (falling back to $SPECSYNC_PROJECT so the
 // board need not be retyped) into a BoardTarget. An empty value yields the zero
-// target, which disables all board behavior.
-func boardTarget(project, assignee string) (specsync.BoardTarget, error) {
+// target, which disables all board behavior. statusMap (falling back to
+// $SPECSYNC_STATUS_MAP) overrides the default stage→Status-name mapping; its
+// syntax is validated even without a project so a typo never fails silently.
+func boardTarget(project, assignee, statusMap string) (specsync.BoardTarget, error) {
+	mapping, err := parseStatusMapping(statusMap)
+	if err != nil {
+		return specsync.BoardTarget{}, err
+	}
 	if strings.TrimSpace(project) == "" {
 		project = os.Getenv("SPECSYNC_PROJECT")
 	}
@@ -312,10 +320,47 @@ func boardTarget(project, assignee string) (specsync.BoardTarget, error) {
 		return specsync.BoardTarget{}, fmt.Errorf("-project number is invalid in %q: %w", project, err)
 	}
 	return specsync.BoardTarget{
-		Owner:    strings.TrimSpace(parts[0]),
-		Number:   number,
-		Assignee: strings.TrimSpace(assignee),
+		Owner:         strings.TrimSpace(parts[0]),
+		Number:        number,
+		Assignee:      strings.TrimSpace(assignee),
+		StatusMapping: mapping,
 	}, nil
+}
+
+// parseStatusMapping parses "-status-map" (falling back to $SPECSYNC_STATUS_MAP)
+// into per-stage Status-name overrides. The format is comma-separated
+// stage=Name pairs where stage is active, complete, or archived; Status names
+// may contain spaces ("active=In Progress,archived=Done"). Empty yields nil
+// (the built-in defaults).
+func parseStatusMapping(s string) (map[specsync.Stage]string, error) {
+	if strings.TrimSpace(s) == "" {
+		s = os.Getenv("SPECSYNC_STATUS_MAP")
+	}
+	if strings.TrimSpace(s) == "" {
+		return nil, nil
+	}
+	stages := map[string]specsync.Stage{
+		"active":   specsync.StageActive,
+		"complete": specsync.StageComplete,
+		"archived": specsync.StageArchived,
+	}
+	mapping := map[specsync.Stage]string{}
+	for _, pair := range strings.Split(s, ",") {
+		k, v, ok := strings.Cut(pair, "=")
+		k, v = strings.TrimSpace(k), strings.TrimSpace(v)
+		if !ok || k == "" || v == "" {
+			return nil, fmt.Errorf("-status-map entry %q must be stage=Name (e.g. \"active=In Progress\")", strings.TrimSpace(pair))
+		}
+		stage, known := stages[strings.ToLower(k)]
+		if !known {
+			return nil, fmt.Errorf("-status-map stage %q is unknown; valid stages: active, complete, archived", k)
+		}
+		if _, dup := mapping[stage]; dup {
+			return nil, fmt.Errorf("-status-map maps stage %q twice", k)
+		}
+		mapping[stage] = v
+	}
+	return mapping, nil
 }
 
 // printBoardPlan renders the board projection for one change: what happened on a
