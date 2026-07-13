@@ -26,6 +26,10 @@ type PullResult struct {
 	Proposal string
 	Tasks    string
 	Links    []string // URLs from the ## Related section, for dry-run display
+	Marker   string   // identity marker upserted into the source issue
+	// MarkerPresent reports whether the source issue already carried the marker,
+	// i.e. no write was (or would be) needed. Drives the dry-run preview.
+	MarkerPresent bool
 }
 
 // Pull materializes a local OpenSpec change from an existing issue. The change
@@ -62,12 +66,14 @@ func Pull(ctx context.Context, opts PullOptions) (PullResult, error) {
 
 	proposal, tasks, relatedURLs := splitBody(item.Body, item.Title)
 	res := PullResult{
-		Slug:     slug,
-		Dir:      filepath.Join(opts.OpenSpecDir, "changes", slug),
-		IssueURL: item.URL,
-		Proposal: proposal,
-		Tasks:    tasks,
-		Links:    relatedURLs,
+		Slug:          slug,
+		Dir:           filepath.Join(opts.OpenSpecDir, "changes", slug),
+		IssueURL:      item.URL,
+		Proposal:      proposal,
+		Tasks:         tasks,
+		Links:         relatedURLs,
+		Marker:        marker(slug),
+		MarkerPresent: strings.Contains(item.Body, marker(slug)),
 	}
 
 	if opts.DryRun {
@@ -101,6 +107,13 @@ func Pull(ctx context.Context, opts PullOptions) (PullResult, error) {
 	ref := Ref{Provider: opts.Provider.Name(), ID: item.ID, URL: item.URL}
 	if err := saveRef(res.Dir, opts.Provider.Name(), ref); err != nil {
 		return PullResult{}, err
+	}
+	// Persist the identity marker into the source issue so the link is durable:
+	// even if the ref cache is deleted, a later sync rediscovers it via Find.
+	if mw, ok := opts.Provider.(IssueMarkerWriter); ok {
+		if _, err := mw.EnsureMarker(ctx, item.ID, slug, item.Body); err != nil {
+			return PullResult{}, fmt.Errorf("persist identity marker: %w", err)
+		}
 	}
 	return res, nil
 }

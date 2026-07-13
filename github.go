@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"sync"
 )
 
 // GitHubProvider projects changes onto GitHub Issues using the `gh` CLI. It
@@ -15,6 +16,11 @@ type GitHubProvider struct {
 	repo string // optional "owner/name"; empty = auto-detect from git remote
 	// run executes gh and returns trimmed stdout. Overridable in tests.
 	run func(ctx context.Context, args ...string) (string, error)
+
+	// nameOnce memoizes the canonical cache key so Name() resolves the concrete
+	// repo (auto-detect included) exactly once instead of on every call.
+	nameOnce sync.Once
+	name     string
 }
 
 // NewGitHubProvider returns a provider that drives the real `gh` binary,
@@ -48,11 +54,30 @@ func runGH(ctx context.Context, args ...string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
+// Name is the ref-cache key. It resolves the concrete target repo — from -repo
+// or, failing that, the git-remote auto-detect gh itself would use — and keys
+// canonically as "github:owner/repo". Two providers aimed at the same repo thus
+// share one key, whichever way the repo was supplied, so a ref cached by `pull`
+// is found by a later auto-detected `sync`. Resolution is memoized because it
+// shells out; when the repo can't be resolved it degrades to the bare "github".
 func (p *GitHubProvider) Name() string {
-	if p.repo != "" {
-		return "github:" + p.repo
+	p.nameOnce.Do(func() {
+		p.name = p.resolveKey(context.Background())
+	})
+	return p.name
+}
+
+func (p *GitHubProvider) resolveKey(ctx context.Context) string {
+	repo := p.repo
+	if repo == "" {
+		if out, err := p.run(ctx, "repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"); err == nil {
+			repo = strings.TrimSpace(out)
+		}
 	}
-	return "github"
+	if repo == "" {
+		return "github"
+	}
+	return "github:" + repo
 }
 
 // repoFlag returns ["--repo", "owner/name"] when a repo override is set,
@@ -105,6 +130,22 @@ func marker(slug string) string { return fmt.Sprintf("<!-- specsync:change=%s --
 
 func (p *GitHubProvider) renderBody(item WorkItem) string {
 	return marker(item.Slug) + "\n\n" + item.Body
+}
+
+// EnsureMarker upserts the identity marker into issue id's body so the link
+// survives loss of the local ref cache: a later sync rediscovers the issue via
+// Find. Idempotent — a body already carrying the marker is left untouched and no
+// gh write happens. It satisfies the IssueMarkerWriter capability used by pull.
+func (p *GitHubProvider) EnsureMarker(ctx context.Context, id, slug, body string) (bool, error) {
+	if strings.Contains(body, marker(slug)) {
+		return false, nil
+	}
+	args := append([]string{"issue", "edit", id}, p.repoFlag()...)
+	args = append(args, "--body", marker(slug)+"\n\n"+body)
+	if _, err := p.run(ctx, args...); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (p *GitHubProvider) Push(ctx context.Context, item WorkItem, existing *Ref) (Ref, error) {
