@@ -1,0 +1,6 @@
+- [x] Declare `https://specsync.se/` as the canonical site URL
+- [x] Add a tested Cloudflare Pages deployment workflow for pushes to `main`
+- [x] Guard deployment until Cloudflare credentials and project setup are ready
+- [x] Document the build, GitHub settings, custom domain, and redirect ownership
+- [x] Replace the Tantonet Specsync page with a permanent redirect
+- [ ] Enable production deployment after Cloudflare project and domain setup
