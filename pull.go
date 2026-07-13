@@ -16,6 +16,7 @@ type PullOptions struct {
 	IssueID     string       // provider id of the issue to pull (e.g. "42")
 	Slug        string       // change slug; derived from the issue when empty
 	DryRun      bool         // when true, render but never touch disk
+	Project     BoardTarget  // optional GitHub Projects board; unset = no board operations
 }
 
 // PullResult reports what a pull produced (or would produce on a dry run).
@@ -30,6 +31,10 @@ type PullResult struct {
 	// MarkerPresent reports whether the source issue already carried the marker,
 	// i.e. no write was (or would be) needed. Drives the dry-run preview.
 	MarkerPresent bool
+	// Board reports the board projection; BoardConfigured is false when no target
+	// project was configured (Board is zero and no board calls ran).
+	BoardConfigured bool
+	Board           BoardPlan
 }
 
 // Pull materializes a local OpenSpec change from an existing issue. The change
@@ -74,6 +79,22 @@ func Pull(ctx context.Context, opts PullOptions) (PullResult, error) {
 		Links:         relatedURLs,
 		Marker:        marker(slug),
 		MarkerPresent: strings.Contains(item.Body, marker(slug)),
+	}
+
+	// Project onto the board when a target is configured and the provider supports
+	// it. Done for both dry and real runs (the projector makes no mutation on a
+	// dry run); skipped entirely when unconfigured.
+	res.BoardConfigured = opts.Project.Configured()
+	if opts.Project.Configured() {
+		if bp, ok := opts.Provider.(BoardProjector); ok {
+			pulledItem := WorkItem{Slug: slug, Title: item.Title, Stage: StageActive}
+			ref := Ref{Provider: opts.Provider.Name(), ID: item.ID, URL: item.URL}
+			plan, perr := bp.ProjectOntoBoard(ctx, opts.Project, ref, pulledItem, opts.DryRun)
+			if perr != nil {
+				return PullResult{}, perr
+			}
+			res.Board = plan
+		}
 	}
 
 	if opts.DryRun {

@@ -21,6 +21,11 @@ type GitHubProvider struct {
 	// repo (auto-detect included) exactly once instead of on every call.
 	nameOnce sync.Once
 	name     string
+
+	// boardMu guards boardCache, which memoizes a target board's resolved node id
+	// and Status schema per run so repeated projections don't re-query the schema.
+	boardMu    sync.Mutex
+	boardCache map[string]*boardSchema
 }
 
 // NewGitHubProvider returns a provider that drives the real `gh` binary,

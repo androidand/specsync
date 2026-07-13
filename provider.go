@@ -115,6 +115,57 @@ type OpenSpecChange struct {
 	Deltas         []OpenSpecDelta
 }
 
+// BoardTarget names an opt-in GitHub ProjectV2 board to project a synced change
+// onto, plus the knobs for that projection. A zero BoardTarget (empty Owner)
+// means "no board" and MUST result in no board operations at all.
+type BoardTarget struct {
+	Owner  string // org or user login that owns the project
+	Number int    // project number, e.g. 6 in ExopenGitHub/6
+
+	// Assignee is the login to assign; "" or "me"/"@me" means the acting viewer.
+	Assignee string
+
+	// StatusMapping overrides the default stage->Status-name mapping per stage.
+	// A stage present here is treated as an explicit configuration, so an unknown
+	// name fails loud (no positional fallback). Absent stages use the defaults
+	// (active/complete -> "In progress", archived -> "Done") with a positional
+	// fallback to the board's first non-terminal / terminal option.
+	StatusMapping map[Stage]string
+}
+
+// Configured reports whether a board target is set. Unset = no board behavior.
+func (t BoardTarget) Configured() bool { return t.Owner != "" }
+
+// BoardPlan describes what a board projection did (real run) or would do
+// (dry-run). It is the render surface for -dry-run and the human-facing summary.
+type BoardPlan struct {
+	ProjectID      string
+	AlreadyOnBoard bool
+	AddedToBoard   bool // an item was (or would be) added via addProjectV2ItemById
+
+	StatusField   string // the resolved Status field name ("Status")
+	StatusName    string // the status name specsync set (or would set); "" = left alone
+	CurrentStatus string // the board Status before specsync acted
+	StatusSkipped string // reason the Status was left unchanged (human curation), if any
+
+	AssigneeLogin string // the login specsync assigned (or would assign); "" = none
+	AssignSkipped string // reason the assignee was left unchanged, if any
+}
+
+// BoardProjector is an optional, type-asserted provider capability: projecting a
+// synced change's issue onto a GitHub ProjectV2 board — detecting membership,
+// ensuring the issue is on the board, mapping its stage to the board Status
+// field, and assigning it, all idempotently and without clobbering human
+// curation. Providers that have no board concept simply don't implement it, and
+// sync/pull skip board work entirely. When target is unconfigured this MUST be a
+// no-op that issues no board calls.
+type BoardProjector interface {
+	// ProjectOntoBoard reconciles ref's issue with target. When dryRun is set it
+	// performs only read queries and returns the plan it would apply, making no
+	// mutation. item.Stage drives the Status mapping.
+	ProjectOntoBoard(ctx context.Context, target BoardTarget, ref Ref, item WorkItem, dryRun bool) (BoardPlan, error)
+}
+
 // IssueSearcher is an optional, type-asserted provider capability: finding open
 // issues by a free-text query. `scan` uses it to surface in-area issues that
 // link to no change. Providers that cannot search simply don't implement it, and

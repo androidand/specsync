@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/androidand/specsync"
@@ -59,9 +60,16 @@ func runSync(args []string) {
 	dryRun := fs.Bool("dry-run", false, "print the provider commands and rendered body without executing")
 	reconcile := fs.Bool("reconcile", true, "merge external task state back into tasks.md before pushing")
 	closeCompleted := fs.Bool("close-completed", false, "close the tracker item once every task in a change is checked")
+	project := fs.String("project", "", "target GitHub Projects board as owner/number (default: $SPECSYNC_PROJECT; unset = no board)")
+	assignee := fs.String("assignee", "", "board assignee login (default: the acting viewer, \"me\")")
 	_ = fs.Parse(args)
 
 	abs, err := filepath.Abs(*openspec)
+	if err != nil {
+		fail(err)
+	}
+
+	target, err := boardTarget(*project, *assignee)
 	if err != nil {
 		fail(err)
 	}
@@ -79,6 +87,10 @@ func runSync(args []string) {
 		fmt.Println()
 	}
 
+	if *dryRun && target.Configured() {
+		fmt.Printf("board: %s/%d (no GraphQL mutations on a dry run)\n\n", target.Owner, target.Number)
+	}
+
 	res, err := specsync.Sync(context.Background(), specsync.Options{
 		OpenSpecDir:    abs,
 		Provider:       provider,
@@ -86,6 +98,7 @@ func runSync(args []string) {
 		DryRun:         *dryRun,
 		Reconcile:      *reconcile,
 		CloseCompleted: *closeCompleted,
+		Project:        target,
 	})
 	if err != nil {
 		fail(err)
@@ -107,6 +120,9 @@ func runSync(args []string) {
 			}
 			fmt.Printf("           ↳ reconciled from issue: %s → %s\n", f.Text, state)
 		}
+		if it.BoardConfigured {
+			printBoardPlan(it.Board, *dryRun)
+		}
 	}
 	fmt.Printf("specsync: %d created, %d updated\n", res.Created, res.Updated)
 }
@@ -120,12 +136,18 @@ func runPull(args []string) {
 	slug := fs.String("slug", "", "change slug (default: derived from the issue title)")
 	repo := fs.String("repo", "", "source repo as owner/name (default: auto-detect from git remote)")
 	dryRun := fs.Bool("dry-run", false, "show what would be written without touching disk")
+	project := fs.String("project", "", "target GitHub Projects board as owner/number (default: $SPECSYNC_PROJECT; unset = no board)")
+	assignee := fs.String("assignee", "", "board assignee login (default: the acting viewer, \"me\")")
 	_ = fs.Parse(args)
 
 	if strings.TrimSpace(*issue) == "" {
 		fail(fmt.Errorf("pull: -issue is required"))
 	}
 	abs, err := filepath.Abs(*openspec)
+	if err != nil {
+		fail(err)
+	}
+	target, err := boardTarget(*project, *assignee)
 	if err != nil {
 		fail(err)
 	}
@@ -136,6 +158,7 @@ func runPull(args []string) {
 		IssueID:     *issue,
 		Slug:        *slug,
 		DryRun:      *dryRun,
+		Project:     target,
 	})
 	if err != nil {
 		fail(err)
@@ -153,12 +176,18 @@ func runPull(args []string) {
 		} else {
 			fmt.Printf("\nwould add marker to issue %s body: %s\n", *issue, res.Marker)
 		}
+		if res.BoardConfigured {
+			printBoardPlan(res.Board, true)
+		}
 		return
 	}
 	fmt.Printf("specsync: pulled issue %s -> %s\n", *issue, dest)
 	fmt.Println("  + proposal.md")
 	if res.Tasks != "" {
 		fmt.Println("  + tasks.md")
+	}
+	if res.BoardConfigured {
+		printBoardPlan(res.Board, false)
 	}
 }
 
@@ -260,6 +289,63 @@ func makeProvider(repo string, dryRun bool, provider string) specsync.WorkProvid
 			return specsync.NewGitHubProviderWithRepo(repo)
 		}
 		return specsync.NewGitHubProvider()
+	}
+}
+
+// boardTarget parses the -project flag (falling back to $SPECSYNC_PROJECT so the
+// board need not be retyped) into a BoardTarget. An empty value yields the zero
+// target, which disables all board behavior.
+func boardTarget(project, assignee string) (specsync.BoardTarget, error) {
+	if strings.TrimSpace(project) == "" {
+		project = os.Getenv("SPECSYNC_PROJECT")
+	}
+	project = strings.TrimSpace(project)
+	if project == "" {
+		return specsync.BoardTarget{}, nil
+	}
+	parts := strings.Split(project, "/")
+	if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" {
+		return specsync.BoardTarget{}, fmt.Errorf("-project must be owner/number, got %q", project)
+	}
+	number, err := strconv.Atoi(strings.TrimSpace(parts[1]))
+	if err != nil {
+		return specsync.BoardTarget{}, fmt.Errorf("-project number is invalid in %q: %w", project, err)
+	}
+	return specsync.BoardTarget{
+		Owner:    strings.TrimSpace(parts[0]),
+		Number:   number,
+		Assignee: strings.TrimSpace(assignee),
+	}, nil
+}
+
+// printBoardPlan renders the board projection for one change: what happened on a
+// real run, or what would happen on a dry run.
+func printBoardPlan(plan specsync.BoardPlan, dryRun bool) {
+	if dryRun {
+		fmt.Println("           ↳ board (dry run):")
+		fmt.Println("               • would ensure the issue is on the board")
+		if plan.StatusName != "" {
+			fmt.Printf("               • would set Status → %s\n", plan.StatusName)
+		}
+		if plan.AssigneeLogin != "" {
+			fmt.Printf("               • would assign → %s\n", plan.AssigneeLogin)
+		}
+		return
+	}
+	if plan.AddedToBoard {
+		fmt.Println("           ↳ board: added to the board")
+	} else if plan.AlreadyOnBoard {
+		fmt.Println("           ↳ board: already on the board")
+	}
+	if plan.StatusName != "" {
+		fmt.Printf("               • Status → %s\n", plan.StatusName)
+	} else if plan.StatusSkipped != "" {
+		fmt.Printf("               • Status left unchanged (%s)\n", plan.StatusSkipped)
+	}
+	if plan.AssigneeLogin != "" {
+		fmt.Printf("               • assigned → %s\n", plan.AssigneeLogin)
+	} else if plan.AssignSkipped != "" {
+		fmt.Printf("               • assignee left unchanged (%s)\n", plan.AssignSkipped)
 	}
 }
 
