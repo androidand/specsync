@@ -48,5 +48,27 @@
     "icon": "🎯",
     "title": "Auto-lifecycle",
     "body": "<code>stage:active</code> while work remains; auto-flips to <code>stage:complete</code> when all tasks are checked. Optional <code>-close-completed</code> keeps the issue open/closed state aligned — completion closes it, new work reopens it."
+  },
+  {
+    "icon": "🔀",
+    "title": "Two-way reconcile",
+    "body": "Checkboxes ticked in the GitHub issue merge back into your local <code>tasks.md</code> on the next sync — progress flows both ways, never lost in either direction."
+  },
+  {
+    "icon": "🧵",
+    "title": "Traceability",
+    "body": "<code>specsync trace</code> reconstructs how a change, its issue, PRs, and commits connect — every link backed by evidence (markers, branches, commit footers), never guessed."
+  },
+  {
+    "icon": "📋",
+    "title": "Projects boards",
+    "status": "soon",
+    "body": "Point <code>-project owner/number</code> at a GitHub Projects board: synced issues land on the board, Status follows the change lifecycle, and human curation is respected."
+  },
+  {
+    "icon": "📜",
+    "title": "Spec-driven changelog",
+    "status": "soon",
+    "body": "<code>specsync changelog</code> writes a Keep a Changelog section from your shipped changes — one entry per change, release notes authored at planning time, never a raw commit dump."
   }
 ]

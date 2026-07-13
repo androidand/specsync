@@ -51,15 +51,52 @@ function replaceRegion(html, name, inner) {
 function escapeRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
 
 function mdToHtml(md) {
-  return md
+  return escapeHtml(md)
     .replace(/^### (.+)$/gm, "<h5>$1</h5>")
     .replace(/^## (.+)$/gm, "<h4>$1</h4>")
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
     .replace(/`([^`]+)`/g, "<code>$1</code>")
-    .replace(/^- (.+)$/gm, "<li>$1</li>")
+    .replace(/^[-*] (.+)$/gm, "<li>$1</li>")
     .replace(/(<li>.*<\/li>\n?)+/g, (s) => `<ul>${s}</ul>`)
     .replace(/\n{2,}/g, "</p><p>")
     .trim();
+}
+
+// goreleaser (changelog.use: github) writes release bodies as
+//   * <40-char sha>: <commit subject> (@author)
+// Render those as grouped, human-readable entries: conventional-commit types
+// bucket into Features / Fixes / Other, the sha shortens into a commit link.
+// Bodies that don't match (hand-written notes) fall back to mdToHtml.
+const COMMIT_LINE = /^\* ([0-9a-f]{40}): (.+?) \(@[^)]+\)\s*$/;
+const CONVENTIONAL = /^(\w+)(?:\([^)]*\))?!?:\s*(.+)$/;
+const TYPE_GROUP = { feat: "Features", fix: "Fixes" };
+
+function renderReleaseBody(body, repoUrl) {
+  const commits = [];
+  let matched = true;
+  for (const line of body.split("\n")) {
+    const t = line.trim();
+    if (!t || /^#+\s*Changelog$/i.test(t)) continue;
+    const m = t.match(COMMIT_LINE);
+    if (!m) { matched = false; break; }
+    const conv = m[2].match(CONVENTIONAL);
+    commits.push({
+      sha: m[1],
+      group: conv ? (TYPE_GROUP[conv[1].toLowerCase()] || "Other") : "Other",
+      text: conv ? conv[2] : m[2],
+    });
+  }
+  if (!matched || commits.length === 0) return `<p>${mdToHtml(body)}</p>`;
+
+  const groups = ["Features", "Fixes", "Other"];
+  return groups.map((g) => {
+    const items = commits.filter((c) => c.group === g);
+    if (items.length === 0) return "";
+    const lis = items.map((c) =>
+      `<li>${escapeHtml(c.text)} <a class="commit-sha" href="${repoUrl}/commit/${c.sha}" target="_blank" rel="noopener">${c.sha.slice(0, 7)}</a></li>`
+    ).join("\n");
+    return `<h5>${g}</h5><ul>${lis}</ul>`;
+  }).filter(Boolean).join("\n");
 }
 
 async function build() {
@@ -97,13 +134,13 @@ async function build() {
       const releases = JSON.parse(res.body).filter((r) => !r.draft).slice(0, 3);
       changelog = releases.map((r) => {
         const date = new Date(r.published_at).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
-        const body = r.body ? mdToHtml(r.body) : "";
+        const body = r.body ? renderReleaseBody(r.body, "https://github.com/androidand/specsync") : "";
         return `        <div class="release">
           <div class="release-header">
             <a class="release-tag" href="${r.html_url}" target="_blank" rel="noopener">${escapeHtml(r.tag_name)}</a>
             <span class="release-date">${date}</span>
           </div>
-          ${body ? `<div class="release-body"><p>${body}</p></div>` : ""}
+          ${body ? `<div class="release-body">${body}</div>` : ""}
         </div>`;
       }).join("\n");
       console.log(`  changelog: ${releases.length} releases`);

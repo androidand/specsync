@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>specsync</title>
-<meta name="description" content="Keep OpenSpec change specs in sync with GitHub issues — without committing planning files to git.">
+<meta name="description" content="The issue is the spec. The changelog is the spec history. specsync keeps OpenSpec changes in sync with GitHub issues.">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="canonical" href="https://specsync.se/">
 <meta property="og:url" content="https://specsync.se/">
@@ -263,7 +263,16 @@ nav {
 .c-flag { color: #7EB8D4; }
 .c-out { color: var(--dark-green); }
 .c-dim { color: var(--dark-ink-2); }
-code { display: block; white-space: pre; }
+.code-block code { display: block; white-space: pre; }
+/* Inline code in step text (feature cards and release bodies have their own rules). */
+.step-text code {
+  background: var(--accent-light);
+  color: var(--accent);
+  padding: 0.1em 0.35em;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+}
 
 /* ── DARK SECTION ── */
 .dark-section {
@@ -352,6 +361,8 @@ code { display: block; white-space: pre; }
 .release-body ul { padding-left: 1.25rem; margin: 0.25rem 0; }
 .release-body li { margin-bottom: 0.15rem; }
 .release-body code { font-family: var(--font-mono); font-size: 0.85em; background: var(--accent-light); color: var(--accent); padding: 0.1em 0.3em; border-radius: 3px; }
+.release-body .commit-sha { font-family: var(--font-mono); font-size: 0.8em; color: var(--ink-3); text-decoration: none; }
+.release-body .commit-sha:hover { color: var(--accent); text-decoration: underline; }
 .release-body h4, .release-body h5 { font-size: 0.875rem; font-weight: 600; margin: 0.75rem 0 0.25rem; color: var(--ink); }
 .changelog-empty { color: var(--ink-3); font-size: 0.9rem; }
 .changelog-empty a { color: var(--accent); text-decoration: none; }
@@ -472,8 +483,8 @@ v0.5.1
 <!-- HERO -->
 <section class="hero">
   <p class="hero-eyebrow">OpenSpec × GitHub Issues</p>
-  <h1>The spec <em>is</em> the issue.</h1>
-  <p class="hero-sub">specsync keeps your OpenSpec change specs out of git and in your issue tracker — automatically. Plan locally, sync once, collaborate everywhere.</p>
+  <h1>The issue <em>is</em> the spec.<br>The changelog <em>is</em> the spec history.</h1>
+  <p class="hero-sub">specsync projects your OpenSpec change specs into your issue tracker — automatically. Plan locally, sync once, collaborate everywhere. And when you ship, the changelog writes itself from the specs — in user language, never a commit dump.</p>
 
   <div class="terminal" role="img" aria-label="specsync demo terminal">
     <div class="terminal-bar">
@@ -516,7 +527,7 @@ v0.5.1
       <div class="step-text">
         <p class="step-label">Spec-first</p>
         <h3>Write the plan, create the issue</h3>
-        <p>Author <code style="display:inline;background:var(--accent-light);color:var(--accent);padding:0.1em 0.35em;border-radius:3px;font-family:var(--font-mono);font-size:0.85em">proposal.md</code> and <code style="display:inline;background:var(--accent-light);color:var(--accent);padding:0.1em 0.35em;border-radius:3px;font-family:var(--font-mono);font-size:0.85em">tasks.md</code> locally. Run specsync once — the GitHub issue appears, body and checklist intact. No branch, no pre-existing issue required.</p>
+        <p>Author <code>proposal.md</code> and <code>tasks.md</code> locally. Run specsync once — the GitHub issue appears, body and checklist intact. No branch, no pre-existing issue required.</p>
       </div>
       <div class="step-code">
         <div class="code-block"><code><span class="c-comment"># Write your spec</span>
@@ -537,7 +548,7 @@ specsync <span class="c-flag">-slug</span> my-feature
       <div class="step-text">
         <p class="step-label">Issue-first</p>
         <h3>Pull an existing issue into a spec</h3>
-        <p>When the issue already exists — created manually or via your backlog MCP — pull it. specsync materialises <code style="display:inline;background:var(--accent-light);color:var(--accent);padding:0.1em 0.35em;border-radius:3px;font-family:var(--font-mono);font-size:0.85em">proposal.md</code> and <code style="display:inline;background:var(--accent-light);color:var(--accent);padding:0.1em 0.35em;border-radius:3px;font-family:var(--font-mono);font-size:0.85em">tasks.md</code> from the issue body and caches the ref — the next push updates that same issue, never creates a duplicate.</p>
+        <p>When the issue already exists — created manually or via your backlog MCP — pull it. specsync materialises <code>proposal.md</code> and <code>tasks.md</code> from the issue body and caches the ref — the next push updates that same issue, never creates a duplicate.</p>
       </div>
       <div class="step-code">
         <div class="code-block"><code><span class="c-comment"># Pull issue #4083 into a local spec</span>
@@ -557,7 +568,7 @@ specsync <span class="c-flag">-slug</span> streamlined-modals</code></div>
       <div class="step-text">
         <p class="step-label">Cross-repo</p>
         <h3>Link issues across repositories</h3>
-        <p>Large features span multiple repos. Use <code style="display:inline;background:var(--accent-light);color:var(--accent);padding:0.1em 0.35em;border-radius:3px;font-family:var(--font-mono);font-size:0.85em">-repo</code> to target any repo, then <code style="display:inline;background:var(--accent-light);color:var(--accent);padding:0.1em 0.35em;border-radius:3px;font-family:var(--font-mono);font-size:0.85em">specsync link</code> to cross-reference both. Each issue gets a <code style="display:inline;background:var(--accent-light);color:var(--accent);padding:0.1em 0.35em;border-radius:3px;font-family:var(--font-mono);font-size:0.85em">## Related</code> section pointing to the sibling — maintained automatically on every push.</p>
+        <p>Large features span multiple repos. Use <code>-repo</code> to target any repo, then <code>specsync link</code> to cross-reference both. Each issue gets a <code>## Related</code> section pointing to the sibling — maintained automatically on every push.</p>
       </div>
       <div class="step-code">
         <div class="code-block"><code><span class="c-comment"># Create issues in two repos</span>
@@ -633,48 +644,31 @@ specsync link feature-api feature-ui
         <h4>Auto-lifecycle</h4>
         <p><code>stage:active</code> while work remains; auto-flips to <code>stage:complete</code> when all tasks are checked. Optional <code>-close-completed</code> keeps the issue open/closed state aligned — completion closes it, new work reopens it.</p>
       </div>
+      <div class="feature">
+        <span class="feature-icon">🔀</span>
+        <h4>Two-way reconcile</h4>
+        <p>Checkboxes ticked in the GitHub issue merge back into your local <code>tasks.md</code> on the next sync — progress flows both ways, never lost in either direction.</p>
+      </div>
+      <div class="feature">
+        <span class="feature-icon">🧵</span>
+        <h4>Traceability</h4>
+        <p><code>specsync trace</code> reconstructs how a change, its issue, PRs, and commits connect — every link backed by evidence (markers, branches, commit footers), never guessed.</p>
+      </div>
+      <div class="feature is-soon">
+        <span class="feature-icon">📋</span>
+        <h4>Projects boards <span class="soon">soon</span></h4>
+        <p>Point <code>-project owner/number</code> at a GitHub Projects board: synced issues land on the board, Status follows the change lifecycle, and human curation is respected.</p>
+      </div>
+      <div class="feature is-soon">
+        <span class="feature-icon">📜</span>
+        <h4>Spec-driven changelog <span class="soon">soon</span></h4>
+        <p><code>specsync changelog</code> writes a Keep a Changelog section from your shipped changes — one entry per change, release notes authored at planning time, never a raw commit dump.</p>
+      </div>
 <!-- FEATURES:end -->
     </div>
   </div>
 </div>
 
-
-        <div class="release">
-          <div class="release-header">
-            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.2.1" target="_blank" rel="noopener">v0.2.1</a>
-            <span class="release-date">Jun 29, 2026</span>
-          </div>
-          <div class="release-body"><p><h4>Changelog</h4>
-* 9eef34dff156452f8015ec2b478eb772c6501f04: refactor: replace .specsync/links.json with links.md (@androidand)
-* fbfd9ea4e06b8b7ae6f30095c58a7668a3a3e7af: feat: render Related section as [owner/repo#N](url) autolinks (@androidand)
-* b9fcbd8e4bf1e1f73d7428655bb7197a1439fb53: fix: specsync link dry-run now shows links.md content and Related preview (@androidand)</p><p></p></div>
-        </div>
-
-        <div class="release">
-          <div class="release-header">
-            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.2.0" target="_blank" rel="noopener">v0.2.0</a>
-            <span class="release-date">Jun 29, 2026</span>
-          </div>
-          <div class="release-body"><p><h4>Changelog</h4>
-* b32ef8dc2107ff021ab94269750a2290a2d20cde: feat: cross-repo issues and specsync link command (@androidand)</p><p></p></div>
-        </div>
-
-        <div class="release">
-          <div class="release-header">
-            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.1.1" target="_blank" rel="noopener">v0.1.1</a>
-            <span class="release-date">Jun 17, 2026</span>
-          </div>
-          <div class="release-body"><p><h4>Changelog</h4>
-* a38fe3dff3aa4ce71787d0fadf55065b8ddee9bd: ci: self-sync workflow — generate this repo's issues from its own OpenSpec changes (@androidand)
-* d640285f044911c4f8ec03a8fcbc3819f3d6cadd: feat: issue-first pull — materialize an OpenSpec change from a GitHub issue (@androidand)
-* 42ad84bc6edbdf75e475ef092cd8dfd5cc4e87f9: Fix exact marker resolution in GitHub find (@androidand)
-* ce75cbbc39fe3fbfba18227c505bb281155390f4: Document OpenSpec team workflow guardrails (@androidand)
-* 4bdb2b9b4077923339c65a1edd9bd937d635b5c5: Add agent workflow rules for OpenSpec/specsync/Beads (@androidand)
-* bafeb467d27aec945cd0596184c237d25a81aecd: Tighten and clarify agent workflow rules (@androidand)
-* 068573bb3af6a21211cdce55c913c7463c5dd397: Add explicit public-repo no-secrets rule (@androidand)
-* e1a4d5e1a4fcec6701d9eb8cff978af55d502146: build(npm): promote npm install, sync version to tag, auto-publish on release (@androidand)
-* d58e229e67954c1251fa8bd49f92c514248ec391: build(npm): publish via Trusted Publishing (OIDC); set version 0.1.1 (@androidand)</p><p></p></div>
-        </div>
 <hr class="divider">
 <section class="changelog">
   <p class="section-label">Changelog</p>
@@ -685,37 +679,34 @@ specsync link feature-api feature-ui
             <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.5.1" target="_blank" rel="noopener">v0.5.1</a>
             <span class="release-date">Jul 13, 2026</span>
           </div>
-          <div class="release-body"><p><h4>Changelog</h4>
-* 2990406baef500784da1e1c093807eecfcb35b3a: fix(release): complete lifecycle sync and harden npm install (@androidand)</p><p></p></div>
+          <div class="release-body"><h5>Fixes</h5><ul><li>complete lifecycle sync and harden npm install <a class="commit-sha" href="https://github.com/androidand/specsync/commit/2990406baef500784da1e1c093807eecfcb35b3a" target="_blank" rel="noopener">2990406</a></li></ul></div>
         </div>
         <div class="release">
           <div class="release-header">
             <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.5.0" target="_blank" rel="noopener">v0.5.0</a>
             <span class="release-date">Jul 13, 2026</span>
           </div>
-          <div class="release-body"><p><h4>Changelog</h4>
-* ee7664b94567d7e292b99cb399f4c45be34006c4: feat(sync): derive a "complete" stage from task completion + optional auto-close (@androidand)</p><p></p></div>
+          <div class="release-body"><h5>Features</h5><ul><li>derive a "complete" stage from task completion + optional auto-close <a class="commit-sha" href="https://github.com/androidand/specsync/commit/ee7664b94567d7e292b99cb399f4c45be34006c4" target="_blank" rel="noopener">ee7664b</a></li></ul></div>
         </div>
         <div class="release">
           <div class="release-header">
             <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.4.1" target="_blank" rel="noopener">v0.4.1</a>
             <span class="release-date">Jul 6, 2026</span>
           </div>
-          <div class="release-body"><p><h4>Changelog</h4>
-* 1e05a1c164be705c23ed315342aa29fd48448487: chore(site): rebuild at v0.4.0 (@androidand)
-* ca5ae79aa12a475ce2b548c515be46482fc41e58: chore: ignore .skein/ and logs/ runtime state; track changes/.gitignore (@androidand)
-* d4327e9db0a17d296eda872a6234cee506abb1e8: docs: add gh issue list and openspec archive to skill workflow (@androidand)
-* 7272da8809384af4583dc7c608ae32a52584b237: spec: specsync Go library (pkg/specsync) — GH #25 (@androidand)
-* af119790c86f125357a5db61075604681c39e4f6: docs: add OpenSpec CLI commands and prerequisites to skill (@androidand)
-* 52882a564d087ab99da3bcd74ac58a359e6dbcca: chore: integrate OPSX into specsync skill (@androidand)
-* 233a54a81fbe67877d229311b9bedd83f191530e: docs(openspec): plan launch-readiness — README surface, npm metadata, audit record (@androidand)
-* e0e54298050c10b62e6d2255f950151f57a9ea8d: chore(npm): add keywords, author, bugs to package metadata (@androidand)
-* 12fbda70bfe45fe24deffcea51225624a26d8a64: feat(cli): version subcommand and -version/--version flags (@androidand)
-* f9001bbc2cd2655cc9080e8ea85f4f03b2577403: docs(readme): document full CLI surface, requirements, badges (@androidand)
-* 4ee97ea28e6fcfac30581fd47cf488bee3e35235: docs(openspec): check off launch-readiness section-1 tasks (@androidand)
-* cb4c87afbb816334bfcf05713ef281592924c9d2: docs(readme): fix first-sync stumbling blocks found in stranger read-through (@androidand)
-* 0157a851c31a6c308fbd8549e23e11793003b01f: chore(site): rebuild at v0.4.0 (@androidand)
-* aa95e61222aad64fcf56de4a1d4749935f089c43: docs(openspec): check off launch-readiness section-2 tasks (@androidand)</p><p></p></div>
+          <div class="release-body"><h5>Features</h5><ul><li>version subcommand and -version/--version flags <a class="commit-sha" href="https://github.com/androidand/specsync/commit/12fbda70bfe45fe24deffcea51225624a26d8a64" target="_blank" rel="noopener">12fbda7</a></li></ul>
+<h5>Other</h5><ul><li>rebuild at v0.4.0 <a class="commit-sha" href="https://github.com/androidand/specsync/commit/1e05a1c164be705c23ed315342aa29fd48448487" target="_blank" rel="noopener">1e05a1c</a></li>
+<li>ignore .skein/ and logs/ runtime state; track changes/.gitignore <a class="commit-sha" href="https://github.com/androidand/specsync/commit/ca5ae79aa12a475ce2b548c515be46482fc41e58" target="_blank" rel="noopener">ca5ae79</a></li>
+<li>add gh issue list and openspec archive to skill workflow <a class="commit-sha" href="https://github.com/androidand/specsync/commit/d4327e9db0a17d296eda872a6234cee506abb1e8" target="_blank" rel="noopener">d4327e9</a></li>
+<li>specsync Go library (pkg/specsync) — GH #25 <a class="commit-sha" href="https://github.com/androidand/specsync/commit/7272da8809384af4583dc7c608ae32a52584b237" target="_blank" rel="noopener">7272da8</a></li>
+<li>add OpenSpec CLI commands and prerequisites to skill <a class="commit-sha" href="https://github.com/androidand/specsync/commit/af119790c86f125357a5db61075604681c39e4f6" target="_blank" rel="noopener">af11979</a></li>
+<li>integrate OPSX into specsync skill <a class="commit-sha" href="https://github.com/androidand/specsync/commit/52882a564d087ab99da3bcd74ac58a359e6dbcca" target="_blank" rel="noopener">52882a5</a></li>
+<li>plan launch-readiness — README surface, npm metadata, audit record <a class="commit-sha" href="https://github.com/androidand/specsync/commit/233a54a81fbe67877d229311b9bedd83f191530e" target="_blank" rel="noopener">233a54a</a></li>
+<li>add keywords, author, bugs to package metadata <a class="commit-sha" href="https://github.com/androidand/specsync/commit/e0e54298050c10b62e6d2255f950151f57a9ea8d" target="_blank" rel="noopener">e0e5429</a></li>
+<li>document full CLI surface, requirements, badges <a class="commit-sha" href="https://github.com/androidand/specsync/commit/f9001bbc2cd2655cc9080e8ea85f4f03b2577403" target="_blank" rel="noopener">f9001bb</a></li>
+<li>check off launch-readiness section-1 tasks <a class="commit-sha" href="https://github.com/androidand/specsync/commit/4ee97ea28e6fcfac30581fd47cf488bee3e35235" target="_blank" rel="noopener">4ee97ea</a></li>
+<li>fix first-sync stumbling blocks found in stranger read-through <a class="commit-sha" href="https://github.com/androidand/specsync/commit/cb4c87afbb816334bfcf05713ef281592924c9d2" target="_blank" rel="noopener">cb4c87a</a></li>
+<li>rebuild at v0.4.0 <a class="commit-sha" href="https://github.com/androidand/specsync/commit/0157a851c31a6c308fbd8549e23e11793003b01f" target="_blank" rel="noopener">0157a85</a></li>
+<li>check off launch-readiness section-2 tasks <a class="commit-sha" href="https://github.com/androidand/specsync/commit/aa95e61222aad64fcf56de4a1d4749935f089c43" target="_blank" rel="noopener">aa95e61</a></li></ul></div>
         </div>
 <!-- CHANGELOG:end -->
 </section>
