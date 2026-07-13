@@ -2,6 +2,7 @@ package specsync
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -81,14 +82,26 @@ func Link(opts LinkOptions) ([]LinkedPair, error) {
 	return pairs, nil
 }
 
-// firstRef returns the first ref from the map, preferring the plain "github"
-// key over namespaced "github:owner/repo" entries.
+// firstRef picks the ref to link against: canonical "github:owner/repo" keys
+// first (the bare "github" key is a pre-migration relic and may be stale),
+// then the bare key, then anything else. Keys are scanned in sorted order so
+// the pick is deterministic when several remain.
 func firstRef(refs map[string]Ref) (string, Ref) {
+	keys := make([]string, 0, len(refs))
+	for k := range refs {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		if strings.HasPrefix(k, "github:") {
+			return k, refs[k]
+		}
+	}
 	if r, ok := refs["github"]; ok {
 		return "github", r
 	}
-	for k, r := range refs {
-		return k, r
+	for _, k := range keys {
+		return k, refs[k]
 	}
 	return "", Ref{}
 }

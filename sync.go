@@ -80,12 +80,18 @@ func syncOne(ctx context.Context, prov WorkProvider, c Change, dryRun, reconcile
 	}
 	// Resolve by the canonical key, then fall back to the legacy bare "github"
 	// key so an existing refs.json — written before the key was repo-qualified —
-	// keeps updating its issue instead of creating a duplicate. saveRef below
-	// persists under the canonical key, migrating the hit going forward.
+	// keeps updating its issue instead of creating a duplicate. The fallback only
+	// applies when the cached URL points into the target repo: an unguarded hit
+	// would make `-repo ownerB/repoB` edit whatever issue number the legacy entry
+	// holds in the wrong repo. A rejected fallback degrades to no ref, and the
+	// marker lookup in Push still rescues genuine matches. saveRef below persists
+	// under the canonical key, migrating the hit going forward.
 	key := prov.Name()
 	existing, hadRef := refs[key]
 	if !hadRef && strings.HasPrefix(key, "github:") {
-		existing, hadRef = refs["github"]
+		if legacy, ok := refs["github"]; ok && legacyRefMatchesRepo(legacy, strings.TrimPrefix(key, "github:")) {
+			existing, hadRef = legacy, true
+		}
 	}
 	var existingPtr *Ref
 	if hadRef {
@@ -163,6 +169,29 @@ func WorkItemFor(c Change, closeCompleted bool) WorkItem {
 		Closed:       c.Archived || (closeCompleted && c.Stage == StageComplete),
 		ManageClosed: c.Archived || closeCompleted,
 	}
+}
+
+// legacyRefMatchesRepo reports whether a legacy bare-"github" cache entry
+// belongs to the given "owner/repo", by parsing the owner/repo out of its
+// issue URL. Unparseable URLs never match: the entry may point anywhere, so
+// it must not be edited under a repo-qualified key.
+func legacyRefMatchesRepo(ref Ref, repo string) bool {
+	r, ok := ghIssueRepo(ref.URL)
+	return ok && strings.EqualFold(r, repo)
+}
+
+// ghIssueRepo extracts "owner/repo" from a GitHub issue URL. ok is false for
+// anything that isn't a github.com URL with an owner, repo, and further path.
+func ghIssueRepo(url string) (repo string, ok bool) {
+	const prefix = "https://github.com/"
+	if !strings.HasPrefix(url, prefix) {
+		return "", false
+	}
+	parts := strings.SplitN(url[len(prefix):], "/", 3)
+	if len(parts) < 3 {
+		return "", false
+	}
+	return parts[0] + "/" + parts[1], true
 }
 
 // refLabel returns "[owner/repo#N](url)" for GitHub issue URLs so GitHub
