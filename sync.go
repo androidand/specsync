@@ -65,7 +65,15 @@ func syncOne(ctx context.Context, prov WorkProvider, c Change, dryRun, reconcile
 	if err != nil {
 		return Ref{}, false, nil, err
 	}
-	existing, hadRef := refs[prov.Name()]
+	// Resolve by the canonical key, then fall back to the legacy bare "github"
+	// key so an existing refs.json — written before the key was repo-qualified —
+	// keeps updating its issue instead of creating a duplicate. saveRef below
+	// persists under the canonical key, migrating the hit going forward.
+	key := prov.Name()
+	existing, hadRef := refs[key]
+	if !hadRef && strings.HasPrefix(key, "github:") {
+		existing, hadRef = refs["github"]
+	}
 	var existingPtr *Ref
 	if hadRef {
 		existingPtr = &existing

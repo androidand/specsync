@@ -57,6 +57,18 @@ type IssueReader interface {
 	Get(ctx context.Context, id string) (FetchedItem, error)
 }
 
+// IssueMarkerWriter is an optional, type-asserted provider capability: persist
+// the identity marker into an existing item's body. `pull` uses it so a change
+// linked to an existing issue stays rediscoverable via Find even if the local
+// ref cache is lost. Providers that always embed the marker on write (or model
+// identity differently) simply don't implement it.
+type IssueMarkerWriter interface {
+	// EnsureMarker upserts the identity marker for slug into item id's body,
+	// given its current body. It reports whether a write occurred and is
+	// idempotent: a body already carrying the marker triggers no write.
+	EnsureMarker(ctx context.Context, id, slug, body string) (bool, error)
+}
+
 // TaskStateReader is an optional, type-asserted provider capability: report the
 // external done-state of a change's tasks, keyed by normalized task text. It
 // exists because not every provider models tasks as checkboxes inside one item

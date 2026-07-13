@@ -136,6 +136,11 @@ func runPull(args []string) {
 		if res.Tasks != "" {
 			printPreview("tasks.md", res.Tasks)
 		}
+		if res.MarkerPresent {
+			fmt.Printf("\nissue %s already carries the marker %s (no edit needed)\n", *issue, res.Marker)
+		} else {
+			fmt.Printf("\nwould add marker to issue %s body: %s\n", *issue, res.Marker)
+		}
 		return
 	}
 	fmt.Printf("specsync: pulled issue %s -> %s\n", *issue, dest)
