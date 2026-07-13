@@ -29,19 +29,26 @@ type statusOption struct {
 	name string
 }
 
-// statusField holds the Status field id and its options in board order, plus a
-// name->option-id lookup. Option order matters: the last option is treated as
-// terminal ("Done"-like) for the positional default of the archived stage.
+// statusField holds the Status field id and its options in board order. Option
+// order matters: the last option is treated as terminal ("Done"-like) for the
+// positional default of the archived stage.
 type statusField struct {
 	id      string
 	name    string
 	options []statusOption
-	byName  map[string]string
 }
 
-func (f statusField) optionID(name string) (string, bool) {
-	id, ok := f.byName[name]
-	return id, ok
+// option finds a Status option by name, case-insensitively, so the default
+// "In progress" matches the stock GitHub "In Progress" (and any configured
+// casing matches the board's). The returned option carries the board's
+// canonical name.
+func (f statusField) option(name string) (statusOption, bool) {
+	for _, o := range f.options {
+		if strings.EqualFold(o.name, name) {
+			return o, true
+		}
+	}
+	return statusOption{}, false
 }
 
 // ProjectOntoBoard satisfies the BoardProjector capability. See the interface
@@ -152,13 +159,15 @@ func (p *GitHubProvider) resolveStatus(target BoardTarget, stage Stage, f status
 	return resolveStatusOption(f, wantName, explicit, stage)
 }
 
-// resolveStatusOption resolves a Status name to its option id. A configured name
+// resolveStatusOption resolves a Status name to its option id. Matching is
+// case-insensitive and the returned name is the board's canonical casing, so
+// later comparisons against board-reported values are exact. A configured name
 // that the board doesn't define is an error listing the valid options; a default
 // name falls back to the board's first non-terminal (or terminal, for archived)
 // option so specsync works against boards with different Status labels.
 func resolveStatusOption(f statusField, name string, explicit bool, stage Stage) (string, string, error) {
-	if id, ok := f.optionID(name); ok {
-		return name, id, nil
+	if o, ok := f.option(name); ok {
+		return o.name, o.id, nil
 	}
 	if explicit {
 		return "", "", unknownStatusErr(name, f)
@@ -309,10 +318,9 @@ func (p *GitHubProvider) resolveStatusField(ctx context.Context, projectID strin
 		if n.ID == "" || !strings.EqualFold(n.Name, "Status") {
 			continue
 		}
-		f := statusField{id: n.ID, name: n.Name, byName: map[string]string{}}
+		f := statusField{id: n.ID, name: n.Name}
 		for _, o := range n.Options {
 			f.options = append(f.options, statusOption{id: o.ID, name: o.Name})
-			f.byName[o.Name] = o.ID
 		}
 		return f, nil
 	}
