@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -407,7 +408,19 @@ func printPreview(name, content string) {
 
 // dryRunner prints what would run instead of calling gh, returning canned output
 // so the orchestration proceeds through the create path.
-func dryRunner(_ context.Context, args ...string) (string, error) {
+func dryRunner(ctx context.Context, args ...string) (string, error) {
+	// Repo auto-detection must stay live even on a dry run: it is read-only, and
+	// canned output would key the ref cache as the bare "github", previewing
+	// "created" for changes a real run would resolve and update. A failure (no
+	// gh, offline) degrades to the bare key, same as a real run.
+	if len(args) >= 2 && args[0] == "repo" && args[1] == "view" {
+		out, err := exec.CommandContext(ctx, "gh", args...).Output()
+		if err != nil {
+			return "", nil
+		}
+		return strings.TrimSpace(string(out)), nil
+	}
+
 	var inline []string
 	var body string
 	for i := 0; i < len(args); i++ {

@@ -38,6 +38,21 @@ func saveRef(changeDir, provider string, ref Ref) error {
 		return err
 	}
 	refs[provider] = ref
+	// Migrating a ref to a repo-qualified key retires the legacy bare "github"
+	// entry; leaving it behind would keep a stale duplicate around forever. The
+	// only legacy entry worth keeping is one that verifiably points at a
+	// *different* repo — it is still that repo's only link until a sync
+	// targeting it migrates it in turn. Same-repo entries are superseded by the
+	// canonical ref being written; unparseable ones can't belong to any repo
+	// (sync's guarded fallback will never use them) and are dropped as garbage.
+	if strings.HasPrefix(provider, "github:") {
+		if legacy, ok := refs["github"]; ok {
+			repo, parsed := ghIssueRepo(legacy.URL)
+			if !parsed || strings.EqualFold(repo, strings.TrimPrefix(provider, "github:")) {
+				delete(refs, "github")
+			}
+		}
+	}
 
 	if err := os.MkdirAll(filepath.Join(changeDir, ".specsync"), 0o755); err != nil {
 		return fmt.Errorf("create .specsync: %w", err)
