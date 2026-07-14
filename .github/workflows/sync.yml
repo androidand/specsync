@@ -26,8 +26,8 @@ jobs:
       - name: Preview (dry run)
         env:
           GH_TOKEN: ${{ github.token }}
-        run: ./specsync -dry-run
+        run: ./specsync -dry-run -close-completed
       - name: Sync OpenSpec changes to issues
         env:
           GH_TOKEN: ${{ github.token }}
-        run: ./specsync
+        run: ./specsync -close-completed
