@@ -403,6 +403,7 @@ nav {
 .install-note {
   font-size: 0.8125rem;
   color: var(--ink-3);
+  overflow-wrap: anywhere;
 }
 .install-note a {
   color: var(--accent);
@@ -450,6 +451,9 @@ footer {
   .step:nth-child(even) .step-text { order: 1; }
   .step:nth-child(even) .step-code { order: 2; }
   .hero h1 { font-size: 2rem; }
+  nav { padding: 1.25rem 1.25rem; }
+  .nav-links { gap: 0.75rem; }
+  .nav-links a:not(.nav-github) { display: none; }
 }
 
 /* ── FOCUS ── */
@@ -679,10 +683,31 @@ specsync link feature-api feature-ui
             <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.6.0" target="_blank" rel="noopener">v0.6.0</a>
             <span class="release-date">Jul 14, 2026</span>
           </div>
-          <div class="release-body"><h5>Added</h5><ul><li>GitHub Projects (board) projection: opt-in <code>-project owner/number</code> (or <code>$SPECSYNC_PROJECT</code>) syncs an issue onto a GitHub Projects v2 board, maps the change's stage to the board's Status field, and assigns the acting viewer — unconfigured stays a complete no-op, zero board calls. (#37)</li>
-<li><code>specsync changelog</code>: a Keep a Changelog section built from shipped OpenSpec changes via the trace graph — one entry per change, release notes authored at planning time, never a raw commit dump.</li></ul>
-<h5>Fixed</h5><ul><li>Two-way sync no longer duplicates a GitHub issue after <code>pull</code> — the ref-cache key is now repo-stable, and a legacy pre-fix cache entry can no longer be mistaken for a different repo's issue and edited by accident. (#35)</li>
-<li>Board Status option names now resolve case-insensitively (a stock "To do / In Progress / Done" board no longer falls back to "Todo" for active work), and the promised stage→Status mapping is reachable via <code>-status-map</code> (or <code>$SPECSYNC_STATUS_MAP</code>).</li></ul></div>
+          <div class="release-body"><h5>Features</h5><ul><li>spec-driven changelog — one entry per shipped change <a class="commit-sha" href="https://github.com/androidand/specsync/commit/189753071326652e628b7339a8cdd957ac2b9c4d" target="_blank" rel="noopener">1897530</a></li></ul>
+<h5>Fixes</h5><ul><li>case-insensitive Status matching + CLI status-map wiring <a class="commit-sha" href="https://github.com/androidand/specsync/commit/cc2bc110fe963f5f780298feae586fef7e8cafe4" target="_blank" rel="noopener">cc2bc11</a></li>
+<li>readable release notes, spec-history hero, drop stale blocks <a class="commit-sha" href="https://github.com/androidand/specsync/commit/0349b063b7206e04f31b40eafcf7b51aeb093d66" target="_blank" rel="noopener">0349b06</a></li>
+<li>guard legacy ref fallback against cross-repo clobber <a class="commit-sha" href="https://github.com/androidand/specsync/commit/64203a44c99e8d9751d6ff1c6e18334e106c693a" target="_blank" rel="noopener">64203a4</a></li></ul>
+<h5>Other</h5><ul><li>record v0.5.1 verification <a class="commit-sha" href="https://github.com/androidand/specsync/commit/4cdd037c50b7e2798db379f73421bd3180c7c4fd" target="_blank" rel="noopener">4cdd037</a></li>
+<li>prepare standalone Cloudflare deployment <a class="commit-sha" href="https://github.com/androidand/specsync/commit/b1ad4ca0cde3a8253e6321c923c18c4b5cd4428f" target="_blank" rel="noopener">b1ad4ca</a></li>
+<li>Stabilize projection ref-cache key so sync never duplicates an issue (#35) <a class="commit-sha" href="https://github.com/androidand/specsync/commit/a29de44c9ac296c50d61d8d75fa9f41aff53c233" target="_blank" rel="noopener">a29de44</a></li>
+<li>GitHub Projects (board) compatibility (#37) <a class="commit-sha" href="https://github.com/androidand/specsync/commit/51d6b83db881d4e9a61a15911dcde3b7482bc771" target="_blank" rel="noopener">51d6b83</a></li>
+<li>Merge branch 'claude/jovial-noyce-5910b2': board Status case-insensitivity + -status-map CLI wiring <a class="commit-sha" href="https://github.com/androidand/specsync/commit/b6d2cee66febd88232bd19e50f6731a301dcf2c7" target="_blank" rel="noopener">b6d2cee</a></li>
+<li>Merge branch 'claude/happy-wright-4358a5' <a class="commit-sha" href="https://github.com/androidand/specsync/commit/d51514d6590fb695cd0371197925319f165b1f20" target="_blank" rel="noopener">d51514d</a></li>
+<li>document changelog/board CLI surface, add CHANGELOG.md for v0.6.0 <a class="commit-sha" href="https://github.com/androidand/specsync/commit/6b70891ec682d924579d16efc5b8aef5c67ad3ad" target="_blank" rel="noopener">6b70891</a></li></ul></div>
+        </div>
+        <div class="release">
+          <div class="release-header">
+            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.5.1" target="_blank" rel="noopener">v0.5.1</a>
+            <span class="release-date">Jul 13, 2026</span>
+          </div>
+          <div class="release-body"><h5>Fixes</h5><ul><li>complete lifecycle sync and harden npm install <a class="commit-sha" href="https://github.com/androidand/specsync/commit/2990406baef500784da1e1c093807eecfcb35b3a" target="_blank" rel="noopener">2990406</a></li></ul></div>
+        </div>
+        <div class="release">
+          <div class="release-header">
+            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.5.0" target="_blank" rel="noopener">v0.5.0</a>
+            <span class="release-date">Jul 13, 2026</span>
+          </div>
+          <div class="release-body"><h5>Features</h5><ul><li>derive a "complete" stage from task completion + optional auto-close <a class="commit-sha" href="https://github.com/androidand/specsync/commit/ee7664b94567d7e292b99cb399f4c45be34006c4" target="_blank" rel="noopener">ee7664b</a></li></ul></div>
         </div>
 <!-- CHANGELOG:end -->
 </section>

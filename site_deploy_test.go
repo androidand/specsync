@@ -6,25 +6,13 @@ import (
 	"testing"
 )
 
-func TestSiteDeploymentContract(t *testing.T) {
-	workflow, err := os.ReadFile(".github/workflows/deploy-site.yml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	content := string(workflow)
-	for _, required := range []string{
-		"branches: [main]",
-		"workflow_dispatch:",
-		"CLOUDFLARE_PAGES_ENABLED",
-		"node build.sh",
-		"cloudflare/wrangler-action@v3",
-		"CLOUDFLARE_API_TOKEN",
-		"CLOUDFLARE_ACCOUNT_ID",
-		"pages deploy site --project-name=specsync --branch=main",
-	} {
-		if !strings.Contains(content, required) {
-			t.Errorf("deployment workflow is missing %q", required)
-		}
+// TestNoRedundantSiteDeployWorkflow guards against reintroducing a GitHub
+// Actions deploy workflow that would silently no-op (or race) alongside
+// Cloudflare Pages' own git integration, which is the actual deploy path —
+// see site/README.md.
+func TestNoRedundantSiteDeployWorkflow(t *testing.T) {
+	if _, err := os.Stat(".github/workflows/deploy-site.yml"); err == nil {
+		t.Fatal("deploy-site.yml exists again — Cloudflare Pages' git integration is the real deploy path (site/README.md); a second Actions-based deploy will confuse or race it")
 	}
 }
 

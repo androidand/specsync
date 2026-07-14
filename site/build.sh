@@ -3,23 +3,21 @@
 // between <!-- X:start --> and <!-- X:end --> markers, so it can run on the
 // committed (already-built) index.html and re-inject cleanly.
 // Run: node build.sh   (CF Pages build command: cd site && node build.sh)
-// Requires: Node 16+. Network + git are best-effort; missing ones degrade.
+// Requires: Node 16+. No git dependency (some build environments have no
+// tags). The GitHub Releases fetch is best-effort: on failure the version
+// badge and changelog are left exactly as committed, never degraded.
 
 const fs = require("fs");
-const { execSync } = require("child_process");
+const https = require("https");
 
-// Version reflects what is RELEASED: the latest git tag (truthful to npm),
-// falling back to package.json only when no tag is reachable.
-function releasedVersion() {
-  try {
-    const tag = execSync("git describe --tags --abbrev=0", { stdio: ["ignore", "pipe", "ignore"] })
-      .toString().trim();
-    if (tag) return tag.replace(/^v/, "");
-  } catch (_) {}
-  try {
-    return require("../npm/package.json").version;
-  } catch (_) {}
-  return "";
+function get(url) {
+  return new Promise((resolve, reject) => {
+    https.get(url, { headers: { "User-Agent": "specsync-site-build" } }, (res) => {
+      let data = "";
+      res.on("data", (c) => (data += c));
+      res.on("end", () => resolve({ status: res.statusCode, body: data }));
+    }).on("error", reject);
+  });
 }
 
 function escapeHtml(s) {
@@ -39,108 +37,109 @@ function replaceRegion(html, name, inner) {
 }
 function escapeRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
 
-// inlineMd renders the handful of inline markers a changelog entry uses:
-// **bold** and `code`. Runs after escapeHtml, so raw < > & are already safe.
-function inlineMd(s) {
-  return escapeHtml(s)
+function mdToHtml(md) {
+  return escapeHtml(md)
+    .replace(/^### (.+)$/gm, "<h5>$1</h5>")
+    .replace(/^## (.+)$/gm, "<h4>$1</h4>")
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-    .replace(/`([^`]+)`/g, "<code>$1</code>");
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/^[-*] (.+)$/gm, "<li>$1</li>")
+    .replace(/(<li>.*<\/li>\n?)+/g, (s) => `<ul>${s}</ul>`)
+    .replace(/\n{2,}/g, "</p><p>")
+    .trim();
 }
 
-// renderChangelogBody renders one version section's body: "### Category"
-// headings each followed by a "- " bullet list. Hand-edited bullets are
-// routinely soft-wrapped across lines (see CHANGELOG.md itself) — a
-// continuation line is anything that doesn't start a new heading or bullet,
-// and is folded back onto the item it continues before rendering.
-function renderChangelogBody(body) {
-  const groups = [];
-  let current = null;
-  let item = null;
-  const flush = () => {
-    if (item !== null) {
-      if (!current) { current = { heading: null, items: [] }; groups.push(current); }
-      current.items.push(item);
-      item = null;
-    }
-  };
+// goreleaser (changelog.use: github) writes release bodies as
+//   * <40-char sha>: <commit subject> (@author)
+// Render those as grouped, human-readable entries: conventional-commit types
+// bucket into Features / Fixes / Other, the sha shortens into a commit link.
+// Bodies that don't match (hand-written notes) fall back to mdToHtml.
+const COMMIT_LINE = /^\* ([0-9a-f]{40}): (.+?) \(@[^)]+\)\s*$/;
+const CONVENTIONAL = /^(\w+)(?:\([^)]*\))?!?:\s*(.+)$/;
+const TYPE_GROUP = { feat: "Features", fix: "Fixes" };
+
+function renderReleaseBody(body, repoUrl) {
+  const commits = [];
+  let matched = true;
   for (const line of body.split("\n")) {
-    const h = line.match(/^#{1,6}\s+(.+)$/);
-    const bullet = line.match(/^[-*]\s+(.+)$/);
-    if (h) {
-      flush();
-      current = { heading: h[1].trim(), items: [] };
-      groups.push(current);
-    } else if (bullet) {
-      flush();
-      item = bullet[1].trim();
-    } else if (line.trim() === "") {
-      continue; // blank lines never separate a Keep a Changelog bullet from its continuation
-    } else if (item !== null) {
-      item += " " + line.trim();
-    }
+    const t = line.trim();
+    if (!t || /^#+\s*Changelog$/i.test(t)) continue;
+    const m = t.match(COMMIT_LINE);
+    if (!m) { matched = false; break; }
+    const conv = m[2].match(CONVENTIONAL);
+    commits.push({
+      sha: m[1],
+      group: conv ? (TYPE_GROUP[conv[1].toLowerCase()] || "Other") : "Other",
+      text: conv ? conv[2] : m[2],
+    });
   }
-  flush();
+  if (!matched || commits.length === 0) return `<p>${mdToHtml(body)}</p>`;
 
+  const groups = ["Features", "Fixes", "Other"];
   return groups.map((g) => {
-    const heading = g.heading ? `<h5>${escapeHtml(g.heading)}</h5>` : "";
-    const lis = g.items.map((it) => `<li>${inlineMd(it)}</li>`).join("\n");
-    return `${heading}<ul>${lis}</ul>`;
-  }).join("\n");
-}
-
-// parseChangelogSections splits a Keep a Changelog file into its "## [x.y.z]
-// - date" sections, in file order (newest first, per specsync's convention).
-function parseChangelogSections(md) {
-  const heading = /^## \[([^\]]+)\](?:\s*-\s*(.+))?\s*$/gm;
-  const matches = [...md.matchAll(heading)];
-  return matches.map((m, i) => {
-    const start = m.index + m[0].length;
-    const end = i + 1 < matches.length ? matches[i + 1].index : md.length;
-    return { version: m[1], date: m[2] || "", body: md.slice(start, end).trim() };
-  });
-}
-
-// shippedIssueNumbers is every "#N" issue reference appearing anywhere in
-// CHANGELOG.md (any past release, not just the ones the page displays).
-// features.json's "soon" cards are cross-checked against this set so a badge
-// clears itself the moment its feature actually ships — nobody has to
-// remember to hand-edit features.json in sync with the changelog.
-function shippedIssueNumbers(md) {
-  const nums = new Set();
-  for (const m of md.matchAll(/#(\d+)/g)) nums.add(m[1]);
-  return nums;
+    const items = commits.filter((c) => c.group === g);
+    if (items.length === 0) return "";
+    const lis = items.map((c) =>
+      `<li>${escapeHtml(c.text)} <a class="commit-sha" href="${repoUrl}/commit/${c.sha}" target="_blank" rel="noopener">${c.sha.slice(0, 7)}</a></li>`
+    ).join("\n");
+    return `<h5>${g}</h5><ul>${lis}</ul>`;
+  }).filter(Boolean).join("\n");
 }
 
 async function build() {
   let html = fs.readFileSync("index.html", "utf8");
 
-  // Read CHANGELOG.md once — the features section's "soon" check and the
-  // changelog section's rendering both key off the same content.
-  let changelogMd = "";
+  // 1 & 3. Version + changelog both come from one GitHub Releases fetch — no
+  // local git-tag dependency (some build environments, e.g. a shallow-clone
+  // CI checkout, have no tags at all) and no stale checked-in fallback value.
+  // On any failure (network blocked, rate-limited, no releases yet) neither
+  // region is touched, so a build never regresses the last known-good,
+  // already-committed content — better a stale-but-correct badge than a
+  // wrong one or an empty placeholder.
+  let releases = null;
   try {
-    changelogMd = fs.readFileSync("../CHANGELOG.md", "utf8");
-  } catch (_) {}
+    const res = await get("https://api.github.com/repos/androidand/specsync/releases?per_page=4");
+    if (res.status !== 200) throw new Error(`HTTP ${res.status}`);
+    releases = JSON.parse(res.body).filter((r) => !r.draft);
+  } catch (e) {
+    console.warn(`  releases: ${e.message} — version and changelog left as committed`);
+  }
 
-  // 1. Version (released tag).
-  const version = releasedVersion();
-  if (version) {
-    html = replaceRegion(html, "VERSION", `v${version}`);
-    console.log(`  version: v${version} (released)`);
+  if (releases && releases.length > 0) {
+    html = replaceRegion(html, "VERSION", releases[0].tag_name);
+    console.log(`  version: ${releases[0].tag_name} (released)`);
+
+    const changelog = releases.slice(0, 3).map((r) => {
+      const date = new Date(r.published_at).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+      const body = r.body ? renderReleaseBody(r.body, "https://github.com/androidand/specsync") : "";
+      return `        <div class="release">
+          <div class="release-header">
+            <a class="release-tag" href="${r.html_url}" target="_blank" rel="noopener">${escapeHtml(r.tag_name)}</a>
+            <span class="release-date">${date}</span>
+          </div>
+          ${body ? `<div class="release-body">${body}</div>` : ""}
+        </div>`;
+    }).join("\n");
+    html = replaceRegion(html, "CHANGELOG", changelog);
+    console.log(`  changelog: ${Math.min(releases.length, 3)} releases`);
+  }
+
+  // shippedIssueNumbers: every "#N" reference in the fetched release bodies —
+  // cross-checked against each "soon" feature's `issue` field so its badge
+  // clears itself the moment that issue actually ships, instead of relying on
+  // someone remembering to hand-edit features.json. Reuses the same fetch as
+  // the changelog above (no extra request, no extra failure mode): if it's
+  // null, "soon" badges are simply left exactly as authored.
+  const shipped = new Set();
+  if (releases) {
+    for (const r of releases) for (const m of (r.body || "").matchAll(/#(\d+)/g)) shipped.add(m[1]);
   }
 
   // 2. Features from features.json. status:"soon" cards are clearly badged as
   //    planned-not-yet-shipped, so the page stays true to what is installable.
-  //    A "soon" card tagged with the issue it ships with auto-clears once that
-  //    issue appears in CHANGELOG.md — see shippedIssueNumbers above.
   const features = JSON.parse(fs.readFileSync("features.json", "utf8"));
-  const shipped = shippedIssueNumbers(changelogMd);
-  let autoCleared = 0;
   const featuresHtml = features.map((f) => {
-    let soon = f.status === "soon";
-    if (soon && f.issue && shipped.has(String(f.issue))) {
-      soon = false;
-      autoCleared++;
-    }
+    const soon = f.status === "soon" && !(f.issue && shipped.has(String(f.issue)));
     const badge = soon ? ` <span class="soon">soon</span>` : "";
     const cls = soon ? "feature is-soon" : "feature";
     return `      <div class="${cls}">
@@ -150,38 +149,8 @@ async function build() {
       </div>`;
   }).join("\n");
   html = replaceRegion(html, "FEATURES", featuresHtml);
-  const soonCount = features.filter((f) => f.status === "soon").length - autoCleared;
-  console.log(`  features: ${features.length} (${soonCount} marked soon${autoCleared ? `, ${autoCleared} auto-cleared as shipped` : ""})`);
-
-  // 3. Changelog from this repo's own CHANGELOG.md — specsync's feature-level
-  //    output, never a raw commit dump. No network call: the file is already
-  //    in the checkout.
-  let changelog;
-  try {
-    const md = changelogMd;
-    if (!md) throw new Error("CHANGELOG.md not found");
-    const sections = parseChangelogSections(md)
-      .filter((s) => s.version.toLowerCase() !== "unreleased")
-      .slice(0, 3);
-    if (sections.length === 0) throw new Error("no released sections found");
-    changelog = sections.map((s) => {
-      const date = s.date
-        ? new Date(s.date).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
-        : "";
-      return `        <div class="release">
-          <div class="release-header">
-            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v${s.version}" target="_blank" rel="noopener">v${escapeHtml(s.version)}</a>
-            ${date ? `<span class="release-date">${date}</span>` : ""}
-          </div>
-          <div class="release-body">${renderChangelogBody(s.body)}</div>
-        </div>`;
-    }).join("\n");
-    console.log(`  changelog: ${sections.length} releases (from CHANGELOG.md)`);
-  } catch (e) {
-    changelog = `        <p class="changelog-empty">See <a href="https://github.com/androidand/specsync/releases">GitHub releases</a> for the full changelog.</p>`;
-    console.warn(`  changelog: ${e.message} — using fallback`);
-  }
-  html = replaceRegion(html, "CHANGELOG", changelog);
+  const soonCount = features.filter((f) => f.status === "soon" && !(f.issue && shipped.has(String(f.issue)))).length;
+  console.log(`  features: ${features.length} (${soonCount} marked soon)`);
 
   fs.writeFileSync("index.html", html);
   console.log("  site: built → index.html");
