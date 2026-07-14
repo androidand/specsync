@@ -1,0 +1,27 @@
+# Changelog
+
+All notable changes to this project are documented here. One entry per shipped
+OpenSpec change — see the linked issues for the full spec and discussion.
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+
+## [0.6.0] - 2026-07-14
+
+### Added
+
+- GitHub Projects (board) projection: opt-in `-project owner/number` (or
+  `$SPECSYNC_PROJECT`) syncs an issue onto a GitHub Projects v2 board, maps
+  the change's stage to the board's Status field, and assigns the acting
+  viewer — unconfigured stays a complete no-op, zero board calls. (#37)
+- `specsync changelog`: a Keep a Changelog section built from shipped OpenSpec
+  changes via the trace graph — one entry per change, release notes authored
+  at planning time, never a raw commit dump.
+
+### Fixed
+
+- Two-way sync no longer duplicates a GitHub issue after `pull` — the
+  ref-cache key is now repo-stable, and a legacy pre-fix cache entry can no
+  longer be mistaken for a different repo's issue and edited by accident. (#35)
+- Board Status option names now resolve case-insensitively (a stock "To do /
+  In Progress / Done" board no longer falls back to "Todo" for active work),
+  and the promised stage→Status mapping is reachable via `-status-map` (or
+  `$SPECSYNC_STATUS_MAP`).

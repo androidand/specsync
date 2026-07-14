@@ -92,13 +92,15 @@ specsync scan            # what already exists in an area?
 specsync trace           # print the raw spec<->commit<->issue link graph
 specsync link            # cross-link two or more changes
 specsync release-plan    # shipped changes + advisory semver bump
+specsync changelog       # Keep a Changelog section from shipped changes
 specsync install-skill   # install the bundled agent skill
 specsync version         # print the binary version
 ```
 
 **Dry-run flags** — `sync`, `pull`, and `link` support `-dry-run`. Beads can be
-previewed through `specsync -dry-run -provider beads`. `scan`, `trace`, and
-`release-plan` are read-only commands and do not take a dry-run flag.
+previewed through `specsync -dry-run -provider beads`. `scan`, `trace`,
+`release-plan`, and `changelog` (unless `-apply`) are read-only and do not take
+a dry-run flag.
 
 Flags come **before** positional arguments (standard Go flag parsing):
 `specsync scan -json cmd/ auth`, not `specsync scan cmd/ auth -json`.
@@ -174,6 +176,51 @@ advice, not action:
 specsync release-plan                  # since the latest tag
 specsync release-plan -since v0.3.0 -json
 ```
+
+### `changelog` — a changelog generated from your specs, not your commits
+
+Commit-log changelogs are noise: `chore`, `wip`, squash messages. `specsync
+changelog` builds a [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
+section from what actually shipped — one entry per OpenSpec change in the
+revision range, in plain language, grouped into Added/Changed/Fixed/Removed/
+Security:
+
+```bash
+specsync changelog                     # preview the section for latest tag -> HEAD
+specsync changelog -release-notes      # bare body, for `goreleaser --release-notes`
+specsync changelog -apply              # write/replace the section in CHANGELOG.md
+```
+
+Entry text comes from an optional `## Release note` section in the change's
+`proposal.md` — written at planning time, reviewed in the issue like everything
+else — falling back to the proposal title. The category comes from OpenSpec
+requirement deltas (added/changed/removed) and linked commit types; a change
+with no deltas and all-`fix` commits lands under Fixed, any `feat` under Added.
+Commits that link to no change still surface honestly (a loose `feat`/`fix`
+is included; plumbing commits like `chore`/`docs`/`ci` are counted, not
+silently dropped). `-apply` is idempotent — re-running replaces that version's
+section in place — and defers to a release tool that already owns the
+changelog (release-please, changesets, …) unless you pass `-force`.
+
+### Projects boards: `-project owner/number`
+
+Project a synced change onto a GitHub Projects (v2) board — the issue is added
+to the board, its Status follows the change's stage, and the acting user is
+assigned:
+
+```bash
+specsync -project my-org/6                        # sync + project onto board 6
+specsync -project my-org/6 -status-map "active=In Progress,archived=Done"
+SPECSYNC_PROJECT=my-org/6 specsync                 # env var, so it need not be retyped
+```
+
+Unset (the default), specsync makes zero board calls — completely
+backward-compatible. Status option names resolve case-insensitively against
+the board's own schema (never hard-coded ids), so a stock "Todo / In Progress /
+Done" board works out of the box; `-status-map` (or `$SPECSYNC_STATUS_MAP`)
+overrides the stage→Status names explicitly and fails loud on an unknown name.
+specsync never clobbers a Status or assignee it didn't set itself, and
+`-dry-run` previews the board plan with zero GraphQL calls.
 
 ### `install-skill` — install the agent skill
 
