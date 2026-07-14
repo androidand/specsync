@@ -60,6 +60,16 @@ func TestParseCommitRefs(t *testing.T) {
 		{"trailing PR squash", "feat(ui): split modal (#51)", nil, []string{"#51"}},
 		{"cross-repo issue", "fix: shared client\n\nFixes owner/repo#7", []string{"owner/repo#7"}, nil},
 		{"pr and issue", "feat: bulk import (#51)\n\nCloses #42", []string{"#42"}, []string{"#51"}},
+		{"trailer line", "test: cover migration\n\nRefs #35", []string{"#35"}, nil},
+		{"trailer line with colon", "test: cover migration\n\nSee-also: owner/repo#9", []string{"owner/repo#9"}, nil},
+		{
+			"bare ref in narrative prose is not evidence",
+			"fix(sync): guard legacy ref fallback against cross-repo clobber\n\n" +
+				"Two-way sync created a duplicate GitHub issue (ExoKit #15 -> #16) instead\n" +
+				"of updating the existing one.",
+			nil, nil,
+		},
+		{"owner/repo ref mid-prose still counts", "fix: note\n\nSee also owner/repo#5 for background.", []string{"owner/repo#5"}, nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

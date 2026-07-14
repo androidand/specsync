@@ -43,6 +43,11 @@ var refRE = regexp.MustCompile(`(?:([\w.-]+/[\w.-]+))?#(\d+)`)
 // closeKeywordRE matches a closing keyword preceding a reference (these are issues).
 var closeKeywordRE = regexp.MustCompile(`(?i)\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+(?:([\w.-]+/[\w.-]+))?#(\d+)`)
 
+// trailerRefRE matches a trailer-style line that is nothing but a reference
+// keyword and a ref, e.g. "Refs: #35" or "See-also: #12" — deliberate evidence,
+// as opposed to a bare "#N" mentioned in passing within narrative prose.
+var trailerRefRE = regexp.MustCompile(`(?im)^[ \t]*(?:refs?|see-also|related)[ \t]*:?[ \t]+(?:([\w.-]+/[\w.-]+))?#(\d+)[ \t]*$`)
+
 // ParseCommit parses a commit message (and optional metadata) into a Commit. It
 // never errors: a non-conventional message yields ConventionalOK=false with the
 // raw text preserved, because in this tool the messy message is the normal case.
@@ -81,8 +86,13 @@ func ParseCommit(hash, author, date, message string) Commit {
 }
 
 // extractRefs pulls issue and PR references out of a commit. The squash-merge
-// trailing "(#N)" in the header is treated as a PR; closing-keyword references
-// and other bare "#N" / "owner/repo#N" references are treated as issues. The
+// trailing "(#N)" in the header is treated as a PR. A same-repo bare "#N" is
+// only accepted as issue evidence when it appears somewhere deliberate — after
+// a closing keyword or on its own trailer line — because a bare number can
+// also show up incidentally in narrative prose (e.g. quoting another repo's
+// issue number without its "owner/repo" prefix), which is not evidence of a
+// link in this repo. A "owner/repo#N" reference is unambiguous regardless of
+// where it appears, since it can't collide with a same-repo issue number. The
 // trace layer reconciles the exact kind against the tracker, which actually
 // knows whether a number is an issue or a PR.
 func extractRefs(header, message string) (issues, prs []string) {
@@ -102,25 +112,32 @@ func extractRefs(header, message string) (issues, prs []string) {
 		}
 	}
 
-	// Trailing "(#N)" in the header → PR. Remove it so it isn't double-counted.
-	scanHeader := header
+	// Trailing "(#N)" in the header → PR.
 	if pm := trailingPRRE.FindStringSubmatch(header); pm != nil {
 		addPR("#" + pm[1])
-		scanHeader = trailingPRRE.ReplaceAllString(header, "")
 	}
 
-	// Closing keywords always denote issues.
+	// Closing keywords always denote issues, wherever they appear.
 	for _, m := range closeKeywordRE.FindAllStringSubmatch(message, -1) {
 		addIssue(refString(m[1], m[2]))
 	}
 
-	// Remaining bare references are issues (a PR referenced bare is reconciled later).
-	for _, src := range []string{scanHeader, message} {
-		for _, m := range refRE.FindAllStringSubmatch(src, -1) {
-			ref := refString(m[1], m[2])
-			if !seenPR[ref] {
-				addIssue(ref)
-			}
+	// A genuine trailer line ("Refs: #N", "See-also: #N") is deliberate
+	// evidence too, even without a closing keyword.
+	for _, m := range trailerRefRE.FindAllStringSubmatch(message, -1) {
+		addIssue(refString(m[1], m[2]))
+	}
+
+	// A cross-repo "owner/repo#N" reference counts regardless of position. A
+	// bare "#N" outside the cases above is narrative prose, not linking
+	// evidence, and is deliberately dropped here.
+	for _, m := range refRE.FindAllStringSubmatch(message, -1) {
+		if m[1] == "" {
+			continue
+		}
+		ref := refString(m[1], m[2])
+		if !seenPR[ref] {
+			addIssue(ref)
 		}
 	}
 	return issues, prs
