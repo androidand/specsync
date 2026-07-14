@@ -15,20 +15,23 @@ The build is idempotent and updates `index.html` in place.
 
 ## Cloudflare Pages setup
 
-The `Deploy site` GitHub Actions workflow deploys every push to `main` after
-the one-time setup below:
+Deployment is Cloudflare Pages' own **git integration** ("Connect to Git"),
+configured once in the Cloudflare dashboard — there is no GitHub Actions
+workflow involved. On every merge to `main`, Cloudflare clones the repo itself
+and runs the build below:
 
-1. Create a Cloudflare Pages Direct Upload project named `specsync` with
+1. Create a Cloudflare Pages project named `specsync`, connected to this repo,
    production branch `main`.
-2. Add repository Actions secrets `CLOUDFLARE_API_TOKEN` and
-   `CLOUDFLARE_ACCOUNT_ID`. The token needs permission to edit Cloudflare
-   Pages for the account.
-3. Attach `specsync.se` as the project's custom domain in Cloudflare Pages.
-4. Add the repository Actions variable `CLOUDFLARE_PAGES_ENABLED=true` last.
+2. Build command: `cd site && node build.sh`. Build output directory: `site`.
+3. Attach `specsync.se` as the project's custom domain.
 
-The enable variable keeps deployments safely disabled until the project,
-credentials, and domain are ready. A manual run is available from the Actions
-tab after setup.
+Cloudflare's own checkout is shallow and has no tags, and its build fleet's
+shared IPs can hit GitHub's unauthenticated API rate limit — `build.sh` is
+written to tolerate both: version and changelog come from one GitHub Releases
+API call with no git-tag dependency, and on any fetch failure the last
+committed content is left untouched rather than degraded. Run `node build.sh`
+locally before merging a release-relevant change so the committed baseline is
+always current, since that's what a failed remote build falls back to.
 
 `tantonet.se/specsync` is maintained by the Tantonet site as a permanent
 redirect to the canonical domain. Redirect `www.specsync.se` to the apex in
