@@ -2,11 +2,24 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>specsync</title>
+<title>specsync — Keep OpenSpec and GitHub Issues in sync</title>
 <meta name="description" content="The issue is the spec. The changelog is the spec history. specsync keeps OpenSpec changes in sync with GitHub issues.">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="canonical" href="https://specsync.se/">
+
+<meta property="og:type" content="website">
+<meta property="og:title" content="specsync — The issue is the spec">
+<meta property="og:description" content="Keep OpenSpec changes, GitHub issues, project status and release notes synchronized.">
 <meta property="og:url" content="https://specsync.se/">
+<meta property="og:image" content="https://specsync.se/og-image.png">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="specsync — The issue is the spec">
+<meta name="twitter:description" content="Keep OpenSpec changes, GitHub issues, project status and release notes synchronized.">
+<meta name="twitter:image" content="https://specsync.se/og-image.png">
+
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#1B5E3E">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -15,7 +28,7 @@
   --surface:      #FFFFFF;
   --ink:          #1A1F2E;
   --ink-2:        #5A6175;
-  --ink-3:        #9BA3B5;
+  --ink-3:        #667083;
   --accent:       #1B5E3E;
   --accent-mid:   #2D8A5E;
   --accent-light: #E8F5EE;
@@ -29,6 +42,17 @@
   --font-sans:    -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   --font-mono:    'SF Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
   --max:          760px;
+  --max-layout:   960px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 html { font-size: 16px; }
@@ -132,8 +156,69 @@ nav {
   color: var(--ink-2);
   max-width: 540px;
   line-height: 1.65;
+  margin-bottom: 2rem;
+}
+
+/* ── HERO CTA ── */
+.hero-cta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
   margin-bottom: 2.5rem;
 }
+.hero-install {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--dark-bg);
+  border-radius: 8px;
+  padding: 0.75rem 0.5rem 0.75rem 1.25rem;
+  font-family: var(--font-mono);
+  font-size: 0.9375rem;
+  color: var(--dark-ink);
+}
+.hero-install .install-prompt { color: var(--dark-dim); }
+.hero-install .install-cmd { color: var(--dark-green); }
+.hero-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: transparent;
+  color: var(--dark-ink-2);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.hero-copy-btn:hover { color: var(--dark-ink); border-color: rgba(255,255,255,0.3); }
+.hero-copy-btn svg { width: 15px; height: 15px; }
+.hero-links { display: flex; gap: 0.75rem; align-items: center; }
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  text-decoration: none;
+  padding: 0.65rem 1.1rem;
+  border-radius: 8px;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+  border: 1px solid var(--accent);
+}
+.btn-primary:hover { background: var(--accent-mid); border-color: var(--accent-mid); }
+.btn-secondary {
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--rule);
+}
+.btn-secondary:hover { border-color: var(--ink-3); box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
 
 /* ── TERMINAL ── */
 .terminal {
@@ -157,12 +242,12 @@ nav {
 .dot-r { background: #FF5F56; }
 .dot-y { background: #FFBD2E; }
 .dot-g { background: #27C93F; }
-.terminal-body { padding: 1.25rem 1.5rem 1.5rem; }
+.terminal-body { padding: 1.25rem 1.5rem 1.5rem; overflow-x: auto; }
 .t-prompt { color: var(--dark-dim); }
 .t-cmd { color: var(--dark-ink); }
 .t-out { color: var(--dark-ink-2); }
 .t-green { color: var(--dark-green); }
-.t-line { display: block; }
+.t-line { display: block; min-width: max-content; }
 
 /* typewriter effect */
 .typewriter {
@@ -200,7 +285,7 @@ nav {
 
 /* ── LIGHT SECTION ── */
 .section {
-  max-width: var(--max);
+  max-width: var(--max-layout);
   margin: 0 auto;
   padding: 4.5rem 2rem;
 }
@@ -226,10 +311,41 @@ nav {
   margin-bottom: 1rem;
 }
 .section p:last-child { margin-bottom: 0; }
+.section p a { color: var(--accent); }
+
+/* ── PROOF ── */
+.proof-card {
+  margin-top: 2rem;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  padding: 1.5rem 1.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem 2.5rem;
+}
+.proof-item { flex: 1 1 220px; }
+.proof-item-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-bottom: 0.4rem;
+}
+.proof-item a {
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  color: var(--accent);
+  text-decoration: none;
+  word-break: break-word;
+}
+.proof-item a:hover { text-decoration: underline; }
 
 /* ── STEPS ── */
 .steps { display: flex; flex-direction: column; gap: 3rem; margin-top: 3rem; }
 .step { display: grid; grid-template-columns: 1fr 1fr; gap: 2.5rem; align-items: start; }
+.step-text, .step-code { min-width: 0; }
 .step:nth-child(even) .step-text { order: 2; }
 .step:nth-child(even) .step-code { order: 1; }
 .step-label {
@@ -281,7 +397,7 @@ nav {
   padding: 5rem 2rem;
 }
 .dark-section-inner {
-  max-width: var(--max);
+  max-width: var(--max-layout);
   margin: 0 auto;
 }
 .dark-section .section-label { color: var(--dark-dim); }
@@ -289,22 +405,25 @@ nav {
 .dark-section p { color: var(--dark-ink-2); }
 
 /* ── FEATURES GRID ── */
+.feature-theme-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dark-green);
+  margin-top: 2.5rem;
+  margin-bottom: 1rem;
+}
 .features {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 1.25rem;
-  margin-top: 2.5rem;
 }
 .feature {
   background: var(--dark-surface);
   border: 1px solid rgba(255,255,255,0.05);
   border-radius: 8px;
   padding: 1.25rem 1.25rem 1.5rem;
-}
-.feature-icon {
-  font-size: 1.25rem;
-  margin-bottom: 0.65rem;
-  display: block;
 }
 .feature h4 {
   font-size: 0.875rem;
@@ -340,6 +459,12 @@ nav {
   font-size: 0.8em;
   color: var(--dark-green);
 }
+.feature a {
+  color: var(--dark-green);
+  text-decoration-color: color-mix(in srgb, currentColor 55%, transparent);
+  text-underline-offset: 0.15em;
+}
+.feature a:hover { text-decoration-thickness: 2px; }
 
 /* ── CHANGELOG ── */
 .changelog { max-width: var(--max); margin: 0 auto; padding: 4.5rem 2rem; }
@@ -361,9 +486,19 @@ nav {
 .release-body ul { padding-left: 1.25rem; margin: 0.25rem 0; }
 .release-body li { margin-bottom: 0.15rem; }
 .release-body code { font-family: var(--font-mono); font-size: 0.85em; background: var(--accent-light); color: var(--accent); padding: 0.1em 0.3em; border-radius: 3px; }
-.release-body .commit-sha { font-family: var(--font-mono); font-size: 0.8em; color: var(--ink-3); text-decoration: none; }
-.release-body .commit-sha:hover { color: var(--accent); text-decoration: underline; }
 .release-body h4, .release-body h5 { font-size: 0.875rem; font-weight: 600; margin: 0.75rem 0 0.25rem; color: var(--ink); }
+.release-ref { font-family: var(--font-mono); font-size: 0.8em; }
+.release-ref a { color: var(--ink-3); text-decoration: none; }
+.release-ref a:hover { color: var(--accent); text-decoration: underline; }
+.release-empty { color: var(--ink-3); font-size: 0.9rem; font-style: italic; }
+.release-full-link {
+  display: inline-block;
+  margin-top: 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--ink-3);
+  text-decoration: none;
+}
+.release-full-link:hover { color: var(--accent); text-decoration: underline; }
 .changelog-empty { color: var(--ink-3); font-size: 0.9rem; }
 .changelog-empty a { color: var(--accent); text-decoration: none; }
 .changelog-empty a:hover { text-decoration: underline; }
@@ -454,6 +589,9 @@ footer {
   nav { padding: 1.25rem 1.25rem; }
   .nav-links { gap: 0.75rem; }
   .nav-links a:not(.nav-github) { display: none; }
+  .hero-install { width: 100%; }
+  .hero-links { width: 100%; }
+  .btn { flex: 1 1 auto; justify-content: center; }
 }
 
 /* ── FOCUS ── */
@@ -471,7 +609,7 @@ a:focus-visible {
   <a class="nav-logo" href="/">
     specsync
     <span class="nav-badge"><!-- VERSION:start -->
-v0.6.0
+v0.7.0
 <!-- VERSION:end --></span>
   </a>
   <div class="nav-links">
@@ -488,9 +626,24 @@ v0.6.0
 <section class="hero">
   <p class="hero-eyebrow">OpenSpec × GitHub Issues</p>
   <h1>The issue <em>is</em> the spec.<br>The changelog <em>is</em> the spec history.</h1>
-  <p class="hero-sub">specsync projects your OpenSpec change specs into your issue tracker — automatically. Plan locally, sync once, collaborate everywhere. And when you ship, the changelog writes itself from the specs — in user language, never a commit dump.</p>
+  <p class="hero-sub">specsync projects your OpenSpec change specs into your issue tracker — automatically. Plan locally, sync with one command, collaborate everywhere. And when you ship, the changelog writes itself from the specs — in user language, never a commit dump.</p>
 
-  <div class="terminal" role="img" aria-label="specsync demo terminal">
+  <div class="hero-cta">
+    <div class="hero-install">
+      <span class="install-prompt">$</span>
+      <span class="install-cmd" id="hero-install-cmd">npm install -g @androidand/specsync</span>
+      <button class="hero-copy-btn" type="button" onclick="specsyncCopyInstall(this)" aria-label="Copy install command">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M3.5 10.5h-1a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v1"/></svg>
+      </button>
+    </div>
+    <div class="hero-links">
+      <a class="btn btn-primary" href="#get-started">Get started</a>
+      <a class="btn btn-secondary" href="https://github.com/androidand/specsync" target="_blank" rel="noopener">View on GitHub</a>
+    </div>
+  </div>
+
+  <p class="sr-only" id="terminal-desc">Example: running "specsync -slug my-feature" creates a GitHub label and issue for the my-feature OpenSpec change, then prints the new issue's URL and a one-line summary — "specsync: 1 created, 0 updated".</p>
+  <div class="terminal" aria-hidden="true">
     <div class="terminal-bar">
       <span class="dot dot-r"></span>
       <span class="dot dot-y"></span>
@@ -515,6 +668,15 @@ v0.6.0
       </span>
     </div>
   </div>
+</section>
+
+<hr class="divider">
+
+<!-- WHY -->
+<section class="section" id="why">
+  <p class="section-label">Why specsync</p>
+  <h2>Specs and issues shouldn't be two jobs.</h2>
+  <p><a href="https://openspec.dev" target="_blank" rel="noopener">OpenSpec</a> keeps plans and requirements in the repository. Teams still collaborate through GitHub issues and project boards. Maintaining both manually means duplicating intent and watching them drift apart. specsync makes them two views of the same work.</p>
 </section>
 
 <hr class="divider">
@@ -596,128 +758,109 @@ specsync link feature-api feature-ui
     <h2 style="font-size:1.75rem;font-weight:700;letter-spacing:-0.025em;margin-bottom:0.75rem;color:var(--dark-ink)">Everything a spec needs. Nothing it doesn't.</h2>
     <p style="color:var(--dark-ink-2);max-width:520px">specsync is a small, focused binary. No config file, no daemon, no SDK dependency — just <code style="font-family:var(--font-mono);font-size:0.875em;color:var(--dark-green)">gh</code> under the hood.</p>
 
-    <div class="features">
 <!-- FEATURES:start -->
-      <div class="feature">
-        <span class="feature-icon">⚡</span>
-        <h4>Auto-detect repo</h4>
-        <p>Reads the git remote — no config required. Override with <code>-repo owner/name</code> for any other repo.</p>
+      <div class="feature-theme">
+        <h3 class="feature-theme-label">Plan</h3>
+        <div class="features">
+        <div class="feature">
+          <h4>Auto-detect repo</h4>
+          <p>Reads the git remote — no config required. Override with <code>-repo owner/name</code> for any other repo.</p>
+        </div>
+        <div class="feature">
+          <h4>Planning scan</h4>
+          <p><code>specsync scan</code> shows what already exists for an area — in-flight changes, loose issues, recent commits — before you plan.</p>
+        </div>
+        <div class="feature">
+          <h4>Issue-first pull</h4>
+          <p>Pull any existing issue into a local spec. The ref is cached so subsequent pushes update — never duplicate.</p>
+        </div>
+        <div class="feature">
+          <h4>Agent-friendly</h4>
+          <p>A bundled skill installs for Claude Code, Codex, OpenCode, Copilot, or any agentskills.io-compatible <code>.agents</code> directory.</p>
+        </div>
+        </div>
       </div>
-      <div class="feature">
-        <span class="feature-icon">🔁</span>
-        <h4>Idempotent</h4>
-        <p>Re-run freely. An identity marker in the issue body prevents duplicates even if the ref cache is lost.</p>
+      <div class="feature-theme">
+        <h3 class="feature-theme-label">Collaborate</h3>
+        <div class="features">
+        <div class="feature">
+          <h4>Idempotent</h4>
+          <p>Re-run freely. An identity marker in the issue body prevents duplicates even if the ref cache is lost.</p>
+        </div>
+        <div class="feature">
+          <h4>Tracker-agnostic</h4>
+          <p>Not just GitHub. Project an OpenSpec change onto a <a href="https://github.com/steveyegge/beads" target="_blank" rel="noopener">Beads</a> task graph with <code>-provider beads</code> — the <code>WorkProvider</code> interface keeps the tracker your choice.</p>
+        </div>
+        <div class="feature">
+          <h4>Cross-repo linking</h4>
+          <p><code>specsync link</code> writes <code>links.md</code> and pushes a Related section to both issues automatically.</p>
+        </div>
+        <div class="feature">
+          <h4>Preview writes</h4>
+          <p><code>sync</code>, <code>pull</code>, and <code>link</code> support <code>-dry-run</code>. Read-only inspection commands need no preview mode.</p>
+        </div>
+        <div class="feature">
+          <h4>Two-way reconcile</h4>
+          <p>Checkboxes ticked in the GitHub issue merge back into your local <code>tasks.md</code> on the next sync — progress flows both ways, never lost in either direction.</p>
+        </div>
+        <div class="feature">
+          <h4>Projects boards</h4>
+          <p>Point <code>-project owner/number</code> at a GitHub Projects board: synced issues land on the board, Status follows the change lifecycle, and human curation is respected.</p>
+        </div>
+        </div>
       </div>
-      <div class="feature">
-        <span class="feature-icon">🧩</span>
-        <h4>Tracker-agnostic</h4>
-        <p>Not just GitHub. Project an OpenSpec change onto a <a href="https://github.com/steveyegge/beads" target="_blank" rel="noopener">Beads</a> task graph with <code>-provider beads</code> — the <code>WorkProvider</code> interface keeps the tracker your choice.</p>
-      </div>
-      <div class="feature">
-        <span class="feature-icon">🔗</span>
-        <h4>Cross-repo linking</h4>
-        <p><code>specsync link</code> writes <code>links.md</code> and pushes a Related section to both issues automatically.</p>
-      </div>
-      <div class="feature">
-        <span class="feature-icon">📥</span>
-        <h4>Issue-first pull</h4>
-        <p>Pull any existing issue into a local spec. The ref is cached so subsequent pushes update — never duplicate.</p>
-      </div>
-      <div class="feature">
-        <span class="feature-icon">🔭</span>
-        <h4>Planning scan</h4>
-        <p><code>specsync scan</code> shows what already exists for an area — in-flight changes, loose issues, recent commits — before you plan.</p>
-      </div>
-      <div class="feature">
-        <span class="feature-icon">🧾</span>
-        <h4>Release follow-up</h4>
-        <p><code>specsync release-plan</code> reconstructs what shipped, what's loose, and an advisory bump — using OpenSpec requirement deltas as a release signal no commit-only tool can see.</p>
-      </div>
-      <div class="feature">
-        <span class="feature-icon">🤖</span>
-        <h4>Agent-friendly</h4>
-        <p>A bundled skill installs for Claude Code, Codex, OpenCode, Copilot, or any agentskills.io-compatible <code>.agents</code> directory.</p>
-      </div>
-      <div class="feature">
-        <span class="feature-icon">🔍</span>
-        <h4>Preview writes</h4>
-        <p><code>sync</code>, <code>pull</code>, and <code>link</code> support <code>-dry-run</code>. Read-only inspection commands need no preview mode.</p>
-      </div>
-      <div class="feature">
-        <span class="feature-icon">🎯</span>
-        <h4>Auto-lifecycle</h4>
-        <p><code>stage:active</code> while work remains; auto-flips to <code>stage:complete</code> when all tasks are checked. Optional <code>-close-completed</code> keeps the issue open/closed state aligned — completion closes it, new work reopens it.</p>
-      </div>
-      <div class="feature">
-        <span class="feature-icon">🔀</span>
-        <h4>Two-way reconcile</h4>
-        <p>Checkboxes ticked in the GitHub issue merge back into your local <code>tasks.md</code> on the next sync — progress flows both ways, never lost in either direction.</p>
-      </div>
-      <div class="feature">
-        <span class="feature-icon">🧵</span>
-        <h4>Traceability</h4>
-        <p><code>specsync trace</code> reconstructs how a change, its issue, PRs, and commits connect — every link backed by evidence (markers, branches, commit footers), never guessed.</p>
-      </div>
-      <div class="feature">
-        <span class="feature-icon">📋</span>
-        <h4>Projects boards</h4>
-        <p>Point <code>-project owner/number</code> at a GitHub Projects board: synced issues land on the board, Status follows the change lifecycle, and human curation is respected.</p>
-      </div>
-      <div class="feature">
-        <span class="feature-icon">📜</span>
-        <h4>Spec-driven changelog</h4>
-        <p><code>specsync changelog</code> writes a Keep a Changelog section from your shipped changes — one entry per change, release notes authored at planning time, never a raw commit dump.</p>
+      <div class="feature-theme">
+        <h3 class="feature-theme-label">Ship</h3>
+        <div class="features">
+        <div class="feature">
+          <h4>Auto-lifecycle</h4>
+          <p><code>stage:active</code> while work remains; auto-flips to <code>stage:complete</code> when all tasks are checked. Optional <code>-close-completed</code> keeps the issue open/closed state aligned — completion closes it, new work reopens it.</p>
+        </div>
+        <div class="feature">
+          <h4>Traceability</h4>
+          <p><code>specsync trace</code> reconstructs how a change, its issue, PRs, and commits connect — every link backed by evidence (markers, branches, commit footers), never guessed.</p>
+        </div>
+        <div class="feature">
+          <h4>Release follow-up</h4>
+          <p><code>specsync release-plan</code> reconstructs what shipped, what's loose, and an advisory bump — using OpenSpec requirement deltas as a release signal no commit-only tool can see.</p>
+        </div>
+        <div class="feature">
+          <h4>Spec-driven changelog</h4>
+          <p><code>specsync changelog</code> writes a Keep a Changelog section from your shipped changes — one entry per change, release notes authored at planning time, never a raw commit dump.</p>
+        </div>
+        </div>
       </div>
 <!-- FEATURES:end -->
-    </div>
   </div>
 </div>
 
-<hr class="divider">
-<section class="changelog">
-  <p class="section-label">Changelog</p>
-  <h2 style="font-size:1.75rem;font-weight:700;letter-spacing:-0.025em;margin-bottom:2rem">Recent releases</h2>
-  <!-- CHANGELOG:start -->
-        <div class="release">
-          <div class="release-header">
-            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.6.0" target="_blank" rel="noopener">v0.6.0</a>
-            <span class="release-date">Jul 14, 2026</span>
-          </div>
-          <div class="release-body"><h5>Features</h5><ul><li>spec-driven changelog — one entry per shipped change <a class="commit-sha" href="https://github.com/androidand/specsync/commit/189753071326652e628b7339a8cdd957ac2b9c4d" target="_blank" rel="noopener">1897530</a></li></ul>
-<h5>Fixes</h5><ul><li>case-insensitive Status matching + CLI status-map wiring <a class="commit-sha" href="https://github.com/androidand/specsync/commit/cc2bc110fe963f5f780298feae586fef7e8cafe4" target="_blank" rel="noopener">cc2bc11</a></li>
-<li>readable release notes, spec-history hero, drop stale blocks <a class="commit-sha" href="https://github.com/androidand/specsync/commit/0349b063b7206e04f31b40eafcf7b51aeb093d66" target="_blank" rel="noopener">0349b06</a></li>
-<li>guard legacy ref fallback against cross-repo clobber <a class="commit-sha" href="https://github.com/androidand/specsync/commit/64203a44c99e8d9751d6ff1c6e18334e106c693a" target="_blank" rel="noopener">64203a4</a></li></ul>
-<h5>Other</h5><ul><li>record v0.5.1 verification <a class="commit-sha" href="https://github.com/androidand/specsync/commit/4cdd037c50b7e2798db379f73421bd3180c7c4fd" target="_blank" rel="noopener">4cdd037</a></li>
-<li>prepare standalone Cloudflare deployment <a class="commit-sha" href="https://github.com/androidand/specsync/commit/b1ad4ca0cde3a8253e6321c923c18c4b5cd4428f" target="_blank" rel="noopener">b1ad4ca</a></li>
-<li>Stabilize projection ref-cache key so sync never duplicates an issue (#35) <a class="commit-sha" href="https://github.com/androidand/specsync/commit/a29de44c9ac296c50d61d8d75fa9f41aff53c233" target="_blank" rel="noopener">a29de44</a></li>
-<li>GitHub Projects (board) compatibility (#37) <a class="commit-sha" href="https://github.com/androidand/specsync/commit/51d6b83db881d4e9a61a15911dcde3b7482bc771" target="_blank" rel="noopener">51d6b83</a></li>
-<li>Merge branch 'claude/jovial-noyce-5910b2': board Status case-insensitivity + -status-map CLI wiring <a class="commit-sha" href="https://github.com/androidand/specsync/commit/b6d2cee66febd88232bd19e50f6731a301dcf2c7" target="_blank" rel="noopener">b6d2cee</a></li>
-<li>Merge branch 'claude/happy-wright-4358a5' <a class="commit-sha" href="https://github.com/androidand/specsync/commit/d51514d6590fb695cd0371197925319f165b1f20" target="_blank" rel="noopener">d51514d</a></li>
-<li>document changelog/board CLI surface, add CHANGELOG.md for v0.6.0 <a class="commit-sha" href="https://github.com/androidand/specsync/commit/6b70891ec682d924579d16efc5b8aef5c67ad3ad" target="_blank" rel="noopener">6b70891</a></li></ul></div>
-        </div>
-        <div class="release">
-          <div class="release-header">
-            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.5.1" target="_blank" rel="noopener">v0.5.1</a>
-            <span class="release-date">Jul 13, 2026</span>
-          </div>
-          <div class="release-body"><h5>Fixes</h5><ul><li>complete lifecycle sync and harden npm install <a class="commit-sha" href="https://github.com/androidand/specsync/commit/2990406baef500784da1e1c093807eecfcb35b3a" target="_blank" rel="noopener">2990406</a></li></ul></div>
-        </div>
-        <div class="release">
-          <div class="release-header">
-            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.5.0" target="_blank" rel="noopener">v0.5.0</a>
-            <span class="release-date">Jul 13, 2026</span>
-          </div>
-          <div class="release-body"><h5>Features</h5><ul><li>derive a "complete" stage from task completion + optional auto-close <a class="commit-sha" href="https://github.com/androidand/specsync/commit/ee7664b94567d7e292b99cb399f4c45be34006c4" target="_blank" rel="noopener">ee7664b</a></li></ul></div>
-        </div>
-<!-- CHANGELOG:end -->
+<!-- PROOF -->
+<section class="section" id="proof">
+  <p class="section-label">Dogfooding proof</p>
+  <h2>specsync manages its own repository.</h2>
+  <p>Every specsync issue is projected from an OpenSpec change. Here's one real example, end to end:</p>
+  <div class="proof-card">
+    <div class="proof-item">
+      <p class="proof-item-label">OpenSpec change</p>
+      <a href="https://github.com/androidand/specsync/tree/main/openspec/changes/archive/fix-completion-lifecycle" target="_blank" rel="noopener">openspec/changes/archive/fix-completion-lifecycle</a>
+    </div>
+    <div class="proof-item">
+      <p class="proof-item-label">Projected issue</p>
+      <a href="https://github.com/androidand/specsync/issues/29" target="_blank" rel="noopener">specsync#29 — Fix completion lifecycle</a>
+    </div>
+    <div class="proof-item">
+      <p class="proof-item-label">Generated release note</p>
+      <a href="https://github.com/androidand/specsync/releases/tag/v0.7.0" target="_blank" rel="noopener">v0.7.0 changelog entry</a>
+    </div>
+  </div>
 </section>
 
 <hr class="divider">
 
 <!-- INSTALL -->
-<section class="install-section">
-  <h2>Get started in one line</h2>
-  <p>Requires Node 16+ for the installer. The binary itself has no runtime dependencies.</p>
+<section class="install-section" id="get-started">
+  <h2>Get started</h2>
+  <p>Self-contained binary for macOS and Linux. GitHub synchronization requires the authenticated GitHub CLI.</p>
   <div class="install-block">
     <span class="install-prompt">$</span>
     <span class="install-cmd">npm install -g @androidand/specsync</span>
@@ -726,6 +869,42 @@ specsync link feature-api feature-ui
     Or install with Go: <code style="font-family:var(--font-mono);font-size:0.875em">go install github.com/androidand/specsync/cmd/specsync@latest</code><br>
     <a href="https://github.com/androidand/specsync/blob/main/README.md" target="_blank" rel="noopener">Full documentation on GitHub →</a>
   </p>
+  <div class="code-block" style="text-align:left;max-width:420px;margin:2rem auto 0"><code><span class="c-comment"># Check prerequisites, install, then preview safely</span>
+gh auth status
+npm install -g @androidand/specsync
+specsync <span class="c-flag">-dry-run</span></code></div>
+</section>
+
+<hr class="divider">
+<section class="changelog">
+  <p class="section-label">Changelog</p>
+  <h2 style="font-size:1.75rem;font-weight:700;letter-spacing:-0.025em;margin-bottom:2rem">Recent releases</h2>
+  <!-- CHANGELOG:start -->
+        <div class="release">
+          <div class="release-header">
+            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.7.0" target="_blank" rel="noopener">v0.7.0</a>
+            <span class="release-date">Jul 14, 2026</span>
+          </div>
+          <div class="release-body"><p class="release-empty">No spec-derived entries for this release.</p></div>
+          <a class="release-full-link" href="https://github.com/androidand/specsync/releases/tag/v0.7.0" target="_blank" rel="noopener">View complete release details on GitHub →</a>
+        </div>
+        <div class="release">
+          <div class="release-header">
+            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.6.0" target="_blank" rel="noopener">v0.6.0</a>
+            <span class="release-date">Jul 14, 2026</span>
+          </div>
+          <div class="release-body"><p class="release-empty">No spec-derived entries for this release.</p></div>
+          <a class="release-full-link" href="https://github.com/androidand/specsync/releases/tag/v0.6.0" target="_blank" rel="noopener">View complete release details on GitHub →</a>
+        </div>
+        <div class="release">
+          <div class="release-header">
+            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.5.1" target="_blank" rel="noopener">v0.5.1</a>
+            <span class="release-date">Jul 13, 2026</span>
+          </div>
+          <div class="release-body"><p class="release-empty">No spec-derived entries for this release.</p></div>
+          <a class="release-full-link" href="https://github.com/androidand/specsync/releases/tag/v0.5.1" target="_blank" rel="noopener">View complete release details on GitHub →</a>
+        </div>
+<!-- CHANGELOG:end -->
 </section>
 
 <!-- FOOTER -->
@@ -741,5 +920,24 @@ specsync link feature-api feature-ui
   </div>
 </footer>
 
+<script>
+function specsyncCopyInstall(btn) {
+  var text = document.getElementById("hero-install-cmd").textContent;
+  var showCopied = function () {
+    var original = btn.innerHTML;
+    btn.setAttribute("aria-label", "Copied!");
+    btn.innerHTML = "<svg viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" aria-hidden=\"true\"><path d=\"M3 8.5l3.2 3.2L13 4.5\"/></svg>";
+    setTimeout(function () {
+      btn.setAttribute("aria-label", "Copy install command");
+      btn.innerHTML = original;
+    }, 1500);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(showCopied, function () {
+      btn.setAttribute("aria-label", "Copy failed — select the command manually");
+    });
+  }
+}
+</script>
 </body>
 </html>
