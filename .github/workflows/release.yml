@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: write
+  issues: read # -resolve-refs looks up each change's issue live via `gh`
 
 jobs:
   goreleaser:
@@ -17,12 +18,35 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      - name: Build specsync
+        run: go build -o /tmp/specsync ./cmd/specsync
+      - name: Generate release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          prev="$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || echo "")"
+          /tmp/specsync changelog -release-notes -resolve-refs -since "$prev" -until "$GITHUB_REF_NAME" -version "${GITHUB_REF_NAME#v}" > /tmp/notes.md
       - uses: goreleaser/goreleaser-action@v6
         with:
           version: "~> v2"
-          args: release --clean
+          args: release --clean --release-notes=/tmp/notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Append this release to CHANGELOG.md on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          prev="$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || echo "")"
+          git fetch origin main
+          git checkout main
+          /tmp/specsync changelog -resolve-refs -since "$prev" -until "$GITHUB_REF_NAME" -version "${GITHUB_REF_NAME#v}" -apply
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          if ! git diff --cached --quiet; then
+            git commit -m "docs: changelog for ${GITHUB_REF_NAME}"
+            git push origin main
+          fi
 
   # Publish the npm wrapper after the release (and its binaries) exist, so the
   # postinstall download has something to fetch. The package version is taken

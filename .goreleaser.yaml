@@ -23,4 +23,6 @@ checksum:
   name_template: "checksums.txt"
 
 changelog:
-  use: github
+  # Release body is supplied via `--release-notes` (release.yml runs
+  # `specsync changelog -release-notes` first) — no auto-generated changelog.
+  disable: true

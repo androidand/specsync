@@ -28,6 +28,9 @@ func runChangelog(args []string) {
 	apply := fs.Bool("apply", false, "write the section into CHANGELOG.md (idempotent per version)")
 	force := fs.Bool("force", false, "apply even when another release tool owns the changelog")
 	changelogPath := fs.String("changelog", "CHANGELOG.md", "path of the changelog file -apply writes")
+	resolveRefs := fs.Bool("resolve-refs", false, "look up a change's issue live (read-only) when its ref cache is missing, e.g. on a fresh CI checkout")
+	repo := fs.String("repo", "", "repo as owner/name for -resolve-refs (default: auto-detect from git remote)")
+	providerName := fs.String("provider", "github", "work provider for -resolve-refs: github (default) or beads")
 	_ = fs.Parse(args)
 
 	abs, err := filepath.Abs(*openspec)
@@ -40,6 +43,12 @@ func runChangelog(args []string) {
 	in, err := specsync.GatherTrace(ctx, abs, specsync.NewGitCommitSource(), scope)
 	if err != nil {
 		fail(err)
+	}
+	if *resolveRefs {
+		provider := makeProvider(*repo, false, *providerName)
+		if err := specsync.ResolveLiveRefs(ctx, &in, provider); err != nil {
+			fail(fmt.Errorf("resolve-refs: %w", err))
+		}
 	}
 
 	// Requirement deltas, best-effort and only for changes that actually
