@@ -467,7 +467,7 @@ a:focus-visible {
   <a class="nav-logo" href="/">
     specsync
     <span class="nav-badge"><!-- VERSION:start -->
-v0.5.1
+v0.6.0
 <!-- VERSION:end --></span>
   </a>
   <div class="nav-links">
@@ -676,6 +676,23 @@ specsync link feature-api feature-ui
   <!-- CHANGELOG:start -->
         <div class="release">
           <div class="release-header">
+            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.6.0" target="_blank" rel="noopener">v0.6.0</a>
+            <span class="release-date">Jul 14, 2026</span>
+          </div>
+          <div class="release-body"><h5>Features</h5><ul><li>spec-driven changelog — one entry per shipped change <a class="commit-sha" href="https://github.com/androidand/specsync/commit/189753071326652e628b7339a8cdd957ac2b9c4d" target="_blank" rel="noopener">1897530</a></li></ul>
+<h5>Fixes</h5><ul><li>case-insensitive Status matching + CLI status-map wiring <a class="commit-sha" href="https://github.com/androidand/specsync/commit/cc2bc110fe963f5f780298feae586fef7e8cafe4" target="_blank" rel="noopener">cc2bc11</a></li>
+<li>readable release notes, spec-history hero, drop stale blocks <a class="commit-sha" href="https://github.com/androidand/specsync/commit/0349b063b7206e04f31b40eafcf7b51aeb093d66" target="_blank" rel="noopener">0349b06</a></li>
+<li>guard legacy ref fallback against cross-repo clobber <a class="commit-sha" href="https://github.com/androidand/specsync/commit/64203a44c99e8d9751d6ff1c6e18334e106c693a" target="_blank" rel="noopener">64203a4</a></li></ul>
+<h5>Other</h5><ul><li>record v0.5.1 verification <a class="commit-sha" href="https://github.com/androidand/specsync/commit/4cdd037c50b7e2798db379f73421bd3180c7c4fd" target="_blank" rel="noopener">4cdd037</a></li>
+<li>prepare standalone Cloudflare deployment <a class="commit-sha" href="https://github.com/androidand/specsync/commit/b1ad4ca0cde3a8253e6321c923c18c4b5cd4428f" target="_blank" rel="noopener">b1ad4ca</a></li>
+<li>Stabilize projection ref-cache key so sync never duplicates an issue (#35) <a class="commit-sha" href="https://github.com/androidand/specsync/commit/a29de44c9ac296c50d61d8d75fa9f41aff53c233" target="_blank" rel="noopener">a29de44</a></li>
+<li>GitHub Projects (board) compatibility (#37) <a class="commit-sha" href="https://github.com/androidand/specsync/commit/51d6b83db881d4e9a61a15911dcde3b7482bc771" target="_blank" rel="noopener">51d6b83</a></li>
+<li>Merge branch 'claude/jovial-noyce-5910b2': board Status case-insensitivity + -status-map CLI wiring <a class="commit-sha" href="https://github.com/androidand/specsync/commit/b6d2cee66febd88232bd19e50f6731a301dcf2c7" target="_blank" rel="noopener">b6d2cee</a></li>
+<li>Merge branch 'claude/happy-wright-4358a5' <a class="commit-sha" href="https://github.com/androidand/specsync/commit/d51514d6590fb695cd0371197925319f165b1f20" target="_blank" rel="noopener">d51514d</a></li>
+<li>document changelog/board CLI surface, add CHANGELOG.md for v0.6.0 <a class="commit-sha" href="https://github.com/androidand/specsync/commit/6b70891ec682d924579d16efc5b8aef5c67ad3ad" target="_blank" rel="noopener">6b70891</a></li></ul></div>
+        </div>
+        <div class="release">
+          <div class="release-header">
             <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.5.1" target="_blank" rel="noopener">v0.5.1</a>
             <span class="release-date">Jul 13, 2026</span>
           </div>
@@ -687,26 +704,6 @@ specsync link feature-api feature-ui
             <span class="release-date">Jul 13, 2026</span>
           </div>
           <div class="release-body"><h5>Features</h5><ul><li>derive a "complete" stage from task completion + optional auto-close <a class="commit-sha" href="https://github.com/androidand/specsync/commit/ee7664b94567d7e292b99cb399f4c45be34006c4" target="_blank" rel="noopener">ee7664b</a></li></ul></div>
-        </div>
-        <div class="release">
-          <div class="release-header">
-            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.4.1" target="_blank" rel="noopener">v0.4.1</a>
-            <span class="release-date">Jul 6, 2026</span>
-          </div>
-          <div class="release-body"><h5>Features</h5><ul><li>version subcommand and -version/--version flags <a class="commit-sha" href="https://github.com/androidand/specsync/commit/12fbda70bfe45fe24deffcea51225624a26d8a64" target="_blank" rel="noopener">12fbda7</a></li></ul>
-<h5>Other</h5><ul><li>rebuild at v0.4.0 <a class="commit-sha" href="https://github.com/androidand/specsync/commit/1e05a1c164be705c23ed315342aa29fd48448487" target="_blank" rel="noopener">1e05a1c</a></li>
-<li>ignore .skein/ and logs/ runtime state; track changes/.gitignore <a class="commit-sha" href="https://github.com/androidand/specsync/commit/ca5ae79aa12a475ce2b548c515be46482fc41e58" target="_blank" rel="noopener">ca5ae79</a></li>
-<li>add gh issue list and openspec archive to skill workflow <a class="commit-sha" href="https://github.com/androidand/specsync/commit/d4327e9db0a17d296eda872a6234cee506abb1e8" target="_blank" rel="noopener">d4327e9</a></li>
-<li>specsync Go library (pkg/specsync) — GH #25 <a class="commit-sha" href="https://github.com/androidand/specsync/commit/7272da8809384af4583dc7c608ae32a52584b237" target="_blank" rel="noopener">7272da8</a></li>
-<li>add OpenSpec CLI commands and prerequisites to skill <a class="commit-sha" href="https://github.com/androidand/specsync/commit/af119790c86f125357a5db61075604681c39e4f6" target="_blank" rel="noopener">af11979</a></li>
-<li>integrate OPSX into specsync skill <a class="commit-sha" href="https://github.com/androidand/specsync/commit/52882a564d087ab99da3bcd74ac58a359e6dbcca" target="_blank" rel="noopener">52882a5</a></li>
-<li>plan launch-readiness — README surface, npm metadata, audit record <a class="commit-sha" href="https://github.com/androidand/specsync/commit/233a54a81fbe67877d229311b9bedd83f191530e" target="_blank" rel="noopener">233a54a</a></li>
-<li>add keywords, author, bugs to package metadata <a class="commit-sha" href="https://github.com/androidand/specsync/commit/e0e54298050c10b62e6d2255f950151f57a9ea8d" target="_blank" rel="noopener">e0e5429</a></li>
-<li>document full CLI surface, requirements, badges <a class="commit-sha" href="https://github.com/androidand/specsync/commit/f9001bbc2cd2655cc9080e8ea85f4f03b2577403" target="_blank" rel="noopener">f9001bb</a></li>
-<li>check off launch-readiness section-1 tasks <a class="commit-sha" href="https://github.com/androidand/specsync/commit/4ee97ea28e6fcfac30581fd47cf488bee3e35235" target="_blank" rel="noopener">4ee97ea</a></li>
-<li>fix first-sync stumbling blocks found in stranger read-through <a class="commit-sha" href="https://github.com/androidand/specsync/commit/cb4c87afbb816334bfcf05713ef281592924c9d2" target="_blank" rel="noopener">cb4c87a</a></li>
-<li>rebuild at v0.4.0 <a class="commit-sha" href="https://github.com/androidand/specsync/commit/0157a851c31a6c308fbd8549e23e11793003b01f" target="_blank" rel="noopener">0157a85</a></li>
-<li>check off launch-readiness section-2 tasks <a class="commit-sha" href="https://github.com/androidand/specsync/commit/aa95e61222aad64fcf56de4a1d4749935f089c43" target="_blank" rel="noopener">aa95e61</a></li></ul></div>
         </div>
 <!-- CHANGELOG:end -->
 </section>

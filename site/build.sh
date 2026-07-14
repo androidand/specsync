@@ -3,25 +3,12 @@
 // between <!-- X:start --> and <!-- X:end --> markers, so it can run on the
 // committed (already-built) index.html and re-inject cleanly.
 // Run: node build.sh   (CF Pages build command: cd site && node build.sh)
-// Requires: Node 16+. Network + git are best-effort; missing ones degrade.
+// Requires: Node 16+. No git dependency (some build environments have no
+// tags). The GitHub Releases fetch is best-effort: on failure the version
+// badge and changelog are left exactly as committed, never degraded.
 
 const fs = require("fs");
 const https = require("https");
-const { execSync } = require("child_process");
-
-// Version reflects what is RELEASED: the latest git tag (truthful to npm),
-// falling back to package.json only when no tag is reachable.
-function releasedVersion() {
-  try {
-    const tag = execSync("git describe --tags --abbrev=0", { stdio: ["ignore", "pipe", "ignore"] })
-      .toString().trim();
-    if (tag) return tag.replace(/^v/, "");
-  } catch (_) {}
-  try {
-    return require("../npm/package.json").version;
-  } catch (_) {}
-  return "";
-}
 
 function get(url) {
   return new Promise((resolve, reject) => {
@@ -102,11 +89,39 @@ function renderReleaseBody(body, repoUrl) {
 async function build() {
   let html = fs.readFileSync("index.html", "utf8");
 
-  // 1. Version (released tag).
-  const version = releasedVersion();
-  if (version) {
-    html = replaceRegion(html, "VERSION", `v${version}`);
-    console.log(`  version: v${version} (released)`);
+  // 1 & 3. Version + changelog both come from one GitHub Releases fetch — no
+  // local git-tag dependency (some build environments, e.g. a shallow-clone
+  // CI checkout, have no tags at all) and no stale checked-in fallback value.
+  // On any failure (network blocked, rate-limited, no releases yet) neither
+  // region is touched, so a build never regresses the last known-good,
+  // already-committed content — better a stale-but-correct badge than a
+  // wrong one or an empty placeholder.
+  let releases = null;
+  try {
+    const res = await get("https://api.github.com/repos/androidand/specsync/releases?per_page=4");
+    if (res.status !== 200) throw new Error(`HTTP ${res.status}`);
+    releases = JSON.parse(res.body).filter((r) => !r.draft);
+  } catch (e) {
+    console.warn(`  releases: ${e.message} — version and changelog left as committed`);
+  }
+
+  if (releases && releases.length > 0) {
+    html = replaceRegion(html, "VERSION", releases[0].tag_name);
+    console.log(`  version: ${releases[0].tag_name} (released)`);
+
+    const changelog = releases.slice(0, 3).map((r) => {
+      const date = new Date(r.published_at).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+      const body = r.body ? renderReleaseBody(r.body, "https://github.com/androidand/specsync") : "";
+      return `        <div class="release">
+          <div class="release-header">
+            <a class="release-tag" href="${r.html_url}" target="_blank" rel="noopener">${escapeHtml(r.tag_name)}</a>
+            <span class="release-date">${date}</span>
+          </div>
+          ${body ? `<div class="release-body">${body}</div>` : ""}
+        </div>`;
+    }).join("\n");
+    html = replaceRegion(html, "CHANGELOG", changelog);
+    console.log(`  changelog: ${Math.min(releases.length, 3)} releases`);
   }
 
   // 2. Features from features.json. status:"soon" cards are clearly badged as
@@ -125,33 +140,6 @@ async function build() {
   html = replaceRegion(html, "FEATURES", featuresHtml);
   const soonCount = features.filter((f) => f.status === "soon").length;
   console.log(`  features: ${features.length} (${soonCount} marked soon)`);
-
-  // 3. Changelog from GitHub releases (best-effort).
-  let changelog;
-  try {
-    const res = await get("https://api.github.com/repos/androidand/specsync/releases?per_page=4");
-    if (res.status === 200) {
-      const releases = JSON.parse(res.body).filter((r) => !r.draft).slice(0, 3);
-      changelog = releases.map((r) => {
-        const date = new Date(r.published_at).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
-        const body = r.body ? renderReleaseBody(r.body, "https://github.com/androidand/specsync") : "";
-        return `        <div class="release">
-          <div class="release-header">
-            <a class="release-tag" href="${r.html_url}" target="_blank" rel="noopener">${escapeHtml(r.tag_name)}</a>
-            <span class="release-date">${date}</span>
-          </div>
-          ${body ? `<div class="release-body">${body}</div>` : ""}
-        </div>`;
-      }).join("\n");
-      console.log(`  changelog: ${releases.length} releases`);
-    } else {
-      throw new Error(`HTTP ${res.status}`);
-    }
-  } catch (e) {
-    changelog = `        <p class="changelog-empty">See <a href="https://github.com/androidand/specsync/releases">GitHub releases</a> for the full changelog.</p>`;
-    console.warn(`  changelog: ${e.message} — using fallback`);
-  }
-  html = replaceRegion(html, "CHANGELOG", changelog);
 
   fs.writeFileSync("index.html", html);
   console.log("  site: built → index.html");
