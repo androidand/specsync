@@ -13,6 +13,16 @@ node build.sh
 
 The build is idempotent and updates `index.html` in place.
 
+## Marking a feature card "soon"
+
+A `features.json` entry for work that hasn't shipped yet should carry both
+`"status": "soon"` and `"issue": <number>` — the issue number the feature
+ships under. `build.sh` cross-checks that number against every `#N` reference
+in `CHANGELOG.md` on each build and clears the "soon" badge automatically the
+moment the feature actually ships, so nobody has to remember to hand-edit
+`features.json` in sync with the changelog. Without an `issue` field, a
+`"soon"` badge never clears itself and needs a manual edit once shipped.
+
 ## Cloudflare Pages setup
 
 The `Deploy site` GitHub Actions workflow deploys every push to `main` after

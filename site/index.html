@@ -467,7 +467,7 @@ a:focus-visible {
   <a class="nav-logo" href="/">
     specsync
     <span class="nav-badge"><!-- VERSION:start -->
-v0.5.1
+v0.6.0
 <!-- VERSION:end --></span>
   </a>
   <div class="nav-links">
@@ -654,14 +654,14 @@ specsync link feature-api feature-ui
         <h4>Traceability</h4>
         <p><code>specsync trace</code> reconstructs how a change, its issue, PRs, and commits connect — every link backed by evidence (markers, branches, commit footers), never guessed.</p>
       </div>
-      <div class="feature is-soon">
+      <div class="feature">
         <span class="feature-icon">📋</span>
-        <h4>Projects boards <span class="soon">soon</span></h4>
+        <h4>Projects boards</h4>
         <p>Point <code>-project owner/number</code> at a GitHub Projects board: synced issues land on the board, Status follows the change lifecycle, and human curation is respected.</p>
       </div>
-      <div class="feature is-soon">
+      <div class="feature">
         <span class="feature-icon">📜</span>
-        <h4>Spec-driven changelog <span class="soon">soon</span></h4>
+        <h4>Spec-driven changelog</h4>
         <p><code>specsync changelog</code> writes a Keep a Changelog section from your shipped changes — one entry per change, release notes authored at planning time, never a raw commit dump.</p>
       </div>
 <!-- FEATURES:end -->
@@ -676,37 +676,13 @@ specsync link feature-api feature-ui
   <!-- CHANGELOG:start -->
         <div class="release">
           <div class="release-header">
-            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.5.1" target="_blank" rel="noopener">v0.5.1</a>
-            <span class="release-date">Jul 13, 2026</span>
+            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.6.0" target="_blank" rel="noopener">v0.6.0</a>
+            <span class="release-date">Jul 14, 2026</span>
           </div>
-          <div class="release-body"><h5>Fixes</h5><ul><li>complete lifecycle sync and harden npm install <a class="commit-sha" href="https://github.com/androidand/specsync/commit/2990406baef500784da1e1c093807eecfcb35b3a" target="_blank" rel="noopener">2990406</a></li></ul></div>
-        </div>
-        <div class="release">
-          <div class="release-header">
-            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.5.0" target="_blank" rel="noopener">v0.5.0</a>
-            <span class="release-date">Jul 13, 2026</span>
-          </div>
-          <div class="release-body"><h5>Features</h5><ul><li>derive a "complete" stage from task completion + optional auto-close <a class="commit-sha" href="https://github.com/androidand/specsync/commit/ee7664b94567d7e292b99cb399f4c45be34006c4" target="_blank" rel="noopener">ee7664b</a></li></ul></div>
-        </div>
-        <div class="release">
-          <div class="release-header">
-            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.4.1" target="_blank" rel="noopener">v0.4.1</a>
-            <span class="release-date">Jul 6, 2026</span>
-          </div>
-          <div class="release-body"><h5>Features</h5><ul><li>version subcommand and -version/--version flags <a class="commit-sha" href="https://github.com/androidand/specsync/commit/12fbda70bfe45fe24deffcea51225624a26d8a64" target="_blank" rel="noopener">12fbda7</a></li></ul>
-<h5>Other</h5><ul><li>rebuild at v0.4.0 <a class="commit-sha" href="https://github.com/androidand/specsync/commit/1e05a1c164be705c23ed315342aa29fd48448487" target="_blank" rel="noopener">1e05a1c</a></li>
-<li>ignore .skein/ and logs/ runtime state; track changes/.gitignore <a class="commit-sha" href="https://github.com/androidand/specsync/commit/ca5ae79aa12a475ce2b548c515be46482fc41e58" target="_blank" rel="noopener">ca5ae79</a></li>
-<li>add gh issue list and openspec archive to skill workflow <a class="commit-sha" href="https://github.com/androidand/specsync/commit/d4327e9db0a17d296eda872a6234cee506abb1e8" target="_blank" rel="noopener">d4327e9</a></li>
-<li>specsync Go library (pkg/specsync) — GH #25 <a class="commit-sha" href="https://github.com/androidand/specsync/commit/7272da8809384af4583dc7c608ae32a52584b237" target="_blank" rel="noopener">7272da8</a></li>
-<li>add OpenSpec CLI commands and prerequisites to skill <a class="commit-sha" href="https://github.com/androidand/specsync/commit/af119790c86f125357a5db61075604681c39e4f6" target="_blank" rel="noopener">af11979</a></li>
-<li>integrate OPSX into specsync skill <a class="commit-sha" href="https://github.com/androidand/specsync/commit/52882a564d087ab99da3bcd74ac58a359e6dbcca" target="_blank" rel="noopener">52882a5</a></li>
-<li>plan launch-readiness — README surface, npm metadata, audit record <a class="commit-sha" href="https://github.com/androidand/specsync/commit/233a54a81fbe67877d229311b9bedd83f191530e" target="_blank" rel="noopener">233a54a</a></li>
-<li>add keywords, author, bugs to package metadata <a class="commit-sha" href="https://github.com/androidand/specsync/commit/e0e54298050c10b62e6d2255f950151f57a9ea8d" target="_blank" rel="noopener">e0e5429</a></li>
-<li>document full CLI surface, requirements, badges <a class="commit-sha" href="https://github.com/androidand/specsync/commit/f9001bbc2cd2655cc9080e8ea85f4f03b2577403" target="_blank" rel="noopener">f9001bb</a></li>
-<li>check off launch-readiness section-1 tasks <a class="commit-sha" href="https://github.com/androidand/specsync/commit/4ee97ea28e6fcfac30581fd47cf488bee3e35235" target="_blank" rel="noopener">4ee97ea</a></li>
-<li>fix first-sync stumbling blocks found in stranger read-through <a class="commit-sha" href="https://github.com/androidand/specsync/commit/cb4c87afbb816334bfcf05713ef281592924c9d2" target="_blank" rel="noopener">cb4c87a</a></li>
-<li>rebuild at v0.4.0 <a class="commit-sha" href="https://github.com/androidand/specsync/commit/0157a851c31a6c308fbd8549e23e11793003b01f" target="_blank" rel="noopener">0157a85</a></li>
-<li>check off launch-readiness section-2 tasks <a class="commit-sha" href="https://github.com/androidand/specsync/commit/aa95e61222aad64fcf56de4a1d4749935f089c43" target="_blank" rel="noopener">aa95e61</a></li></ul></div>
+          <div class="release-body"><h5>Added</h5><ul><li>GitHub Projects (board) projection: opt-in <code>-project owner/number</code> (or <code>$SPECSYNC_PROJECT</code>) syncs an issue onto a GitHub Projects v2 board, maps the change's stage to the board's Status field, and assigns the acting viewer — unconfigured stays a complete no-op, zero board calls. (#37)</li>
+<li><code>specsync changelog</code>: a Keep a Changelog section built from shipped OpenSpec changes via the trace graph — one entry per change, release notes authored at planning time, never a raw commit dump.</li></ul>
+<h5>Fixed</h5><ul><li>Two-way sync no longer duplicates a GitHub issue after <code>pull</code> — the ref-cache key is now repo-stable, and a legacy pre-fix cache entry can no longer be mistaken for a different repo's issue and edited by accident. (#35)</li>
+<li>Board Status option names now resolve case-insensitively (a stock "To do / In Progress / Done" board no longer falls back to "Todo" for active work), and the promised stage→Status mapping is reachable via <code>-status-map</code> (or <code>$SPECSYNC_STATUS_MAP</code>).</li></ul></div>
         </div>
 <!-- CHANGELOG:end -->
 </section>

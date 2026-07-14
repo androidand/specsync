@@ -62,13 +62,11 @@
   {
     "icon": "📋",
     "title": "Projects boards",
-    "status": "soon",
     "body": "Point <code>-project owner/number</code> at a GitHub Projects board: synced issues land on the board, Status follows the change lifecycle, and human curation is respected."
   },
   {
     "icon": "📜",
     "title": "Spec-driven changelog",
-    "status": "soon",
     "body": "<code>specsync changelog</code> writes a Keep a Changelog section from your shipped changes — one entry per change, release notes authored at planning time, never a raw commit dump."
   }
 ]
