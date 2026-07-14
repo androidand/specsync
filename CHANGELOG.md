@@ -4,6 +4,20 @@ All notable changes to this project are documented here. One entry per shipped
 OpenSpec change — see the linked issues for the full spec and discussion.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.7.0] - 2026-07-14
+
+### Added
+
+- resolve refs live at release time, wire into release CI (d0578292)
+- render changelog from CHANGELOG.md, not the GitHub API (e2c18f8d)
+
+### Fixed
+
+- never let a failed build degrade committed content (9035465c)
+- stop reading bare #N in commit prose as issue evidence (aeee62a9)
+
+<!-- 1 internal commit(s) omitted (chore/docs/ci/...) -->
+
 ## [0.6.0] - 2026-07-14
 
 ### Added
