@@ -4,7 +4,7 @@ Quick reference for agents (Skein, Claude Code) working with OpenSpec changes.
 
 ## TL;DR
 
-1. **Before assigning work**: `specsync changes --stage backlog --output json` → sort by priority
+1. **Before assigning work**: `specsync changes --stage backlog --json` → sort by priority
 2. **When starting**: `specsync set-stage <slug> active`
 3. **When blocked**: `specsync set-stage <slug> blocked` (add reason in tasks)
 4. **When done**: `specsync set-stage <slug> complete`
@@ -14,7 +14,7 @@ Quick reference for agents (Skein, Claude Code) working with OpenSpec changes.
 
 ```bash
 # List work by priority
-specsync changes --stage backlog --output json | jq 'sort_by(.priority // 0) | reverse'
+specsync changes --stage backlog --json | jq 'sort_by(.priority // 0) | reverse'
 
 # Set stage (backlog, active, blocked, in-review, complete, archived)
 specsync set-stage my-change active
@@ -68,7 +68,7 @@ This is correct behavior—respect it.
 
 ```bash
 # 1. Find next task
-specsync changes --stage backlog --output json | jq '.[0]'
+specsync changes --stage backlog --json | jq '.[0]'
 
 # 2. Assign and start
 specsync set-stage my-change active
@@ -150,4 +150,4 @@ specsync set-stage my-change complete
 - `cmd/specsync/main.go` — CLI source
 - `board.go` — Three-way merge logic
 
-**Start here**: `specsync changes --output json` to see all work.
+**Start here**: `specsync changes --json` to see all work.

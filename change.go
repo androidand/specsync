@@ -21,7 +21,8 @@ const (
 )
 
 // Stage is the workflow placement of a change. It is distinct from task progress.
-// Workflow stage can be explicitly set via .specsync.yaml or derived from tasks/location.
+// Workflow stage can be explicitly set via .specsync/metadata.json or derived
+// from tasks/location.
 type Stage string
 
 const (
@@ -65,7 +66,7 @@ func CanonicalStageOrder() []Stage {
 	}
 }
 
-// ChangeMetadata holds shared workflow metadata from .specsync.json.
+// ChangeMetadata holds shared workflow metadata from .specsync/metadata.json.
 type ChangeMetadata struct {
 	Version  int    `json:"version"`
 	Stage    *Stage `json:"stage,omitempty"`
@@ -78,7 +79,7 @@ type StageSource string
 const (
 	StageSourceDefault      StageSource = "default"       // no other source; assume active
 	StageSourceTasks        StageSource = "tasks"         // derived from task completion (all done → complete)
-	StageSourceMetadata     StageSource = "metadata"      // explicit .specsync.yaml stage field
+	StageSourceMetadata     StageSource = "metadata"      // explicit .specsync/metadata.json stage field
 	StageSourceLegacyStatus StageSource = "legacy-status" // read from .status file (backward compat)
 	StageSourceFolder       StageSource = "folder"        // archived folder location (final, immutable)
 )
@@ -356,7 +357,7 @@ func refreshState(c *Change) error {
 	}
 
 	// Step 3: Try explicit metadata from .specsync/metadata.json
-	metadata, err := loadChangeMetadata(c.Dir)
+	metadata, err := LoadChangeMetadata(c.Dir)
 	if err != nil {
 		return err // malformed metadata blocks loading
 	}
@@ -416,8 +417,9 @@ func deriveTaskProgress(tasksMarkdown string) TaskProgress {
 	return TaskProgressInProgress
 }
 
-// loadChangeMetadata loads and validates .specsync/metadata.json, returning nil if absent.
-func loadChangeMetadata(dir string) (*ChangeMetadata, error) {
+// LoadChangeMetadata loads and validates a change folder's
+// .specsync/metadata.json, returning nil if the file is absent.
+func LoadChangeMetadata(dir string) (*ChangeMetadata, error) {
 	path := filepath.Join(dir, ".specsync", "metadata.json")
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -438,6 +440,46 @@ func loadChangeMetadata(dir string) (*ChangeMetadata, error) {
 	return &m, nil
 }
 
+// SaveChangeMetadata atomically writes a change folder's
+// .specsync/metadata.json. Metadata that carries neither a stage nor a
+// priority means "no manual overrides", so the file is removed instead of
+// written — LoadChangeMetadata then reports nil and stage derivation falls
+// back to tasks/legacy/default. This is the single write path for workflow
+// metadata; the CLI's set-stage and set-priority both go through it so
+// unsetting one field can never drop the other.
+func SaveChangeMetadata(dir string, m ChangeMetadata) error {
+	if err := normalizeMetadata(&m); err != nil {
+		return err
+	}
+
+	metaDir := filepath.Join(dir, ".specsync")
+	path := filepath.Join(metaDir, "metadata.json")
+
+	if m.Stage == nil && m.Priority == nil {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("remove %s: %w", path, err)
+		}
+		return nil
+	}
+
+	if err := os.MkdirAll(metaDir, 0o755); err != nil {
+		return fmt.Errorf("create %s: %w", metaDir, err)
+	}
+	data, err := json.MarshalIndent(m, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal metadata: %w", err)
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		return fmt.Errorf("write %s: %w", tmp, err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		os.Remove(tmp) // best-effort cleanup
+		return fmt.Errorf("rename metadata file: %w", err)
+	}
+	return nil
+}
+
 // normalizeMetadata validates metadata version and field values.
 func normalizeMetadata(m *ChangeMetadata) error {
 	if m.Version == 0 {
@@ -445,7 +487,7 @@ func normalizeMetadata(m *ChangeMetadata) error {
 	}
 
 	if m.Version != 1 {
-		return fmt.Errorf("unsupported .specsync.yaml version %d", m.Version)
+		return fmt.Errorf("unsupported .specsync/metadata.json version %d", m.Version)
 	}
 
 	if m.Stage != nil {
@@ -480,13 +522,14 @@ func readLegacyStatus(dir string) (Stage, bool) {
 	return stage, true
 }
 
-// warnStageMismatch emits a stderr warning when .specsync.yaml and .status disagree.
-func warnStageMismatch(slug string, yamlStage, statusStage Stage) {
+// warnStageMismatch emits a stderr warning when .specsync/metadata.json and
+// legacy .status disagree.
+func warnStageMismatch(slug string, metaStage, statusStage Stage) {
 	fmt.Fprintf(os.Stderr,
-		"warning: %s defines stage in both .specsync.yaml and legacy .status;\n"+
-			"  using .specsync.yaml (%q)\n"+
+		"warning: %s defines stage in both .specsync/metadata.json and legacy .status;\n"+
+			"  using .specsync/metadata.json (%q)\n"+
 			"  run `specsync set-stage %s auto` to migrate\n",
-		slug, yamlStage, slug,
+		slug, metaStage, slug,
 	)
 }
 

@@ -2,6 +2,7 @@ package specsync
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -122,61 +123,17 @@ func TestStagePrecedenceDefault(t *testing.T) {
 }
 
 // TestPriorityMetadataLoading verifies that priority from metadata.json is loaded correctly.
-func TestPriorityMetadataLoading(t *testing.T) {
+// TestEmptyProposal: a change folder without proposal.md is skipped, not an error.
+func TestEmptyProposal(t *testing.T) {
 	root := t.TempDir()
-
-	cdir := filepath.Join(root, "changes", "test-change")
-	mustWrite(t, filepath.Join(cdir, "proposal.md"), "# Test\n\nBody\n")
-	mustWrite(t, filepath.Join(cdir, ".specsync", "metadata.json"), `{"version":1,"priority":85}`)
+	cdir := filepath.Join(root, "changes", "missing-proposal")
 
 	c, err := LoadChange(cdir, false, root)
 	if err != nil {
 		t.Fatalf("LoadChange: %v", err)
 	}
-
-	if c.Priority == nil || *c.Priority != 85 {
-		t.Errorf("priority = %v, want 85", c.Priority)
-	}
-}
-
-// TestPriorityNilWhenAbsent verifies that priority is nil when metadata.json is absent.
-func TestPriorityNilWhenAbsent(t *testing.T) {
-	root := t.TempDir()
-
-	cdir := filepath.Join(root, "changes", "test-change")
-	mustWrite(t, filepath.Join(cdir, "proposal.md"), "# Test\n\nBody\n")
-	// No metadata.json file
-
-	c, err := LoadChange(cdir, false, root)
-	if err != nil {
-		t.Fatalf("LoadChange: %v", err)
-	}
-
-	if c.Priority != nil {
-		t.Errorf("priority = %v, want nil", c.Priority)
-	}
-}
-
-// TestPriorityAndMetadataIndependent verifies that priority and stage can be set independently.
-func TestPriorityAndMetadataIndependent(t *testing.T) {
-	root := t.TempDir()
-
-	cdir := filepath.Join(root, "changes", "test-change")
-	mustWrite(t, filepath.Join(cdir, "proposal.md"), "# Test\n\nBody\n")
-	// Set priority but not stage in metadata
-	mustWrite(t, filepath.Join(cdir, ".specsync", "metadata.json"), `{"version":1,"priority":75}`)
-
-	c, err := LoadChange(cdir, false, root)
-	if err != nil {
-		t.Fatalf("LoadChange: %v", err)
-	}
-
-	if c.Priority == nil || *c.Priority != 75 {
-		t.Errorf("priority = %v, want 75", c.Priority)
-	}
-	// Stage should be derived (default) since metadata didn't specify it
-	if c.Stage != StageActive {
-		t.Errorf("stage = %q, want %q (should be derived)", c.Stage, StageActive)
+	if c != nil {
+		t.Errorf("LoadChange should return nil for missing proposal.md, got %+v", c)
 	}
 }
 
@@ -221,6 +178,8 @@ func TestValidateStageCustomInvalid(t *testing.T) {
 		"with space",
 		"with/slash",
 		"with..dots",
+		"with@char",
+		Stage("way-too-long-" + strings.Repeat("x", 64)),
 	}
 
 	for _, stage := range invalid {

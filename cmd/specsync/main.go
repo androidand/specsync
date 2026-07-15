@@ -64,7 +64,6 @@ func isVersionArg(arg string) bool {
 func runSync(args []string) {
 	fs := flag.NewFlagSet("sync", flag.ExitOnError)
 	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
-	specFormat := fs.String("spec", "openspec", "spec format: openspec (default) or beads (future)")
 	slug := fs.String("slug", "", "sync only this change (default: all changes)")
 	repo := fs.String("repo", "", "target repo as owner/name (default: auto-detect from git remote)")
 	providerName := fs.String("provider", "github", "work provider: github (default, human-facing) or beads (agent-facing)")
@@ -75,7 +74,6 @@ func runSync(args []string) {
 	assignee := fs.String("assignee", "", "board assignee login (default: the acting viewer, \"me\")")
 	statusMap := fs.String("status-map", "", "stage→Status overrides as stage=Name pairs, e.g. \"active=In Progress,archived=Done\" (default: $SPECSYNC_STATUS_MAP)")
 	_ = fs.Parse(args)
-	_ = specFormat // for future use with SpecSourceFactory
 
 	abs, err := filepath.Abs(*openspec)
 	if err != nil {
@@ -145,7 +143,6 @@ func runSync(args []string) {
 func runPull(args []string) {
 	fs := flag.NewFlagSet("pull", flag.ExitOnError)
 	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
-	specFormat := fs.String("spec", "openspec", "spec format: openspec (default) or beads (future)")
 	issue := fs.String("issue", "", "issue number to pull into a local change (required)")
 	slug := fs.String("slug", "", "change slug (default: derived from the issue title)")
 	repo := fs.String("repo", "", "source repo as owner/name (default: auto-detect from git remote)")
@@ -154,7 +151,6 @@ func runPull(args []string) {
 	assignee := fs.String("assignee", "", "board assignee login (default: the acting viewer, \"me\")")
 	statusMap := fs.String("status-map", "", "stage→Status overrides as stage=Name pairs, e.g. \"active=In Progress,archived=Done\" (default: $SPECSYNC_STATUS_MAP)")
 	_ = fs.Parse(args)
-	_ = specFormat // for future use with SpecSourceFactory
 
 	if strings.TrimSpace(*issue) == "" {
 		fail(fmt.Errorf("pull: -issue is required"))
@@ -515,47 +511,15 @@ func shellJoin(args []string) string {
 	return b.String()
 }
 
-// atomicWriteMetadata writes metadata to .specsync/metadata.json atomically.
-func atomicWriteMetadata(changeDir string, metadata map[string]interface{}) error {
-	metadataDir := filepath.Join(changeDir, ".specsync")
-	if err := os.MkdirAll(metadataDir, 0o755); err != nil {
-		return fmt.Errorf("create .specsync directory: %w", err)
-	}
-
-	metadataPath := filepath.Join(metadataDir, "metadata.json")
-	tempPath := metadataPath + ".tmp"
-
-	// Marshal to JSON
-	data, err := json.MarshalIndent(metadata, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal metadata: %w", err)
-	}
-
-	// Write to temp file
-	if err := os.WriteFile(tempPath, data, 0o644); err != nil {
-		return fmt.Errorf("write temp file: %w", err)
-	}
-
-	// Atomic rename
-	if err := os.Rename(tempPath, metadataPath); err != nil {
-		os.Remove(tempPath) // best-effort cleanup
-		return fmt.Errorf("rename metadata file: %w", err)
-	}
-
-	return nil
-}
-
 // runChanges lists OpenSpec changes with state and priority.
 func runChanges(args []string) {
 	fs := flag.NewFlagSet("changes", flag.ExitOnError)
 	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
-	specFormat := fs.String("spec", "openspec", "spec format: openspec (default) or beads (future)")
 	stages := fs.String("stage", "", "filter by stages (comma-separated, e.g. backlog,blocked)")
 	asJSON := fs.Bool("json", false, "output as JSON")
 	if err := fs.Parse(args); err != nil {
 		fail(err)
 	}
-	_ = specFormat // for future use with SpecSourceFactory
 
 	changes, err := specsync.LoadChanges(*openspec)
 	if err != nil {
@@ -625,65 +589,65 @@ func runChanges(args []string) {
 	}
 }
 
-// runSetStage sets a change's workflow stage.
-func runSetStage(args []string) {
-	fs := flag.NewFlagSet("set-stage", flag.ExitOnError)
-	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
-	specFormat := fs.String("spec", "openspec", "spec format: openspec (default) or beads (future)")
-	if err := fs.Parse(args); err != nil {
-		fail(err)
+// mutableChange validates the slug, loads the change, and rejects archived
+// changes — the shared guard path for every metadata-mutating subcommand, so
+// the two commands can never drift on validation again.
+func mutableChange(openspecDir, slug string) *specsync.Change {
+	if strings.ContainsAny(slug, `/\`) || strings.Contains(slug, "..") {
+		fail(fmt.Errorf("invalid slug %q: must be a plain change directory name", slug))
 	}
-	_ = specFormat // for future use with SpecSourceFactory
-
-	if fs.NArg() < 2 {
-		fail(fmt.Errorf("usage: specsync set-stage <slug> <stage> [reason]"))
-	}
-
-	slug := fs.Arg(0)
-	stage := fs.Arg(1)
-
-	// Validate slug
-	if strings.ContainsAny(slug, "/..") {
-		fail(fmt.Errorf("invalid slug: %s", slug))
-	}
-
-	// Load the change
-	change, err := specsync.LoadChangeBySlug(*openspec, slug)
-	if err != nil || change == nil {
+	change, err := specsync.LoadChangeBySlug(openspecDir, slug)
+	if err != nil {
 		fail(fmt.Errorf("change not found: %s", slug))
 	}
-
-	// Reject if archived
 	if change.Archived {
 		fail(fmt.Errorf("cannot mutate archived change %s", slug))
 	}
+	return change
+}
 
-	// Handle "auto" to unset stage
+// changeMetadata reads the change's current metadata, returning an empty
+// (version-1) value when no file exists, so callers can read-modify-write.
+func changeMetadata(change *specsync.Change) specsync.ChangeMetadata {
+	meta, err := specsync.LoadChangeMetadata(change.Dir)
+	if err != nil {
+		fail(err)
+	}
+	if meta == nil {
+		return specsync.ChangeMetadata{Version: 1}
+	}
+	return *meta
+}
+
+// runSetStage sets or unsets a change's explicit workflow stage. Only the
+// stage field is touched: an explicit priority survives set-stage auto.
+func runSetStage(args []string) {
+	fs := flag.NewFlagSet("set-stage", flag.ExitOnError)
+	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	if err := fs.Parse(args); err != nil {
+		fail(err)
+	}
+	if fs.NArg() < 2 {
+		fail(fmt.Errorf("usage: specsync set-stage <slug> <stage|auto>"))
+	}
+	slug, stage := fs.Arg(0), fs.Arg(1)
+
+	change := mutableChange(*openspec, slug)
+	meta := changeMetadata(change)
+
 	if stage == "auto" {
-		stateFile := filepath.Join(change.Dir, ".specsync", "metadata.json")
-		os.Remove(stateFile) // silently ignore if not present
-		return
+		meta.Stage = nil // back to derived state; explicit priority survives
+	} else {
+		s := specsync.Stage(stage)
+		if err := specsync.ValidateStage(s); err != nil {
+			fail(err)
+		}
+		meta.Stage = &s
 	}
 
-	// Validate stage
-	if err := specsync.ValidateStage(specsync.Stage(stage)); err != nil {
+	if err := specsync.SaveChangeMetadata(change.Dir, meta); err != nil {
 		fail(err)
 	}
-
-	// Write to .specsync/metadata.json
-	metadata := map[string]interface{}{
-		"version": 1,
-		"stage":   stage,
-	}
-	// Preserve priority if it exists
-	if change.Priority != nil {
-		metadata["priority"] = *change.Priority
-	}
-
-	if err := atomicWriteMetadata(change.Dir, metadata); err != nil {
-		fail(err)
-	}
-
 	fmt.Printf("set-stage: %s → %s\n", slug, stage)
 }
 
@@ -691,58 +655,33 @@ func runSetStage(args []string) {
 func runSetPriority(args []string) {
 	fs := flag.NewFlagSet("set-priority", flag.ExitOnError)
 	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
-	specFormat := fs.String("spec", "openspec", "spec format: openspec (default) or beads (future)")
 	if err := fs.Parse(args); err != nil {
 		fail(err)
 	}
-	_ = specFormat // for future use with SpecSourceFactory
-
 	if fs.NArg() < 2 {
 		fail(fmt.Errorf("usage: specsync set-priority <slug> <1-100|unset>"))
 	}
+	slug, priorityArg := fs.Arg(0), fs.Arg(1)
 
-	slug := fs.Arg(0)
-	priorityArg := fs.Arg(1)
+	change := mutableChange(*openspec, slug)
+	meta := changeMetadata(change)
 
-	// Validate slug
-	if strings.ContainsAny(slug, "/..") {
-		fail(fmt.Errorf("invalid slug: %s", slug))
-	}
-
-	// Load the change
-	change, err := specsync.LoadChangeBySlug(*openspec, slug)
-	if err != nil || change == nil {
-		fail(fmt.Errorf("change not found: %s", slug))
-	}
-
-	// Handle "unset"
 	if priorityArg == "unset" {
-		stateFile := filepath.Join(change.Dir, ".specsync", "metadata.json")
-		os.Remove(stateFile) // silently ignore if not present
-		return
+		meta.Priority = nil // an explicit stage survives
+	} else {
+		priority, err := strconv.Atoi(priorityArg)
+		if err != nil || priority < 1 || priority > 100 {
+			fail(fmt.Errorf("priority must be between 1 and 100; got %s", priorityArg))
+		}
+		meta.Priority = &priority
 	}
 
-	// Parse and validate priority
-	priority, err := strconv.Atoi(priorityArg)
-	if err != nil || priority < 1 || priority > 100 {
-		fail(fmt.Errorf("priority must be between 1 and 100; got %s", priorityArg))
-	}
-
-	// Write to .specsync/metadata.json
-	metadata := map[string]interface{}{
-		"version":  1,
-		"priority": priority,
-	}
-	// Preserve stage if it's explicit (not default/active)
-	if change.StageSource != specsync.StageSourceDefault {
-		metadata["stage"] = string(change.Stage)
-	}
-
-	if err := atomicWriteMetadata(change.Dir, metadata); err != nil {
+	// Only fields already explicit in metadata.json are preserved; a stage
+	// derived from tasks or legacy .status is never frozen into an override.
+	if err := specsync.SaveChangeMetadata(change.Dir, meta); err != nil {
 		fail(err)
 	}
-
-	fmt.Printf("set-priority: %s → %d\n", slug, priority)
+	fmt.Printf("set-priority: %s → %s\n", slug, priorityArg)
 }
 
 func fail(err error) {
