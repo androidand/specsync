@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -510,6 +511,36 @@ func shellJoin(args []string) string {
 	return b.String()
 }
 
+// atomicWriteMetadata writes metadata to .specsync/metadata.json atomically.
+func atomicWriteMetadata(changeDir string, metadata map[string]interface{}) error {
+	metadataDir := filepath.Join(changeDir, ".specsync")
+	if err := os.MkdirAll(metadataDir, 0o755); err != nil {
+		return fmt.Errorf("create .specsync directory: %w", err)
+	}
+
+	metadataPath := filepath.Join(metadataDir, "metadata.json")
+	tempPath := metadataPath + ".tmp"
+
+	// Marshal to JSON
+	data, err := json.MarshalIndent(metadata, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal metadata: %w", err)
+	}
+
+	// Write to temp file
+	if err := os.WriteFile(tempPath, data, 0o644); err != nil {
+		return fmt.Errorf("write temp file: %w", err)
+	}
+
+	// Atomic rename
+	if err := os.Rename(tempPath, metadataPath); err != nil {
+		os.Remove(tempPath) // best-effort cleanup
+		return fmt.Errorf("rename metadata file: %w", err)
+	}
+
+	return nil
+}
+
 // runChanges lists OpenSpec changes with state and priority.
 func runChanges(args []string) {
 	fs := flag.NewFlagSet("changes", flag.ExitOnError)
@@ -543,21 +574,37 @@ func runChanges(args []string) {
 
 	// Output
 	if *asJSON {
-		// Simple JSON output for now
-		fmt.Println("[")
-		for i, c := range filtered {
-			fmt.Printf(`  {"slug":"%s","stage":"%s","progress":"%s"`, c.Slug, c.Stage, c.Progress)
-			if c.Priority != nil {
-				fmt.Printf(`,"priority":%d`, *c.Priority)
-			}
-			fmt.Printf("}")
-			if i < len(filtered)-1 {
-				fmt.Println(",")
-			} else {
-				fmt.Println()
-			}
+		// Marshal as proper JSON
+		type changeJSON struct {
+			Slug           string `json:"slug"`
+			Title          string `json:"title"`
+			Stage          string `json:"stage"`
+			CanonicalStage bool   `json:"canonicalStage"`
+			StageSource    string `json:"stageSource"`
+			Progress       string `json:"taskProgress"`
+			Priority       *int   `json:"priority"`
+			Archived       bool   `json:"archived"`
 		}
-		fmt.Println("]")
+
+		var results []changeJSON
+		for _, c := range filtered {
+			results = append(results, changeJSON{
+				Slug:           c.Slug,
+				Title:          c.Title,
+				Stage:          string(c.Stage),
+				CanonicalStage: specsync.IsCanonicalStage(c.Stage),
+				StageSource:    string(c.StageSource),
+				Progress:       string(c.Progress),
+				Priority:       c.Priority,
+				Archived:       c.Archived,
+			})
+		}
+
+		data, err := json.MarshalIndent(results, "", "  ")
+		if err != nil {
+			fail(fmt.Errorf("marshal JSON: %w", err))
+		}
+		fmt.Println(string(data))
 	} else {
 		// Table output
 		fmt.Println("SLUG                          STAGE          PROGRESS        PRIORITY")
@@ -625,7 +672,10 @@ func runSetStage(args []string) {
 		metadata["priority"] = *change.Priority
 	}
 
-	// TODO: atomic write
+	if err := atomicWriteMetadata(change.Dir, metadata); err != nil {
+		fail(err)
+	}
+
 	fmt.Printf("set-stage: %s → %s\n", slug, stage)
 }
 
@@ -678,7 +728,10 @@ func runSetPriority(args []string) {
 		metadata["stage"] = string(change.Stage)
 	}
 
-	// TODO: atomic write
+	if err := atomicWriteMetadata(change.Dir, metadata); err != nil {
+		fail(err)
+	}
+
 	fmt.Printf("set-priority: %s → %d\n", slug, priority)
 }
 
