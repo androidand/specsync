@@ -37,6 +37,20 @@ function replaceRegion(html, name, inner) {
 }
 function escapeRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
 
+function featureIconSvg(name) {
+  const base = 'width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"';
+  const icons = {
+    flow: `<svg ${base}><path d="M4 6h6"/><path d="M4 18h6"/><path d="M10 6l3 6"/><path d="M10 18l3-6"/><path d="M13 12h7"/><path d="M18 9l3 3-3 3"/><circle cx="4" cy="6" r="1.5"/><circle cx="4" cy="18" r="1.5"/></svg>`,
+    scan: `<svg ${base}><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5.5"/><circle cx="12" cy="12" r="1.2"/><path d="M12 12L19.5 8"/></svg>`,
+    idempotent: `<svg ${base}><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M6 10a6 6 0 0 1 10-4"/><path d="M16 6h4v4"/><path d="M18 14a6 6 0 0 1-10 4"/><path d="M8 18H4v-4"/></svg>`,
+    state: `<svg ${base}><path d="M5 7h5"/><path d="M5 12h9"/><path d="M5 17h13"/><circle cx="4" cy="7" r="1.2"/><circle cx="4" cy="12" r="1.2"/><circle cx="4" cy="17" r="1.2"/><path d="M19 17l1.8 1.8L23 16.6"/></svg>`,
+    board: `<svg ${base}><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path d="M15 4v16"/><path d="M5 8h2"/><path d="M11 11h2"/><path d="M17 7h2"/></svg>`,
+    followup: `<svg ${base}><path d="M9 3h6"/><path d="M9 1v4"/><path d="M15 1v4"/><rect x="4" y="3" width="16" height="20" rx="2"/><path d="M8 10h8"/><path d="M8 14h8"/><path d="M8 18h5"/><path d="M17 18l2 2 3-3"/></svg>`,
+    changelog: `<svg ${base}><path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/><path d="M9 12h6"/><path d="M9 16h6"/><path d="M9 8h2"/></svg>`,
+  };
+  return icons[name] || icons.flow;
+}
+
 // inlineMd renders the handful of inline markers a changelog bullet uses:
 // **bold** and `code`. Runs after escapeHtml, so raw < > & are already safe.
 function inlineMd(s) {
@@ -304,8 +318,9 @@ async function build() {
     const soon = f.status === "soon" && !(f.issue && shipped.has(String(f.issue)));
     const badge = soon ? ` <span class="soon">soon</span>` : "";
     const cls = soon ? "feature is-soon" : "feature";
+      const icon = `<span class="feature-icon" aria-hidden="true">${featureIconSvg(f.icon)}</span>`;
     return `        <div class="${cls}">
-          <h4>${escapeHtml(f.title)}${badge}</h4>
+        <h4>${icon}<span class="feature-title">${escapeHtml(f.title)}</span>${badge}</h4>
           <p>${f.body}</p>
         </div>`;
   };

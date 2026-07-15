@@ -1,97 +1,50 @@
 [
   {
     "group": "plan",
-    "title": "Auto-detect repo",
-    "body": "Reads the git remote — no config required. Override with <code>-repo owner/name</code> for any other repo."
+    "icon": "flow",
+    "title": "Spec-first or issue-first",
+    "body": "Start from local <code>proposal.md</code>/<code>tasks.md</code> or pull an existing issue with <code>specsync pull</code>."
   },
   {
     "group": "plan",
+    "icon": "scan",
     "title": "Planning scan",
     "body": "<code>specsync scan</code> shows what already exists for an area — in-flight changes, loose issues, recent commits — before you plan."
   },
   {
-    "group": "plan",
-    "title": "Issue-first pull",
-    "body": "Pull any existing issue into a local spec. The ref is cached so subsequent pushes update — never duplicate."
-  },
-  {
-    "group": "plan",
-    "title": "Agent-friendly",
-    "body": "A bundled skill installs for Claude Code, Codex, OpenCode, Copilot, or any agentskills.io-compatible <code>.agents</code> directory."
-  },
-  {
     "group": "collaborate",
+    "icon": "idempotent",
     "title": "Idempotent",
-    "body": "Re-run freely. An identity marker in the issue body prevents duplicates even if the ref cache is lost."
+    "body": "Run <code>specsync -slug my-change</code> as often as needed. If the issue already exists, specsync updates it (same identity marker) instead of creating a duplicate."
   },
   {
     "group": "collaborate",
-    "title": "Tracker-agnostic",
-    "body": "Not just GitHub. Project an OpenSpec change onto a <a href=\"https://github.com/steveyegge/beads\" target=\"_blank\" rel=\"noopener\">Beads</a> task graph with <code>-provider beads</code> — the <code>WorkProvider</code> interface keeps the tracker your choice."
+    "icon": "state",
+    "title": "Workflow state management",
+    "body": "Set stage explicitly with <code>specsync set-stage my-change [active|blocked|in-review|complete]</code> so progress is visible and committed in metadata."
   },
   {
     "group": "collaborate",
-    "title": "Cross-repo linking",
-    "body": "<code>specsync link</code> writes <code>links.md</code> and pushes a Related section to both issues automatically."
+    "icon": "priority",
+    "title": "Priority-driven dispatch",
+    "body": "Set priorities (1-100) with <code>specsync set-priority my-change 85</code>. Agents respect priority when deciding what to work on next — humans direct focus."
   },
   {
     "group": "collaborate",
-    "title": "Preview writes",
-    "body": "<code>sync</code>, <code>pull</code>, and <code>link</code> support <code>-dry-run</code>. Read-only inspection commands need no preview mode."
-  },
-  {
-    "group": "collaborate",
-    "title": "Two-way reconcile",
-    "body": "Checkboxes ticked in the GitHub issue merge back into your local <code>tasks.md</code> on the next sync — progress flows both ways, never lost in either direction."
-  },
-  {
-    "group": "collaborate",
-    "title": "Projects boards",
-    "body": "Point <code>-project owner/number</code> at a GitHub Projects board: synced issues land on the board, Status follows the change lifecycle, and human curation is respected."
+    "icon": "board",
+    "title": "Projects board sync",
+    "body": "Project and sync with <code>specsync -slug my-change -project my-org/6</code>. Add <code>-status-map \"active=In Progress,complete=Done\"</code> to align board columns with change stages."
   },
   {
     "group": "ship",
-    "title": "Auto-lifecycle",
-    "body": "<code>stage:active</code> while work remains; auto-flips to <code>stage:complete</code> when all tasks are checked. Optional <code>-close-completed</code> keeps the issue open/closed state aligned — completion closes it, new work reopens it."
-  },
-  {
-    "group": "ship",
-    "title": "Traceability",
-    "body": "<code>specsync trace</code> reconstructs how a change, its issue, PRs, and commits connect — every link backed by evidence (markers, branches, commit footers), never guessed."
-  },
-  {
-    "group": "ship",
+    "icon": "followup",
     "title": "Release follow-up",
-    "body": "<code>specsync release-plan</code> reconstructs what shipped, what's loose, and an advisory bump — using OpenSpec requirement deltas as a release signal no commit-only tool can see."
+    "body": "<code>specsync release-plan</code> highlights shipped changes, loose/unlinked work, archive candidates, and advisory release impact from spec-level deltas."
   },
   {
     "group": "ship",
+    "icon": "changelog",
     "title": "Spec-driven changelog",
     "body": "<code>specsync changelog</code> writes a Keep a Changelog section from your shipped changes — one entry per change, release notes authored at planning time, never a raw commit dump."
-  },
-  {
-    "group": "plan",
-    "title": "Priority-driven dispatch",
-    "body": "<code>skein focus</code> tells the agent orchestrator what matters most. specsync reads <code>.specsync/metadata.json</code> priority field; Skein's dispatcher picks work in priority order, not randomly."
-  },
-  {
-    "group": "collaborate",
-    "title": "Workflow state management",
-    "body": "Track change lifecycle: <code>backlog → active → in-review → complete</code>. Stages live in committed <code>.specsync/metadata.json</code> alongside priority. Agents update state via hooks — no manual commands needed."
-  },
-  {
-    "group": "collaborate",
-    "title": "Automatic board sync",
-    "body": "Priority and stage changes sync to GitHub Projects automatically. Three-way merge respects human board moves (won't clobber). Background task every 5 min, or immediate via file watcher."
-  },
-  {
-    "group": "collaborate",
-    "title": "Human-move detection",
-    "body": "Manually moved a card on the board? specsync detects it and skips the update. Human intent is preserved. Audit log shows what happened: <code>\"human moved the card; specsync won't clobber it\"</code>."
-  },
-  {
-    "group": "ship",
-    "title": "Block & unblock workflow",
-    "body": "<code>skein block feature-x \"waiting for design\"</code> marks it blocked; dispatcher skips it. <code>skein unblock</code> resumes. Clean separation: external blockers don't block other work."
   }
 ]
