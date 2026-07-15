@@ -64,6 +64,7 @@ func isVersionArg(arg string) bool {
 func runSync(args []string) {
 	fs := flag.NewFlagSet("sync", flag.ExitOnError)
 	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	specFormat := fs.String("spec", "openspec", "spec format: openspec (default) or beads (future)")
 	slug := fs.String("slug", "", "sync only this change (default: all changes)")
 	repo := fs.String("repo", "", "target repo as owner/name (default: auto-detect from git remote)")
 	providerName := fs.String("provider", "github", "work provider: github (default, human-facing) or beads (agent-facing)")
@@ -74,6 +75,7 @@ func runSync(args []string) {
 	assignee := fs.String("assignee", "", "board assignee login (default: the acting viewer, \"me\")")
 	statusMap := fs.String("status-map", "", "stage→Status overrides as stage=Name pairs, e.g. \"active=In Progress,archived=Done\" (default: $SPECSYNC_STATUS_MAP)")
 	_ = fs.Parse(args)
+	_ = specFormat // for future use with SpecSourceFactory
 
 	abs, err := filepath.Abs(*openspec)
 	if err != nil {
@@ -143,6 +145,7 @@ func runSync(args []string) {
 func runPull(args []string) {
 	fs := flag.NewFlagSet("pull", flag.ExitOnError)
 	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	specFormat := fs.String("spec", "openspec", "spec format: openspec (default) or beads (future)")
 	issue := fs.String("issue", "", "issue number to pull into a local change (required)")
 	slug := fs.String("slug", "", "change slug (default: derived from the issue title)")
 	repo := fs.String("repo", "", "source repo as owner/name (default: auto-detect from git remote)")
@@ -151,6 +154,7 @@ func runPull(args []string) {
 	assignee := fs.String("assignee", "", "board assignee login (default: the acting viewer, \"me\")")
 	statusMap := fs.String("status-map", "", "stage→Status overrides as stage=Name pairs, e.g. \"active=In Progress,archived=Done\" (default: $SPECSYNC_STATUS_MAP)")
 	_ = fs.Parse(args)
+	_ = specFormat // for future use with SpecSourceFactory
 
 	if strings.TrimSpace(*issue) == "" {
 		fail(fmt.Errorf("pull: -issue is required"))
@@ -545,11 +549,13 @@ func atomicWriteMetadata(changeDir string, metadata map[string]interface{}) erro
 func runChanges(args []string) {
 	fs := flag.NewFlagSet("changes", flag.ExitOnError)
 	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	specFormat := fs.String("spec", "openspec", "spec format: openspec (default) or beads (future)")
 	stages := fs.String("stage", "", "filter by stages (comma-separated, e.g. backlog,blocked)")
 	asJSON := fs.Bool("json", false, "output as JSON")
 	if err := fs.Parse(args); err != nil {
 		fail(err)
 	}
+	_ = specFormat // for future use with SpecSourceFactory
 
 	changes, err := specsync.LoadChanges(*openspec)
 	if err != nil {
@@ -623,9 +629,11 @@ func runChanges(args []string) {
 func runSetStage(args []string) {
 	fs := flag.NewFlagSet("set-stage", flag.ExitOnError)
 	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	specFormat := fs.String("spec", "openspec", "spec format: openspec (default) or beads (future)")
 	if err := fs.Parse(args); err != nil {
 		fail(err)
 	}
+	_ = specFormat // for future use with SpecSourceFactory
 
 	if fs.NArg() < 2 {
 		fail(fmt.Errorf("usage: specsync set-stage <slug> <stage> [reason]"))
@@ -683,9 +691,11 @@ func runSetStage(args []string) {
 func runSetPriority(args []string) {
 	fs := flag.NewFlagSet("set-priority", flag.ExitOnError)
 	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	specFormat := fs.String("spec", "openspec", "spec format: openspec (default) or beads (future)")
 	if err := fs.Parse(args); err != nil {
 		fail(err)
 	}
+	_ = specFormat // for future use with SpecSourceFactory
 
 	if fs.NArg() < 2 {
 		fail(fmt.Errorf("usage: specsync set-priority <slug> <1-100|unset>"))

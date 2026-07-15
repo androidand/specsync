@@ -8,7 +8,7 @@ import (
 
 // Options configures a sync run.
 type Options struct {
-	OpenSpecDir    string       // path to the openspec/ directory
+	OpenSpecDir    string       // path to the spec root (openspec/, beads/, etc.)
 	Provider       WorkProvider // target tracker
 	Slug           string       // if set, only this change is synced
 	DryRun         bool         // when true, never persist refs to the cache
@@ -36,7 +36,7 @@ type ItemResult struct {
 	Board           BoardPlan
 }
 
-// Sync projects every OpenSpec change into the provider, idempotently. It is
+// Sync projects every change into the provider, idempotently. It is
 // safe to run after any change moves through the funnel: existing projections
 // are updated, new ones created.
 func Sync(ctx context.Context, opts Options) (Result, error) {

@@ -4,32 +4,28 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
-	"specsync/internal/openspec"
+	"github.com/androidand/specsync"
 )
 
 func TestMigrateAutoPrioritize(t *testing.T) {
 	root := t.TempDir()
 
 	// Create test changes with different task counts.
-	changes := []openspec.Change{
+	changes := []specsync.Change{
 		{
-			Slug:    "feature-a",
-			Dir:     filepath.Join(root, "changes", "feature-a"),
-			Created: time.Date(2026, 7, 10, 0, 0, 0, 0, time.UTC),
+			Slug: "feature-a",
+			Dir:  filepath.Join(root, "changes", "feature-a"),
 			// Will have 5 tasks
 		},
 		{
-			Slug:    "feature-b",
-			Dir:     filepath.Join(root, "changes", "feature-b"),
-			Created: time.Date(2026, 7, 15, 0, 0, 0, 0, time.UTC),
+			Slug: "feature-b",
+			Dir:  filepath.Join(root, "changes", "feature-b"),
 			// Will have 10 tasks (higher = higher priority)
 		},
 		{
-			Slug:    "feature-c",
-			Dir:     filepath.Join(root, "changes", "feature-c"),
-			Created: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
+			Slug: "feature-c",
+			Dir:  filepath.Join(root, "changes", "feature-c"),
 			// Will have 2 tasks
 		},
 	}
@@ -59,7 +55,7 @@ func TestMigrateAutoPrioritize(t *testing.T) {
 func TestMigrateClear(t *testing.T) {
 	root := t.TempDir()
 
-	changes := []openspec.Change{
+	changes := []specsync.Change{
 		{
 			Slug: "feature-a",
 			Dir:  filepath.Join(root, "changes", "feature-a"),

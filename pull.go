@@ -9,9 +9,9 @@ import (
 )
 
 // PullOptions configures an issue-first pull: reading an existing tracker issue
-// and materializing it as a local OpenSpec change.
+// and materializing it as a local change.
 type PullOptions struct {
-	OpenSpecDir string       // path to the openspec/ directory
+	OpenSpecDir string       // path to the spec root (openspec/, beads/, etc.)
 	Provider    WorkProvider // must implement IssueReader
 	IssueID     string       // provider id of the issue to pull (e.g. "42")
 	Slug        string       // change slug; derived from the issue when empty
@@ -37,7 +37,7 @@ type PullResult struct {
 	Board           BoardPlan
 }
 
-// Pull materializes a local OpenSpec change from an existing issue. The change
+// Pull materializes a local change from an existing issue. The change
 // is linked to the source issue (via a cached ref) so a later push updates that
 // same issue instead of creating a duplicate. The provider must implement
 // IssueReader.

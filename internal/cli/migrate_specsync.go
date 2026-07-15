@@ -6,9 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"time"
+	"strings"
 
-	"specsync/internal/openspec"
+	"github.com/androidand/specsync"
 )
 
 // MigrateSpecSyncOptions configures a migration run.
@@ -23,7 +23,7 @@ type MigrateSpecSyncOptions struct {
 //   - "auto-prioritize": Estimate priority from task count, creation date
 //   - "clear": Reset all to priority=0, stage=backlog (manual reprioritization)
 func MigrateSpecSync(opts MigrateSpecSyncOptions) error {
-	changes, err := openspec.LoadChanges(opts.OpenSpecDir)
+	changes, err := specsync.LoadChanges(opts.OpenSpecDir)
 	if err != nil {
 		return fmt.Errorf("load changes: %w", err)
 	}
@@ -45,16 +45,12 @@ func MigrateSpecSync(opts MigrateSpecSyncOptions) error {
 
 // migrateAutoPrioritize estimates priorities based on heuristics.
 // Higher task count → higher priority (more complex = more important).
-// Older created date → higher priority (been waiting longer).
-func migrateAutoPrioritize(changes []openspec.Change, dryRun bool) error {
-	// Sort by task count descending, then creation date ascending.
+func migrateAutoPrioritize(changes []specsync.Change, dryRun bool) error {
+	// Sort by task count descending.
 	sort.Slice(changes, func(i, j int) bool {
 		taskCountI := countTasks(changes[i])
 		taskCountJ := countTasks(changes[j])
-		if taskCountI != taskCountJ {
-			return taskCountI > taskCountJ // More tasks = higher priority
-		}
-		return changes[i].Created.Before(changes[j].Created) // Older first
+		return taskCountI > taskCountJ // More tasks = higher priority
 	})
 
 	// Assign priorities based on position.
@@ -94,7 +90,7 @@ func migrateAutoPrioritize(changes []openspec.Change, dryRun bool) error {
 			}
 		}
 
-		fmt.Printf("✓ %s priority=%d (tasks=%d, created=%s)\n", c.Slug, pri, countTasks(c), c.Created.Format("2006-01-02"))
+		fmt.Printf("✓ %s priority=%d (tasks=%d)\n", c.Slug, pri, countTasks(c))
 		migrated++
 	}
 
@@ -107,12 +103,10 @@ func migrateAutoPrioritize(changes []openspec.Change, dryRun bool) error {
 
 // migrateClear resets all changes to default state.
 // Allows manual reprioritization afterward.
-func migrateClear(changes []openspec.Change, dryRun bool) error {
+func migrateClear(changes []specsync.Change, dryRun bool) error {
 	var cleared int
 
 	for _, c := range changes {
-		metaPath := filepath.Join(c.Dir, ".specsync", "metadata.json")
-
 		// Always write (reset to default), even if exists.
 		meta := &specsyncMetadata{
 			Version: 1,
@@ -158,8 +152,14 @@ func estimatePriority(position, total int) int {
 }
 
 // countTasks counts unchecked + checked tasks in a change.
-func countTasks(c openspec.Change) int {
-	return len(c.GetTasks())
+func countTasks(c specsync.Change) int {
+	count := 0
+	for _, line := range strings.Split(c.TasksMarkdown, "\n") {
+		if strings.Contains(line, "- [ ]") || strings.Contains(line, "- [x]") || strings.Contains(line, "- [X]") {
+			count++
+		}
+	}
+	return count
 }
 
 // specsyncMetadata represents .specsync/metadata.json structure.
