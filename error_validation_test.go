@@ -74,31 +74,40 @@ func TestValidateStageTooLong(t *testing.T) {
 	}
 }
 
-// TestTaskProgressNoTasks verifies the no-tasks constant.
-func TestTaskProgressNoTasks(t *testing.T) {
-	if TaskProgressNoTasks != "no-tasks" {
-		t.Errorf("TaskProgressNoTasks = %q, want %q", TaskProgressNoTasks, "no-tasks")
+// TestTaskProgressTransitions verifies all task progress states are distinct and valid.
+// This replaces 4 noisy constant-value tests with a single property-based test
+// that ensures stage transitions work correctly based on task progress.
+func TestTaskProgressTransitions(t *testing.T) {
+	tests := []struct {
+		tasks    string
+		wantProg TaskProgress
+		wantStage Stage
+	}{
+		{"", TaskProgressNoTasks, StageActive},                                   // no tasks → active (default)
+		{"- [ ] task 1\n- [ ] task 2\n", TaskProgressNotStarted, StageActive},  // 0/N → active
+		{"- [x] task 1\n- [ ] task 2\n", TaskProgressInProgress, StageActive},  // 0 < X < N → active
+		{"- [x] task 1\n- [x] task 2\n", TaskProgressComplete, StageComplete},  // N/N → complete
 	}
-}
 
-// TestTaskProgressNotStarted verifies the not-started constant.
-func TestTaskProgressNotStarted(t *testing.T) {
-	if TaskProgressNotStarted != "not-started" {
-		t.Errorf("TaskProgressNotStarted = %q, want %q", TaskProgressNotStarted, "not-started")
-	}
-}
+	for _, tt := range tests {
+		root := t.TempDir()
+		cdir := filepath.Join(root, "changes", "test")
+		mustWrite(t, filepath.Join(cdir, "proposal.md"), "# Test\n")
+		if tt.tasks != "" {
+			mustWrite(t, filepath.Join(cdir, "tasks.md"), tt.tasks)
+		}
 
-// TestTaskProgressInProgress verifies the in-progress constant.
-func TestTaskProgressInProgress(t *testing.T) {
-	if TaskProgressInProgress != "in-progress" {
-		t.Errorf("TaskProgressInProgress = %q, want %q", TaskProgressInProgress, "in-progress")
-	}
-}
+		c, err := LoadChange(cdir, false, root)
+		if err != nil {
+			t.Fatalf("LoadChange: %v", err)
+		}
 
-// TestTaskProgressComplete verifies the complete constant.
-func TestTaskProgressComplete(t *testing.T) {
-	if TaskProgressComplete != "complete" {
-		t.Errorf("TaskProgressComplete = %q, want %q", TaskProgressComplete, "complete")
+		if c.Progress != tt.wantProg {
+			t.Errorf("tasks %q: progress = %q, want %q", tt.tasks[:20], c.Progress, tt.wantProg)
+		}
+		if c.Stage != tt.wantStage {
+			t.Errorf("tasks %q: stage = %q, want %q", tt.tasks[:20], c.Stage, tt.wantStage)
+		}
 	}
 }
 

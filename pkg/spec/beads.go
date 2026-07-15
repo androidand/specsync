@@ -14,11 +14,6 @@ func (s BeadsSource) Name() string {
 }
 
 // LoadChanges is not yet implemented for Beads format.
-func (s BeadsSource) LoadChanges(specDir string) ([]Change, error) {
-	return nil, fmt.Errorf("Beads support not yet implemented")
-}
-
-// SaveChange is not yet implemented for Beads format.
-func (s BeadsSource) SaveChange(change Change) error {
-	return fmt.Errorf("Beads support not yet implemented")
+func (s BeadsSource) LoadChanges(specDir string) (interface{}, error) {
+	return nil, fmt.Errorf("Beads support not yet implemented (Phase 7+)")
 }

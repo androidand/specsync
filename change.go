@@ -8,8 +8,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-
-	"github.com/androidand/specsync/pkg/spec"
 )
 
 // TaskProgress represents the completion state of a change's tasks.
@@ -117,18 +115,6 @@ func LoadChanges(openspecDir string) ([]Change, error) {
 	return append(active, archived...), nil
 }
 
-// SpecSourceFactory creates a SpecSource instance from a format name.
-// Supported formats: "openspec" (default), "beads" (Phase 7+).
-func SpecSourceFactory(format string) spec.SpecSource {
-	switch format {
-	case "beads":
-		return spec.BeadsSource{}
-	case "openspec":
-		fallthrough
-	default:
-		return spec.OpenSpecSource{}
-	}
-}
 
 func loadChangeDir(dir string, archived bool, openspecDir string) ([]Change, error) {
 	entries, err := os.ReadDir(dir)
