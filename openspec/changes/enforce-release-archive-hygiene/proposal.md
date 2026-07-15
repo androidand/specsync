@@ -22,6 +22,8 @@ workflows enforce that no shipped-complete changes remain unarchived.
   evaluate archive hygiene without brittle text parsing.
 - Add `specsync release-plan -fail-on-archive-candidates` to exit non-zero when
   shipped + completed changes are still unarchived.
+- Add explicit `specsync release-plan -archive-completed` execution to move
+  shipped + completed changes into `openspec/changes/archive/` safely.
 - Add tests for archive-candidate detection and fail-fast behavior.
 - Enforce archive hygiene in CI/release workflows before publish steps.
 - Enforce archive hygiene in the specs->issues sync workflow so stale completed
