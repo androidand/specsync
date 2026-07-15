@@ -130,6 +130,7 @@ func runReleasePlan(args []string) {
 	since := fs.String("since", "", "range start (default: latest tag)")
 	until := fs.String("until", "", "range end (default: HEAD)")
 	asJSON := fs.Bool("json", false, "emit JSON")
+	failOnArchiveCandidates := fs.Bool("fail-on-archive-candidates", false, "exit non-zero when shipped completed changes remain unarchived")
 	apply := fs.Bool("apply", false, "perform suggested spec actions (archive completed changes)")
 	_ = fs.Parse(args)
 
@@ -160,6 +161,10 @@ func runReleasePlan(args []string) {
 		}
 	}
 	impact := specsync.InferImpact(in.Commits, deltas, hasBaseline, nil)
+	archiveCandidates := completedShipped(shipped, statusBySlug)
+	if err := archiveHygieneError(archiveCandidates, *failOnArchiveCandidates); err != nil {
+		fail(err)
+	}
 
 	tool := specsync.DetectReleaseTool(filepath.Dir(abs))
 	rng := rangeLabel(*since, *until)
@@ -168,6 +173,7 @@ func runReleasePlan(args []string) {
 		emitJSON(map[string]any{
 			"range": rng, "trace": tr, "bump": impact.Impact.String(),
 			"reasons": impact.Reasons, "releaseTool": tool,
+			"archiveCandidates": archiveCandidates,
 		})
 		return
 	}
@@ -188,7 +194,6 @@ func runReleasePlan(args []string) {
 		}
 	}
 
-	archiveCandidates := completedShipped(shipped, statusBySlug)
 	if len(archiveCandidates) > 0 {
 		fmt.Println("\nArchive candidates  (all tasks done)")
 		for _, slug := range archiveCandidates {
@@ -354,4 +359,11 @@ func completedShipped(shipped []specsync.TraceNode, status map[string]specsync.O
 		}
 	}
 	return out
+}
+
+func archiveHygieneError(archiveCandidates []string, failOnArchiveCandidates bool) error {
+	if !failOnArchiveCandidates || len(archiveCandidates) == 0 {
+		return nil
+	}
+	return fmt.Errorf("release-plan: %d archive candidate(s) remain unarchived: %s", len(archiveCandidates), strings.Join(archiveCandidates, ", "))
 }

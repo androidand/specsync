@@ -23,6 +23,8 @@ jobs:
         with:
           go-version-file: go.mod
       - run: go build -o specsync ./cmd/specsync
+      - name: Enforce OpenSpec archive hygiene
+        run: go run ./cmd/specsync release-plan -fail-on-archive-candidates
       - name: Preview (dry run)
         env:
           GH_TOKEN: ${{ github.token }}

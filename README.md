@@ -175,7 +175,12 @@ advice, not action:
 ```bash
 specsync release-plan                  # since the latest tag
 specsync release-plan -since v0.3.0 -json
+specsync release-plan -fail-on-archive-candidates
 ```
+
+For release hygiene, run `specsync release-plan -fail-on-archive-candidates`
+in CI/release checks. It exits non-zero when shipped changes with fully
+completed tasks are still unarchived in `openspec/changes/`.
 
 ### `changelog` — a changelog generated from your specs, not your commits
 
