@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -44,5 +46,46 @@ func TestArchiveHygieneError(t *testing.T) {
 		if (err != nil) != tc.wantErr {
 			t.Fatalf("%s: archiveHygieneError(%v, %v) err=%v wantErr=%v", tc.name, tc.cands, tc.failOn, err, tc.wantErr)
 		}
+	}
+}
+
+func TestArchiveCompletedChanges(t *testing.T) {
+	root := t.TempDir()
+	openspecDir := filepath.Join(root, "openspec")
+	activeDir := filepath.Join(openspecDir, "changes", "done")
+	if err := os.MkdirAll(activeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(activeDir, "proposal.md"), []byte("# Done\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	archived, err := archiveCompletedChanges(openspecDir, []string{"done"})
+	if err != nil {
+		t.Fatalf("archiveCompletedChanges error: %v", err)
+	}
+	if !reflect.DeepEqual(archived, []string{"done"}) {
+		t.Fatalf("archived = %v, want [done]", archived)
+	}
+	if _, err := os.Stat(filepath.Join(openspecDir, "changes", "archive", "done", "proposal.md")); err != nil {
+		t.Fatalf("expected archived proposal.md, got %v", err)
+	}
+}
+
+func TestArchiveCompletedChangesDestinationExists(t *testing.T) {
+	root := t.TempDir()
+	openspecDir := filepath.Join(root, "openspec")
+	activeDir := filepath.Join(openspecDir, "changes", "done")
+	archiveDir := filepath.Join(openspecDir, "changes", "archive", "done")
+	if err := os.MkdirAll(activeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(archiveDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := archiveCompletedChanges(openspecDir, []string{"done"})
+	if err == nil {
+		t.Fatal("expected destination exists error")
 	}
 }

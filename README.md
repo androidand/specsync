@@ -176,11 +176,16 @@ advice, not action:
 specsync release-plan                  # since the latest tag
 specsync release-plan -since v0.3.0 -json
 specsync release-plan -fail-on-archive-candidates
+specsync release-plan -archive-completed
 ```
 
 For release hygiene, run `specsync release-plan -fail-on-archive-candidates`
 in CI/release checks. It exits non-zero when shipped changes with fully
 completed tasks are still unarchived in `openspec/changes/`.
+
+`release-plan` remains read-only by default. `-archive-completed` is the
+explicit mutation flag that moves shipped+complete changes into
+`openspec/changes/archive/`.
 
 ### `changelog` — a changelog generated from your specs, not your commits
 

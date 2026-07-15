@@ -131,6 +131,7 @@ func runReleasePlan(args []string) {
 	until := fs.String("until", "", "range end (default: HEAD)")
 	asJSON := fs.Bool("json", false, "emit JSON")
 	failOnArchiveCandidates := fs.Bool("fail-on-archive-candidates", false, "exit non-zero when shipped completed changes remain unarchived")
+	archiveCompleted := fs.Bool("archive-completed", false, "move shipped completed changes from openspec/changes/ to openspec/changes/archive/")
 	apply := fs.Bool("apply", false, "perform suggested spec actions (archive completed changes)")
 	_ = fs.Parse(args)
 
@@ -216,8 +217,23 @@ func runReleasePlan(args []string) {
 	}
 	fmt.Println("\n  specsync defers to it; the bump above is advisory only")
 
-	if *apply {
-		fmt.Println("\n--apply: spec-archive execution is not yet wired; archive completed changes with:")
+	if *archiveCompleted {
+		archived, err := archiveCompletedChanges(abs, archiveCandidates)
+		if err != nil {
+			fail(err)
+		}
+		if len(archived) == 0 {
+			fmt.Println("\narchive-completed: no changes archived")
+		} else {
+			fmt.Println("\nArchived changes")
+			for _, slug := range archived {
+				fmt.Printf("  %s\n", slug)
+			}
+		}
+	}
+
+	if *apply && !*archiveCompleted {
+		fmt.Println("\n--apply preview: archive candidates (execution requires -archive-completed)")
 		for _, slug := range archiveCandidates {
 			fmt.Printf("  openspec archive %s\n", slug)
 		}
@@ -366,4 +382,35 @@ func archiveHygieneError(archiveCandidates []string, failOnArchiveCandidates boo
 		return nil
 	}
 	return fmt.Errorf("release-plan: %d archive candidate(s) remain unarchived: %s", len(archiveCandidates), strings.Join(archiveCandidates, ", "))
+}
+
+func archiveCompletedChanges(openspecDir string, candidates []string) ([]string, error) {
+	if len(candidates) == 0 {
+		return nil, nil
+	}
+	archiveRoot := filepath.Join(openspecDir, "changes", "archive")
+	if err := os.MkdirAll(archiveRoot, 0o755); err != nil {
+		return nil, fmt.Errorf("archive-completed: create archive dir: %w", err)
+	}
+	archived := make([]string, 0, len(candidates))
+	for _, slug := range candidates {
+		src := filepath.Join(openspecDir, "changes", slug)
+		dst := filepath.Join(archiveRoot, slug)
+		if _, err := os.Stat(src); err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return archived, fmt.Errorf("archive-completed: stat %s: %w", slug, err)
+		}
+		if _, err := os.Stat(dst); err == nil {
+			return archived, fmt.Errorf("archive-completed: destination already exists for %s", slug)
+		} else if !os.IsNotExist(err) {
+			return archived, fmt.Errorf("archive-completed: check destination for %s: %w", slug, err)
+		}
+		if err := os.Rename(src, dst); err != nil {
+			return archived, fmt.Errorf("archive-completed: move %s to archive: %w", slug, err)
+		}
+		archived = append(archived, slug)
+	}
+	return archived, nil
 }
