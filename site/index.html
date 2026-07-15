@@ -488,8 +488,21 @@ nav {
 .release-body code { font-family: var(--font-mono); font-size: 0.85em; background: var(--accent-light); color: var(--accent); padding: 0.1em 0.3em; border-radius: 3px; }
 .release-body h4, .release-body h5 { font-size: 0.875rem; font-weight: 600; margin: 0.75rem 0 0.25rem; color: var(--ink); }
 .release-ref { font-family: var(--font-mono); font-size: 0.8em; }
-.release-ref a { color: var(--ink-3); text-decoration: none; }
-.release-ref a:hover { color: var(--accent); text-decoration: underline; }
+.release-ref a {
+  color: var(--accent);
+  background: var(--accent-light);
+  text-decoration: none;
+  padding: 0.05em 0.4em;
+  border-radius: 999px;
+}
+.release-ref a:hover { text-decoration: underline; }
+.release-ref-commit {
+  font-family: var(--font-mono);
+  font-size: 0.8em;
+  color: var(--ink-3);
+  text-decoration: none;
+}
+.release-ref-commit:hover { color: var(--accent); text-decoration: underline; }
 .release-empty { color: var(--ink-3); font-size: 0.9rem; font-style: italic; }
 .release-full-link {
   display: inline-block;
@@ -885,7 +898,10 @@ specsync <span class="c-flag">-dry-run</span></code></div>
             <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.7.0" target="_blank" rel="noopener">v0.7.0</a>
             <span class="release-date">Jul 14, 2026</span>
           </div>
-          <div class="release-body"><p class="release-empty">No spec-derived entries for this release.</p></div>
+          <div class="release-body"><h5>Added</h5><ul><li>resolve refs live at release time, wire into release CI <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/d0578292" target="_blank" rel="noopener">d057829</a></li>
+<li>render changelog from CHANGELOG.md, not the GitHub API <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/e2c18f8d" target="_blank" rel="noopener">e2c18f8</a></li></ul>
+<h5>Fixed</h5><ul><li>never let a failed build degrade committed content <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/9035465c" target="_blank" rel="noopener">9035465</a></li>
+<li>stop reading bare #N in commit prose as issue evidence <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/aeee62a9" target="_blank" rel="noopener">aeee62a</a></li></ul></div>
           <a class="release-full-link" href="https://github.com/androidand/specsync/releases/tag/v0.7.0" target="_blank" rel="noopener">View complete release details on GitHub →</a>
         </div>
         <div class="release">

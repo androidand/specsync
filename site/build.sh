@@ -48,14 +48,18 @@ function inlineMd(s) {
 // specsync's own `changelog -release-notes` (the source of every release body
 // from v0.7.0 on) writes "### Added"-style headings with bullets, each ending
 // in either "(#N[, #M...])" — a commit resolved to an OpenSpec change's issue
-// — or a bare short hash, for a commit that links to no change. Only the
-// former is user-facing evidence the hero's "never a commit dump" claim
-// depends on: a bare hash is exactly the unattributed-commit residue the
-// landing page shouldn't show (this also naturally excludes merge commits
-// and chore/docs/ci entries, none of which ever carry a "#N"). Hand-written
-// bodies that don't look like this shape (older goreleaser-raw releases, pre
-// v0.7.0) fall back to a plain "view full release" link — never a raw dump.
-const REF_SUFFIX = /\s*\(((?:#\d+)(?:,\s*#\d+)*)\)\s*$/;
+// — or a bare short hash, for a commit that links to no change (chore/docs/ci
+// commits are already rolled into a "N internal commits omitted" comment by
+// specsync itself, and merge commits never appear at all — so what's left
+// unlinked here is real, shipped feat/fix work that just isn't spec-backed
+// yet). Both render: an issue-linked entry gets a prominent "#N" badge: a
+// spec actually stands behind it. An unlinked one still shows — the release
+// shouldn't read as emptier than it was — but with a quiet commit link
+// instead, so the two are never visually confused. Bodies that don't look
+// like this shape at all (older goreleaser-raw releases, pre v0.7.0) fall
+// back to a plain "view full release" link — never a raw dump.
+const ISSUE_SUFFIX = /\s*\(((?:#\d+)(?:,\s*#\d+)*)\)\s*$/;
+const HASH_SUFFIX = /\s*\(([0-9a-f]{7,40})\)\s*$/;
 
 function renderReleaseBody(body, repoUrl) {
   const groups = [];
@@ -89,13 +93,21 @@ function renderReleaseBody(body, repoUrl) {
   return groups.map((g) => {
     const items = g.items
       .map((it) => {
-        const m = it.match(REF_SUFFIX);
-        if (!m) return null; // no resolved issue — not shown on the landing page
-        const text = it.slice(0, m.index).trim();
-        const refs = m[1].split(",").map((r) => r.trim()).map((ref) =>
-          `<a href="${repoUrl}/issues/${ref.slice(1)}" target="_blank" rel="noopener">${ref}</a>`
-        ).join(", ");
-        return `<li>${inlineMd(text)} <span class="release-ref">${refs}</span></li>`;
+        const issue = it.match(ISSUE_SUFFIX);
+        if (issue) {
+          const text = it.slice(0, issue.index).trim();
+          const refs = issue[1].split(",").map((r) => r.trim()).map((ref) =>
+            `<a href="${repoUrl}/issues/${ref.slice(1)}" target="_blank" rel="noopener">${ref}</a>`
+          ).join(", ");
+          return `<li>${inlineMd(text)} <span class="release-ref">${refs}</span></li>`;
+        }
+        const hash = it.match(HASH_SUFFIX);
+        if (hash) {
+          const text = it.slice(0, hash.index).trim();
+          const sha = hash[1];
+          return `<li>${inlineMd(text)} <a class="release-ref-commit" href="${repoUrl}/commit/${sha}" target="_blank" rel="noopener">${sha.slice(0, 7)}</a></li>`;
+        }
+        return null; // no reference at all — not shown on the landing page
       })
       .filter(Boolean);
     if (items.length === 0) return "";
