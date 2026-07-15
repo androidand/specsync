@@ -110,7 +110,9 @@ func syncOne(ctx context.Context, prov WorkProvider, c Change, dryRun, reconcile
 		existingPtr = resolved
 		flips = f
 	}
-	refreshStage(&c)
+	if err := refreshState(&c); err != nil {
+		return Ref{}, false, nil, BoardPlan{}, fmt.Errorf("refresh state after reconcile: %w", err)
+	}
 
 	item := WorkItemFor(c, closeCompleted)
 	ref, err = prov.Push(ctx, item, existingPtr)
@@ -160,12 +162,16 @@ func WorkItemFor(c Change, closeCompleted bool) WorkItem {
 			body = body + "\n\n## Related\n\n" + strings.Join(lines, "\n")
 		}
 	}
+	priority := 0
+	if c.Priority != nil {
+		priority = *c.Priority
+	}
 	return WorkItem{
 		Slug:         c.Slug,
 		Title:        c.Title,
 		Body:         body,
 		Stage:        c.Stage,
-		Priority:     c.Priority,
+		Priority:     priority,
 		Closed:       c.Archived || (closeCompleted && c.Stage == StageComplete),
 		ManageClosed: c.Archived || closeCompleted,
 	}

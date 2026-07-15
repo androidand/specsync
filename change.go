@@ -2,6 +2,7 @@ package specsync
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,29 +10,91 @@ import (
 	"strings"
 )
 
-// Stage is the canonical lifecycle position of a change. OpenSpec itself has no
-// stage concept beyond active/archived; richer stages are an optional overlay
-// supplied via the .status convention (see LoadChange).
+// TaskProgress represents the completion state of a change's tasks.
+type TaskProgress string
+
+const (
+	TaskProgressNoTasks    TaskProgress = "no-tasks"      // no tasks.md file
+	TaskProgressNotStarted TaskProgress = "not-started"   // 0/N tasks complete
+	TaskProgressInProgress TaskProgress = "in-progress"   // 0 < X < N
+	TaskProgressComplete   TaskProgress = "complete"      // N/N tasks complete
+)
+
+// Stage is the workflow placement of a change. It is distinct from task progress.
+// Workflow stage can be explicitly set via .specsync.yaml or derived from tasks/location.
 type Stage string
 
 const (
-	StageActive   Stage = "active"   // default: a change living under changes/
-	StageComplete Stage = "complete" // every task checked, not yet archived
-	StageArchived Stage = "archived" // change moved under changes/archive/
+	StageBacklog   Stage = "backlog"      // not yet started; pre-discovery or deferred
+	StageBlocked   Stage = "blocked"      // waiting on external blocker or decision
+	StageActive    Stage = "active"       // in flight; has unchecked work
+	StageInReview  Stage = "in-review"    // awaiting approval before proceeding
+	StageComplete  Stage = "complete"     // all work done, not yet archived
+	StageArchived  Stage = "archived"     // moved to changes/archive/ (immutable)
+)
+
+// ValidateStage checks if a stage value is canonical or matches the custom stage pattern.
+func ValidateStage(stage Stage) error {
+	if IsCanonicalStage(stage) {
+		return nil
+	}
+	// Custom stages must match token pattern: lowercase alphanumeric + hyphens
+	pattern := regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
+	if !pattern.MatchString(string(stage)) {
+		return fmt.Errorf("invalid stage %q; must be canonical or match ^[a-z0-9][a-z0-9-]{0,63}$", stage)
+	}
+	return nil
+}
+
+// IsCanonicalStage reports whether stage is one of the six canonical values.
+func IsCanonicalStage(stage Stage) bool {
+	switch stage {
+	case StageBacklog, StageBlocked, StageActive, StageInReview, StageComplete, StageArchived:
+		return true
+	default:
+		return false
+	}
+}
+
+// CanonicalStageOrder returns the canonical stage ordering for sorting.
+func CanonicalStageOrder() []Stage {
+	return []Stage{
+		StageBacklog, StageBlocked, StageActive, StageInReview, StageComplete, StageArchived,
+	}
+}
+
+// ChangeMetadata holds shared workflow metadata from .specsync.json.
+type ChangeMetadata struct {
+	Version  int    `json:"version"`
+	Stage    *Stage `json:"stage,omitempty"`
+	Priority *int   `json:"priority,omitempty"`
+}
+
+// StageSource indicates how the current stage was derived.
+type StageSource string
+
+const (
+	StageSourceDefault      StageSource = "default"       // no other source; assume active
+	StageSourceTasks        StageSource = "tasks"         // derived from task completion (all done → complete)
+	StageSourceMetadata     StageSource = "metadata"      // explicit .specsync.yaml stage field
+	StageSourceLegacyStatus StageSource = "legacy-status" // read from .status file (backward compat)
+	StageSourceFolder       StageSource = "folder"        // archived folder location (final, immutable)
 )
 
 // Change is a provider-agnostic view of one OpenSpec change folder. It is the
 // only thing this package reads from disk and is fully self-contained.
 type Change struct {
-	Dir           string // absolute path to the change folder
+	Dir           string       // absolute path to the change folder
 	Slug          string
-	Title         string // first H1 of proposal.md, falling back to Slug
-	Body          string // proposal.md contents
-	TasksMarkdown string // tasks.md contents, may be ""
-	Links         []Ref  // resolved related issue refs from links.md
-	Stage         Stage  // .status override, else derived (active/complete/archived)
-	Priority      int    // from .specsync/priority, 0 if unset
+	Title         string       // first H1 of proposal.md, falling back to Slug
+	Body          string       // proposal.md contents
+	TasksMarkdown string       // tasks.md contents, may be ""
+	Links         []Ref        // resolved related issue refs from links.md
 	Archived      bool
+	Progress      TaskProgress // what the task checklist says
+	Stage         Stage        // current workflow placement
+	StageSource   StageSource  // how we arrived at Stage (default/tasks/metadata/legacy-status/folder)
+	Priority      *int         // optional 1-100; nil if unset
 }
 
 // LoadChanges reads every change under <openspecDir>/changes, including those
@@ -103,11 +166,8 @@ func LoadChange(dir string, archived bool, openspecDir string) (*Change, error) 
 		c.TasksMarkdown = string(tasks)
 	}
 
-	refreshStage(c)
-
-	// Optional priority: <change>/.specsync/priority (gitignored, local).
-	if p, err := os.ReadFile(filepath.Join(dir, ".specsync", "priority")); err == nil {
-		c.Priority = atoiSafe(strings.TrimSpace(string(p)))
+	if err := refreshState(c); err != nil {
+		return nil, fmt.Errorf("load state for %s: %w", slug, err)
 	}
 
 	// Optional related issues: links.md (human/agent/machine-writable).
@@ -244,6 +304,22 @@ func refFromURL(url string) *Ref {
 // the "- [ ]"/"- [x]" lines reconcile does — other checkbox markers (living
 // plan's [~]/[>]) and prose are ignored. An empty or task-less list is not
 // "complete": there is nothing to have finished.
+// countCheckboxes returns (total, completed) checkbox counts from markdown.
+func countCheckboxes(md string) (total, completed int) {
+	if strings.TrimSpace(md) == "" {
+		return 0, 0
+	}
+	for _, line := range strings.Split(md, "\n") {
+		if _, checked, ok := parseTaskLine(line); ok {
+			total++
+			if checked {
+				completed++
+			}
+		}
+	}
+	return total, completed
+}
+
 func tasksComplete(md string) bool {
 	if strings.TrimSpace(md) == "" {
 		return false
@@ -264,18 +340,145 @@ func tasksComplete(md string) bool {
 // applies filesystem facts and the explicit .status override. Sync calls this
 // again after inbound reconciliation so one invocation projects the resulting
 // state rather than the state loaded before checkbox merging.
-func refreshStage(c *Change) {
-	c.Stage = StageActive
+// refreshState derives task progress and workflow stage with clear precedence.
+func refreshState(c *Change) error {
+	// Step 1: Always derive progress from tasks
+	c.Progress = deriveTaskProgress(c.TasksMarkdown)
+
+	// Step 2: Archived folder is immutable and final
 	if c.Archived {
 		c.Stage = StageArchived
-	} else if tasksComplete(c.TasksMarkdown) {
-		c.Stage = StageComplete
+		c.StageSource = StageSourceFolder
+		return nil
 	}
-	if st, err := os.ReadFile(filepath.Join(c.Dir, ".status")); err == nil {
-		if s := strings.TrimSpace(string(st)); s != "" {
-			c.Stage = Stage(s)
+
+	// Step 3: Try explicit metadata from .specsync/metadata.json
+	metadata, err := loadChangeMetadata(c.Dir)
+	if err != nil {
+		return err // malformed metadata blocks loading
+	}
+
+	// Load priority from metadata if present (can be independent of stage)
+	if metadata != nil && metadata.Priority != nil {
+		c.Priority = metadata.Priority
+	}
+
+	// Try explicit stage from metadata
+	if metadata != nil && metadata.Stage != nil {
+		c.Stage = *metadata.Stage
+		c.StageSource = StageSourceMetadata
+		return nil
+	}
+
+	// Step 4: Try legacy .status file for backward compat
+	if legacyStage, ok := readLegacyStatus(c.Dir); ok {
+		c.Stage = legacyStage
+		c.StageSource = StageSourceLegacyStatus
+		// Warn if both files exist and differ
+		if metadata != nil && metadata.Stage != nil && *metadata.Stage != legacyStage {
+			warnStageMismatch(c.Slug, *metadata.Stage, legacyStage)
+		}
+		return nil
+	}
+
+	// Step 5: Derive from task completion
+	if c.Progress == TaskProgressComplete {
+		c.Stage = StageComplete
+		c.StageSource = StageSourceTasks
+		return nil
+	}
+
+	// Step 6: Default to active
+	c.Stage = StageActive
+	c.StageSource = StageSourceDefault
+	return nil
+}
+
+// deriveTaskProgress derives progress from task checklist state.
+func deriveTaskProgress(tasksMarkdown string) TaskProgress {
+	if tasksMarkdown == "" {
+		return TaskProgressNoTasks
+	}
+
+	total, completed := countCheckboxes(tasksMarkdown)
+	if total == 0 {
+		return TaskProgressNoTasks
+	}
+	if completed == 0 {
+		return TaskProgressNotStarted
+	}
+	if completed == total {
+		return TaskProgressComplete
+	}
+	return TaskProgressInProgress
+}
+
+// loadChangeMetadata loads and validates .specsync/metadata.json, returning nil if absent.
+func loadChangeMetadata(dir string) (*ChangeMetadata, error) {
+	path := filepath.Join(dir, ".specsync", "metadata.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil // file absent; no metadata
+		}
+		return nil, fmt.Errorf("read .specsync/metadata.json: %w", err)
+	}
+
+	var m ChangeMetadata
+	if err := json.Unmarshal(data, &m); err != nil {
+		return nil, fmt.Errorf("parse .specsync/metadata.json: %w", err)
+	}
+
+	if err := normalizeMetadata(&m); err != nil {
+		return nil, err
+	}
+	return &m, nil
+}
+
+// normalizeMetadata validates metadata version and field values.
+func normalizeMetadata(m *ChangeMetadata) error {
+	if m.Version == 0 {
+		m.Version = 1
+	}
+
+	if m.Version != 1 {
+		return fmt.Errorf("unsupported .specsync.yaml version %d", m.Version)
+	}
+
+	if m.Stage != nil {
+		if err := ValidateStage(*m.Stage); err != nil {
+			return err
 		}
 	}
+
+	if m.Priority != nil {
+		if *m.Priority < 1 || *m.Priority > 100 {
+			return fmt.Errorf("priority must be between 1 and 100; got %d", *m.Priority)
+		}
+	}
+
+	return nil
+}
+
+// readLegacyStatus reads .status file for backward compatibility.
+func readLegacyStatus(dir string) (Stage, bool) {
+	path := filepath.Join(dir, ".status")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", false
+	}
+	stage := Stage(strings.TrimSpace(string(data)))
+	return stage, true
+}
+
+// warnStageMismatch emits a stderr warning when .specsync.yaml and .status disagree.
+func warnStageMismatch(slug string, yamlStage, statusStage Stage) {
+	fmt.Fprintf(os.Stderr,
+		"warning: %s defines stage in both .specsync.yaml and legacy .status;\n"+
+			"  using .specsync.yaml (%q)\n"+
+			"  run `specsync set-stage %s auto` to migrate\n",
+		slug, yamlStage, slug,
+	)
 }
 
 func firstHeading(md, fallback string) string {

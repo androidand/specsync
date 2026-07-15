@@ -14,7 +14,7 @@ func TestLoadChanges(t *testing.T) {
 	mustWrite(t, filepath.Join(cdir, "proposal.md"), "# My Title\n\nthe body\n")
 	mustWrite(t, filepath.Join(cdir, "tasks.md"), "- [ ] do the thing\n")
 	mustWrite(t, filepath.Join(cdir, ".status"), "planned\n")
-	mustWrite(t, filepath.Join(cdir, ".specsync", "priority"), "2\n")
+	mustWrite(t, filepath.Join(cdir, ".specsync", "metadata.json"), `{"version":1,"priority":2}`)
 
 	// An archived change projects as closed.
 	adir := filepath.Join(root, "changes", "archive", "old-change")
@@ -40,8 +40,12 @@ func TestLoadChanges(t *testing.T) {
 	if c.Stage != "planned" {
 		t.Errorf("stage = %q, want planned (from .status)", c.Stage)
 	}
-	if c.Priority != 2 {
-		t.Errorf("priority = %d, want 2", c.Priority)
+	if c.Priority == nil || *c.Priority != 2 {
+		var got int
+		if c.Priority != nil {
+			got = *c.Priority
+		}
+		t.Errorf("priority = %d, want 2", got)
 	}
 	if c.Archived {
 		t.Errorf("my-change should not be archived")
