@@ -45,23 +45,59 @@ function inlineMd(s) {
     .replace(/`([^`]+)`/g, "<code>$1</code>");
 }
 
-// specsync's own `changelog -release-notes` (the source of every release body
-// from v0.7.0 on) writes "### Added"-style headings with bullets, each ending
-// in either "(#N[, #M...])" — a commit resolved to an OpenSpec change's issue
-// — or a bare short hash, for a commit that links to no change (chore/docs/ci
+function parseChangelogEntries(md) {
+  const lines = md.split("\n");
+  const entries = [];
+  let currentVersion = "";
+  let currentDate = "";
+  let buf = [];
+  const flush = () => {
+    if (!currentVersion) return;
+    entries.push({
+      version: currentVersion,
+      date: currentDate,
+      body: buf.join("\n").trim(),
+    });
+  };
+  for (const line of lines) {
+    const m = line.match(/^##\s+\[([^\]]+)\](?:\s*-\s*([^\n]+))?\s*$/);
+    if (m) {
+      flush();
+      currentVersion = m[1].trim().replace(/^v/i, "");
+      currentDate = (m[2] || "").trim();
+      buf = [];
+      continue;
+    }
+    if (currentVersion) buf.push(line);
+  }
+  flush();
+  return entries;
+}
+
+function parseChangelogSections(md) {
+  const sections = {};
+  for (const e of parseChangelogEntries(md)) sections[e.version] = e.body;
+  return sections;
+}
+
+// Both a local CHANGELOG.md section and a GitHub release body (from v0.7.0
+// on — specsync's own `changelog -release-notes`) share this shape:
+// "### Added"-style headings with bullets, each ending in either
+// "(#N[, #M...])" — a commit resolved to an OpenSpec change's issue — or a
+// bare short hash, for a commit that links to no change (chore/docs/ci
 // commits are already rolled into a "N internal commits omitted" comment by
 // specsync itself, and merge commits never appear at all — so what's left
 // unlinked here is real, shipped feat/fix work that just isn't spec-backed
-// yet). Both render: an issue-linked entry gets a prominent "#N" badge: a
+// yet). Both render: an issue-linked entry gets a prominent "#N" badge — a
 // spec actually stands behind it. An unlinked one still shows — the release
 // shouldn't read as emptier than it was — but with a quiet commit link
-// instead, so the two are never visually confused. Bodies that don't look
-// like this shape at all (older goreleaser-raw releases, pre v0.7.0) fall
+// instead, so the two are never visually confused. A body that doesn't look
+// like this shape at all (older goreleaser-raw releases, pre v0.7.0) falls
 // back to a plain "view full release" link — never a raw dump.
 const ISSUE_SUFFIX = /\s*\(((?:#\d+)(?:,\s*#\d+)*)\)\s*$/;
-const HASH_SUFFIX = /\s*\(([0-9a-f]{7,40})\)\s*$/;
+const HASH_SUFFIX = /\s*\(([0-9a-f]{7,40})\)\s*$/i;
 
-function renderReleaseBody(body, repoUrl) {
+function renderChangelogSection(section, repoUrl) {
   const groups = [];
   let current = null;
   let item = null;
@@ -72,7 +108,7 @@ function renderReleaseBody(body, repoUrl) {
       item = null;
     }
   };
-  for (const line of body.split("\n")) {
+  for (const line of section.split("\n")) {
     const h = line.match(/^#{1,6}\s+(.+)$/);
     const bullet = line.match(/^[-*]\s+(.+)$/);
     if (h) {
@@ -118,6 +154,15 @@ function renderReleaseBody(body, repoUrl) {
 
 async function build() {
   let html = fs.readFileSync("index.html", "utf8");
+  let changelogEntries = [];
+  let changelogSections = {};
+  try {
+    const localChangelog = fs.readFileSync("../CHANGELOG.md", "utf8");
+    changelogEntries = parseChangelogEntries(localChangelog);
+    changelogSections = parseChangelogSections(localChangelog);
+  } catch (e) {
+    console.warn(`  changelog: ${e.message} — local CHANGELOG.md unavailable, using release body fallback`);
+  }
 
   // 1 & 3. Version + changelog both come from one GitHub Releases fetch — no
   // local git-tag dependency (some build environments, e.g. a shallow-clone
@@ -141,7 +186,12 @@ async function build() {
 
     const changelog = releases.slice(0, 3).map((r) => {
       const date = new Date(r.published_at).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
-      const body = r.body ? renderReleaseBody(r.body, "https://github.com/androidand/specsync") : "";
+      const version = String(r.tag_name || "").replace(/^v/i, "");
+      const changelogBody = changelogSections[version]
+        ? renderChangelogSection(changelogSections[version], "https://github.com/androidand/specsync")
+        : "";
+      const releaseBody = r.body ? renderChangelogSection(r.body, "https://github.com/androidand/specsync") : "";
+      const body = changelogBody || releaseBody;
       const empty = `<p class="release-empty">No spec-derived entries for this release.</p>`;
       return `        <div class="release">
           <div class="release-header">
@@ -154,6 +204,29 @@ async function build() {
     }).join("\n");
     html = replaceRegion(html, "CHANGELOG", changelog);
     console.log(`  changelog: ${Math.min(releases.length, 3)} releases`);
+  } else if (changelogEntries.length > 0) {
+    const repoUrl = "https://github.com/androidand/specsync";
+    const released = changelogEntries.filter((e) => e.version.toLowerCase() !== "unreleased").slice(0, 3);
+    if (released.length > 0) {
+      html = replaceRegion(html, "VERSION", `v${released[0].version}`);
+      const changelog = released.map((e) => {
+        const body = renderChangelogSection(e.body, repoUrl);
+        const empty = `<p class="release-empty">No spec-derived entries for this release.</p>`;
+        const date = /^\d{4}-\d{2}-\d{2}$/.test(e.date)
+          ? new Date(`${e.date}T00:00:00Z`).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
+          : (e.date || "");
+        return `        <div class="release">
+          <div class="release-header">
+            <a class="release-tag" href="${repoUrl}/releases/tag/v${escapeHtml(e.version)}" target="_blank" rel="noopener">v${escapeHtml(e.version)}</a>
+            <span class="release-date">${escapeHtml(date)}</span>
+          </div>
+          <div class="release-body">${body || empty}</div>
+          <a class="release-full-link" href="${repoUrl}/releases/tag/v${escapeHtml(e.version)}" target="_blank" rel="noopener">View complete release details on GitHub →</a>
+        </div>`;
+      }).join("\n");
+      html = replaceRegion(html, "CHANGELOG", changelog);
+      console.log(`  changelog: ${released.length} releases (local CHANGELOG fallback)`);
+    }
   }
 
   // shippedIssueNumbers: every "#N" reference in the fetched release bodies —

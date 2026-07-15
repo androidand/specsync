@@ -4,9 +4,39 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
+
+// BoardBinding records the state of a change on a specific board (project/provider).
+// Used for three-way merge: local stage, remote status, and last-synced base
+// detect what changed since last sync.
+type BoardBinding struct {
+	Provider           string    `json:"provider"`      // "github-projects", etc.
+	ProjectID          string    `json:"project_id"`
+	ItemID             string    `json:"item_id"`
+	LocalStageBase     Stage     `json:"local_stage_base"`      // what local stage was last time
+	RemoteOptionIDBase string    `json:"remote_option_id_base"` // what remote option was last time
+	SyncedAt           time.Time `json:"synced_at"`
+}
+
+// BoardState wraps all board bindings for a change. Enables multi-provider
+// and multi-project support. Format: .specsync/board.json
+type BoardState struct {
+	Version  int                    `json:"version"`
+	Bindings map[string]BoardBinding `json:"bindings"` // key: "github-projects:owner/5"
+}
+
+// ThreeWayMerge result: what action to take based on local, remote, and base state.
+type ThreeWayDecision struct {
+	Action      string // "none", "push-local", "report-conflict", "report-remote-move"
+	Reason      string // human-readable explanation
+	LocalChanged  bool
+	RemoteChanged bool
+}
 
 // Default stage->Status-name mapping. Both are overridable per stage via
 // BoardTarget.StatusMapping; when a board doesn't name its options literally
@@ -117,6 +147,10 @@ func (p *GitHubProvider) ProjectOntoBoard(ctx context.Context, target BoardTarge
 				return BoardPlan{}, err
 			}
 			plan.StatusName = wantName
+			plan.StatusOptionID = wantOption // Capture for three-way merge binding
+		} else {
+			// Status unchanged, but capture current option ID for binding.
+			plan.StatusOptionID = member.statusOptionID
 		}
 	}
 
@@ -328,14 +362,15 @@ func (p *GitHubProvider) resolveStatusField(ctx context.Context, projectID strin
 }
 
 // boardMembership reports whether ref's issue is on the target board and, if so,
-// its current Status; plus the issue node id (content id) and assignee count.
+// its current Status and option ID; plus the issue node id (content id) and assignee count.
 // This one query is uniform for a freshly-created issue (empty projectItems) and
 // an existing one, and is the primitive every board action builds on.
 type boardMembership struct {
-	contentID     string
-	itemID        string
-	statusName    string
-	assigneeCount int
+	contentID      string
+	itemID         string
+	statusName     string
+	statusOptionID string // option ID for three-way merge
+	assigneeCount  int
 }
 
 func (p *GitHubProvider) boardMembership(ctx context.Context, ref Ref, schema *boardSchema) (boardMembership, error) {
@@ -357,6 +392,7 @@ func (p *GitHubProvider) boardMembership(ctx context.Context, ref Ref, schema *b
               __typename
               ... on ProjectV2ItemFieldSingleSelectValue {
                 name
+                optionId
                 field { ... on ProjectV2FieldCommon { id } }
               }
             }
@@ -383,6 +419,7 @@ func (p *GitHubProvider) boardMembership(ctx context.Context, ref Ref, schema *b
 							Nodes []struct {
 								Typename string `json:"__typename"`
 								Name     string `json:"name"`
+								OptionID string `json:"optionId"`
 								Field    struct {
 									ID string `json:"id"`
 								} `json:"field"`
@@ -410,6 +447,7 @@ func (p *GitHubProvider) boardMembership(ctx context.Context, ref Ref, schema *b
 		for _, fv := range it.FieldValues.Nodes {
 			if fv.Typename == "ProjectV2ItemFieldSingleSelectValue" && fv.Field.ID == schema.statusField.id {
 				m.statusName = fv.Name
+				m.statusOptionID = fv.OptionID
 			}
 		}
 	}
@@ -546,4 +584,107 @@ func parseIssueURL(url string) (owner, repo string, number int, err error) {
 		return "", "", 0, fmt.Errorf("cannot parse issue number from %q: %w", url, err)
 	}
 	return parts[0], parts[1], n, nil
+}
+
+// threeWayMerge compares local stage, remote option, and base to detect conflicts
+// or determine if the board was changed by a human (human-move detection).
+// Returns the decision and whether to push or skip based on local/remote changes.
+func threeWayMerge(local Stage, remote string, base BoardBinding) ThreeWayDecision {
+	localChanged := local != base.LocalStageBase
+	remoteChanged := remote != base.RemoteOptionIDBase
+
+	if !localChanged && !remoteChanged {
+		return ThreeWayDecision{
+			Action: "none",
+			Reason: "local and remote unchanged since last sync",
+		}
+	}
+
+	if localChanged && !remoteChanged {
+		return ThreeWayDecision{
+			Action:       "push-local",
+			Reason:       "local stage changed; remote unchanged",
+			LocalChanged: true,
+		}
+	}
+
+	if !localChanged && remoteChanged {
+		return ThreeWayDecision{
+			Action:        "report-remote-move",
+			Reason:        "human moved the card on the board; specsync won't clobber it",
+			RemoteChanged: true,
+		}
+	}
+
+	// Both changed: conflict.
+	return ThreeWayDecision{
+		Action:        "report-conflict",
+		Reason:        "both local stage and remote status changed; manual review needed",
+		LocalChanged:  true,
+		RemoteChanged: true,
+	}
+}
+
+// LoadBoardState reads .specsync/board.json (gitignored, disposable cache).
+// Returns empty state if file doesn't exist (not an error).
+func LoadBoardState(changeDir string) (BoardState, error) {
+	path := filepath.Join(changeDir, ".specsync", "board.json")
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return BoardState{Version: 1, Bindings: make(map[string]BoardBinding)}, nil
+	}
+	if err != nil {
+		return BoardState{}, err
+	}
+
+	var state BoardState
+	if err := json.Unmarshal(data, &state); err != nil {
+		return BoardState{}, fmt.Errorf("parse %s: %w", path, err)
+	}
+	return state, nil
+}
+
+// SaveBoardState atomically writes .specsync/board.json (temp + rename pattern).
+func SaveBoardState(changeDir string, state BoardState) error {
+	data, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	dir := filepath.Join(changeDir, ".specsync")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+
+	path := filepath.Join(dir, "board.json")
+	tmpPath := path + ".tmp"
+
+	if err := os.WriteFile(tmpPath, data, 0o644); err != nil {
+		return err
+	}
+
+	return os.Rename(tmpPath, path)
+}
+
+// saveBoardBinding updates the board binding for a project after a successful projection.
+// Stores the resolved project ID and current option ID for future three-way merge.
+func saveBoardBinding(changeDir string, target BoardTarget, provider string, stage Stage, plan BoardPlan) error {
+	state, err := LoadBoardState(changeDir)
+	if err != nil {
+		return err
+	}
+
+	bindingKey := fmt.Sprintf("%s:%d:%s", target.Owner, target.Number, provider)
+	binding := state.Bindings[bindingKey]
+
+	// Update binding base state to current (for next three-way merge).
+	// After a successful push, local stage and remote option are in sync.
+	binding.Provider = provider
+	binding.ProjectID = plan.ProjectID          // GraphQL node ID of the project
+	binding.LocalStageBase = stage
+	binding.RemoteOptionIDBase = plan.StatusOptionID // What we just pushed to the board
+	binding.SyncedAt = time.Now()
+
+	state.Bindings[bindingKey] = binding
+	return SaveBoardState(changeDir, state)
 }

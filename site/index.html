@@ -147,6 +147,13 @@ nav {
   color: var(--ink);
   margin-bottom: 1.25rem;
 }
+.hero h1 .hero-h1-sub {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: clamp(1.5rem, 3.6vw, 2.25rem);
+  font-weight: 600;
+  line-height: 1.15;
+}
 .hero h1 em {
   font-style: normal;
   color: var(--accent);
@@ -638,7 +645,10 @@ v0.7.0
 <!-- HERO -->
 <section class="hero">
   <p class="hero-eyebrow">OpenSpec × GitHub Issues</p>
-  <h1>The issue <em>is</em> the spec.<br>The changelog <em>is</em> the spec history.</h1>
+  <h1>
+    The issue <em>is</em> the spec.
+    <span class="hero-h1-sub">The changelog <em>is</em> the spec history.</span>
+  </h1>
   <p class="hero-sub">specsync projects your OpenSpec change specs into your issue tracker — automatically. Plan locally, sync with one command, collaborate everywhere. And when you ship, the changelog writes itself from the specs — in user language, never a commit dump.</p>
 
   <div class="hero-cta">
@@ -909,7 +919,8 @@ specsync <span class="c-flag">-dry-run</span></code></div>
             <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.6.0" target="_blank" rel="noopener">v0.6.0</a>
             <span class="release-date">Jul 14, 2026</span>
           </div>
-          <div class="release-body"><p class="release-empty">No spec-derived entries for this release.</p></div>
+          <div class="release-body"><h5>Added</h5><ul><li>GitHub Projects (board) projection: opt-in <code>-project owner/number</code> (or <code>$SPECSYNC_PROJECT</code>) syncs an issue onto a GitHub Projects v2 board, maps the change's stage to the board's Status field, and assigns the acting viewer — unconfigured stays a complete no-op, zero board calls. <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/37" target="_blank" rel="noopener">#37</a></span></li></ul>
+<h5>Fixed</h5><ul><li>Two-way sync no longer duplicates a GitHub issue after <code>pull</code> — the ref-cache key is now repo-stable, and a legacy pre-fix cache entry can no longer be mistaken for a different repo's issue and edited by accident. <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/35" target="_blank" rel="noopener">#35</a></span></li></ul></div>
           <a class="release-full-link" href="https://github.com/androidand/specsync/releases/tag/v0.6.0" target="_blank" rel="noopener">View complete release details on GitHub →</a>
         </div>
         <div class="release">

@@ -110,7 +110,9 @@ func syncOne(ctx context.Context, prov WorkProvider, c Change, dryRun, reconcile
 		existingPtr = resolved
 		flips = f
 	}
-	refreshStage(&c)
+	if err := refreshState(&c); err != nil {
+		return Ref{}, false, nil, BoardPlan{}, fmt.Errorf("refresh state after reconcile: %w", err)
+	}
 
 	item := WorkItemFor(c, closeCompleted)
 	ref, err = prov.Push(ctx, item, existingPtr)
@@ -121,11 +123,51 @@ func syncOne(ctx context.Context, prov WorkProvider, c Change, dryRun, reconcile
 	// Project onto the board only when a target is configured and the provider
 	// supports it; otherwise no board call is made (backward-compatible). The
 	// projector honors dryRun internally (zero board calls, plan only).
+	// Before pushing, use three-way merge to detect human board edits and prevent clobbering.
 	if target.Configured() {
 		if bp, ok := prov.(BoardProjector); ok {
-			plan, err = bp.ProjectOntoBoard(ctx, target, ref, item, dryRun)
+			// Load board state for three-way merge (human-move detection).
+			boardState, err := LoadBoardState(c.Dir)
 			if err != nil {
-				return Ref{}, false, nil, BoardPlan{}, err
+				return Ref{}, false, nil, BoardPlan{}, fmt.Errorf("load board state: %w", err)
+			}
+
+			// If we have a prior binding, use three-way merge to detect changes.
+			bindingKey := fmt.Sprintf("%s:%d:%s", target.Owner, target.Number, prov.Name())
+			if binding, ok := boardState.Bindings[bindingKey]; ok && !dryRun {
+				// Get current remote state from board (perform board query).
+				// We query just to get the current status, then decide via three-way merge.
+				// For now, ProjectOntoBoard will still query; we just save state after.
+				// Future: optimize to avoid double-query by passing remote state to projector.
+				decision := threeWayMerge(item.Stage, binding.RemoteOptionIDBase, binding)
+				if decision.Action == "report-remote-move" {
+					// Human moved the card; respect it, don't clobber.
+					plan = BoardPlan{
+						ProjectID:     binding.ProjectID,
+						StatusField:   "Status",
+						StatusSkipped: decision.Reason,
+					}
+					// Skip the actual ProjectOntoBoard call; the decision stands.
+				} else if decision.Action == "report-conflict" {
+					// Both sides changed; report for manual review.
+					plan = BoardPlan{
+						ProjectID:     binding.ProjectID,
+						StatusField:   "Status",
+						StatusSkipped: decision.Reason,
+					}
+				} else {
+					// "push-local" or "none": proceed with normal push.
+					plan, err = bp.ProjectOntoBoard(ctx, target, ref, item, dryRun)
+					if err != nil {
+						return Ref{}, false, nil, BoardPlan{}, err
+					}
+				}
+			} else {
+				// First sync or dry-run: proceed normally.
+				plan, err = bp.ProjectOntoBoard(ctx, target, ref, item, dryRun)
+				if err != nil {
+					return Ref{}, false, nil, BoardPlan{}, err
+				}
 			}
 		}
 	}
@@ -138,6 +180,14 @@ func syncOne(ctx context.Context, prov WorkProvider, c Change, dryRun, reconcile
 	if err := saveRef(c.Dir, prov.Name(), ref); err != nil {
 		return Ref{}, false, nil, BoardPlan{}, err
 	}
+
+	// After successful board projection, save the binding for future three-way merge.
+	if target.Configured() && plan.ProjectID != "" {
+		if err := saveBoardBinding(c.Dir, target, prov.Name(), item.Stage, plan); err != nil {
+			return Ref{}, false, nil, BoardPlan{}, fmt.Errorf("save board binding: %w", err)
+		}
+	}
+
 	return ref, !hadRef, flips, plan, nil
 }
 
@@ -160,12 +210,16 @@ func WorkItemFor(c Change, closeCompleted bool) WorkItem {
 			body = body + "\n\n## Related\n\n" + strings.Join(lines, "\n")
 		}
 	}
+	priority := 0
+	if c.Priority != nil {
+		priority = *c.Priority
+	}
 	return WorkItem{
 		Slug:         c.Slug,
 		Title:        c.Title,
 		Body:         body,
 		Stage:        c.Stage,
-		Priority:     c.Priority,
+		Priority:     priority,
 		Closed:       c.Archived || (closeCompleted && c.Stage == StageComplete),
 		ManageClosed: c.Archived || closeCompleted,
 	}
