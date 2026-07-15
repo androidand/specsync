@@ -147,6 +147,10 @@ func (p *GitHubProvider) ProjectOntoBoard(ctx context.Context, target BoardTarge
 				return BoardPlan{}, err
 			}
 			plan.StatusName = wantName
+			plan.StatusOptionID = wantOption // Capture for three-way merge binding
+		} else {
+			// Status unchanged, but capture current option ID for binding.
+			plan.StatusOptionID = member.statusOptionID
 		}
 	}
 
@@ -358,14 +362,15 @@ func (p *GitHubProvider) resolveStatusField(ctx context.Context, projectID strin
 }
 
 // boardMembership reports whether ref's issue is on the target board and, if so,
-// its current Status; plus the issue node id (content id) and assignee count.
+// its current Status and option ID; plus the issue node id (content id) and assignee count.
 // This one query is uniform for a freshly-created issue (empty projectItems) and
 // an existing one, and is the primitive every board action builds on.
 type boardMembership struct {
-	contentID     string
-	itemID        string
-	statusName    string
-	assigneeCount int
+	contentID      string
+	itemID         string
+	statusName     string
+	statusOptionID string // option ID for three-way merge
+	assigneeCount  int
 }
 
 func (p *GitHubProvider) boardMembership(ctx context.Context, ref Ref, schema *boardSchema) (boardMembership, error) {
@@ -387,6 +392,7 @@ func (p *GitHubProvider) boardMembership(ctx context.Context, ref Ref, schema *b
               __typename
               ... on ProjectV2ItemFieldSingleSelectValue {
                 name
+                optionId
                 field { ... on ProjectV2FieldCommon { id } }
               }
             }
@@ -413,6 +419,7 @@ func (p *GitHubProvider) boardMembership(ctx context.Context, ref Ref, schema *b
 							Nodes []struct {
 								Typename string `json:"__typename"`
 								Name     string `json:"name"`
+								OptionID string `json:"optionId"`
 								Field    struct {
 									ID string `json:"id"`
 								} `json:"field"`
@@ -440,6 +447,7 @@ func (p *GitHubProvider) boardMembership(ctx context.Context, ref Ref, schema *b
 		for _, fv := range it.FieldValues.Nodes {
 			if fv.Typename == "ProjectV2ItemFieldSingleSelectValue" && fv.Field.ID == schema.statusField.id {
 				m.statusName = fv.Name
+				m.statusOptionID = fv.OptionID
 			}
 		}
 	}
@@ -656,4 +664,27 @@ func SaveBoardState(changeDir string, state BoardState) error {
 	}
 
 	return os.Rename(tmpPath, path)
+}
+
+// saveBoardBinding updates the board binding for a project after a successful projection.
+// Stores the resolved project ID and current option ID for future three-way merge.
+func saveBoardBinding(changeDir string, target BoardTarget, provider string, stage Stage, plan BoardPlan) error {
+	state, err := LoadBoardState(changeDir)
+	if err != nil {
+		return err
+	}
+
+	bindingKey := fmt.Sprintf("%s:%d:%s", target.Owner, target.Number, provider)
+	binding := state.Bindings[bindingKey]
+
+	// Update binding base state to current (for next three-way merge).
+	// After a successful push, local stage and remote option are in sync.
+	binding.Provider = provider
+	binding.ProjectID = plan.ProjectID          // GraphQL node ID of the project
+	binding.LocalStageBase = stage
+	binding.RemoteOptionIDBase = plan.StatusOptionID // What we just pushed to the board
+	binding.SyncedAt = time.Now()
+
+	state.Bindings[bindingKey] = binding
+	return SaveBoardState(changeDir, state)
 }
