@@ -4,6 +4,12 @@ All notable changes to this project are documented here. One entry per shipped
 OpenSpec change — see the linked issues for the full spec and discussion.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.8.0] - 2026-07-16
+
+### Added
+
+<!-- Release notes pending generation from shipped OpenSpec changes. -->
+
 ## [0.7.0] - 2026-07-14
 
 ### Added

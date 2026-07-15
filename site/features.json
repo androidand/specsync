@@ -3,7 +3,7 @@
     "group": "plan",
     "icon": "flow",
     "title": "Spec-first or issue-first",
-    "body": "Start from local <code>proposal.md</code>/<code>tasks.md</code> or pull an existing issue with <code>specsync pull</code>."
+    "body": "Start from local <code>proposal.md</code>/<code>tasks.md</code> or pull an existing issue tracker issue with <code>specsync pull</code>."
   },
   {
     "group": "plan",
@@ -15,7 +15,7 @@
     "group": "collaborate",
     "icon": "idempotent",
     "title": "Idempotent",
-    "body": "Run <code>specsync -slug my-change</code> as often as needed. If the issue already exists, specsync updates it (same identity marker) instead of creating a duplicate."
+    "body": "Run <code>specsync -slug my-change</code> as often as needed. If the issue tracker issue already exists, specsync updates it (same identity marker) instead of creating a duplicate."
   },
   {
     "group": "collaborate",

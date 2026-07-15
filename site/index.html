@@ -128,7 +128,7 @@ nav {
 .hero {
   max-width: var(--max);
   margin: 0 auto;
-  padding: 4rem 2rem 5rem;
+  padding: 4rem 2rem 2.25rem;
 }
 .hero-eyebrow {
   font-size: 0.75rem;
@@ -154,59 +154,43 @@ nav {
 .hero-sub {
   font-size: 1.125rem;
   color: var(--ink-2);
-  max-width: 540px;
+  max-width: 680px;
   line-height: 1.65;
-  margin-bottom: 1.25rem;
-}
-.hero-proof {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 2rem;
-}
-.hero-proof-pill {
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--ink-2);
-  background: var(--surface);
-  border: 1px solid var(--rule);
-  border-radius: 999px;
-  padding: 0.35rem 0.6rem;
+  margin-bottom: 1.5rem;
 }
 
 /* ── HERO CTA ── */
 .hero-cta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 1rem;
+  display: grid;
+  gap: 0.7rem;
+  max-width: 760px;
   margin-bottom: 2.5rem;
 }
-.hero-install {
-  display: inline-flex;
+.hero-install-row {
+  display: flex;
   align-items: center;
   gap: 0.75rem;
   background: var(--dark-bg);
   border-radius: 8px;
-  padding: 0.75rem 0.5rem 0.75rem 1.25rem;
+  padding: 0.72rem 0.5rem 0.72rem 1rem;
   font-family: var(--font-mono);
-  font-size: 0.9375rem;
+  font-size: 0.9rem;
   color: var(--dark-ink);
+  border: 1px solid rgba(255,255,255,0.06);
 }
-.hero-install .install-prompt { color: var(--dark-dim); }
-.hero-install .install-cmd { color: var(--dark-green); }
-.hero-install-alt {
-  font-size: 0.8125rem;
-  color: var(--ink-3);
-  margin-top: 0.5rem;
-  margin-bottom: 1.25rem;
+.hero-install-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dark-dim);
+  min-width: 3.2rem;
+}
+.hero-install-row .install-cmd {
+  color: var(--dark-green);
+  flex: 1 1 auto;
+  min-width: 0;
   overflow-wrap: anywhere;
-}
-.hero-install-alt code {
-  font-family: var(--font-mono);
-  font-size: 0.8125rem;
 }
 .hero-copy-btn {
   display: inline-flex;
@@ -223,84 +207,7 @@ nav {
 }
 .hero-copy-btn:hover { color: var(--dark-ink); border-color: rgba(255,255,255,0.3); }
 .hero-copy-btn svg { width: 15px; height: 15px; }
-.hero-links { display: flex; gap: 0.75rem; align-items: center; justify-content: center; }
-.btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.9375rem;
-  font-weight: 600;
-  text-decoration: none;
-  padding: 0.65rem 1.1rem;
-  border-radius: 8px;
-  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
-}
-.btn-primary {
-  background: var(--accent);
-  color: #fff;
-  border: 1px solid var(--accent);
-}
-.btn-primary:hover { background: var(--accent-mid); border-color: var(--accent-mid); }
-.btn-secondary {
-  background: var(--surface);
-  color: var(--ink);
-  border: 1px solid var(--rule);
-}
-.btn-secondary:hover { border-color: var(--ink-3); box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
-
-/* ── TERMINAL ── */
-.terminal {
-  background: var(--dark-bg);
-  border-radius: 10px;
-  overflow: hidden;
-  box-shadow: 0 8px 32px rgba(26,31,46,0.18), 0 2px 8px rgba(26,31,46,0.12);
-  font-family: var(--font-mono);
-  font-size: 0.875rem;
-  line-height: 1.7;
-}
-.terminal-bar {
-  background: var(--dark-surface);
-  padding: 0.6rem 1rem;
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  border-bottom: 1px solid rgba(255,255,255,0.05);
-}
-.dot { width: 12px; height: 12px; border-radius: 50%; }
-.dot-r { background: #FF5F56; }
-.dot-y { background: #FFBD2E; }
-.dot-g { background: #27C93F; }
-.terminal-body { padding: 1.25rem 1.5rem 1.5rem; overflow-x: auto; }
-.t-prompt { color: var(--dark-dim); }
-.t-cmd { color: var(--dark-ink); }
-.t-out { color: var(--dark-ink-2); }
-.t-green { color: var(--dark-green); }
-.t-line { display: block; min-width: max-content; }
-
-/* typewriter effect */
-.typewriter {
-  overflow: hidden;
-  white-space: nowrap;
-  border-right: 2px solid var(--dark-green);
-  animation: typing 1.8s steps(40) 0.3s both, blink 0.8s step-end 2.1s 4;
-}
-@keyframes typing {
-  from { width: 0; }
-  to   { width: 100%; }
-}
-@keyframes blink {
-  50% { border-color: transparent; }
-}
-.t-after {
-  animation: fadein 0.4s ease 2.2s both;
-}
-@keyframes fadein {
-  from { opacity: 0; transform: translateY(4px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
 @media (prefers-reduced-motion: reduce) {
-  .typewriter { animation: none; width: 100%; border-right: none; }
-  .t-after { animation: none; }
   .flow-card-left,
   .flow-card-right,
   .flow-merge { animation: none; }
@@ -319,6 +226,9 @@ nav {
   max-width: var(--max-layout);
   margin: 0 auto;
   padding: 4.5rem 2rem;
+}
+#how-it-works.section {
+  padding-top: 2.4rem;
 }
 .section-label {
   font-size: 0.7rem;
@@ -353,7 +263,7 @@ nav {
   padding: 1.5rem 1.75rem;
   display: flex;
   flex-wrap: wrap;
-  gap: 1.5rem 2.5rem;
+  gap: 1.25rem 2rem;
 }
 .proof-item { flex: 1 1 220px; }
 .proof-item-label {
@@ -379,11 +289,13 @@ nav {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  gap: 1rem;
+  gap: 0;
 }
 .flow-card {
+  position: relative;
+  overflow: hidden;
   min-height: 230px;
-  border: 1px solid var(--rule);
+  border: none;
   border-radius: 12px;
   padding: 1.25rem 1.3rem;
   display: flex;
@@ -391,36 +303,60 @@ nav {
   justify-content: center;
 }
 .flow-card-left {
-  background: linear-gradient(150deg, #f4faf9 0%, #eef6f3 100%);
+  background: linear-gradient(
+    150deg,
+    color-mix(in srgb, var(--accent) 10%, #ffffff 90%) 0%,
+    color-mix(in srgb, var(--accent-light) 78%, #ffffff 22%) 100%
+  );
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, #ffffff 78%);
   clip-path: polygon(0 0, 92% 0, 100% 50%, 92% 100%, 0 100%);
+  filter: drop-shadow(0 0 0 color-mix(in srgb, var(--accent) 32%, #ffffff 68%));
   animation: flowInLeft 0.7s ease-out both;
 }
 .flow-card-right {
-  background: linear-gradient(210deg, #f7f4fb 0%, #f1edf8 100%);
+  background: linear-gradient(
+    210deg,
+    color-mix(in srgb, var(--ink) 7%, #ffffff 93%) 0%,
+    color-mix(in srgb, var(--accent) 6%, #f3f6fb 94%) 100%
+  );
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 14%, #ffffff 86%);
   clip-path: polygon(8% 0, 100% 0, 100% 100%, 8% 100%, 0 50%);
+  filter: drop-shadow(0 0 0 color-mix(in srgb, var(--ink) 18%, #ffffff 82%));
   animation: flowInRight 0.7s ease-out both;
 }
 .flow-merge {
-  width: 152px;
-  height: 152px;
+  position: relative;
+  z-index: 2;
+  width: 166px;
+  height: 166px;
   border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--accent) 26%, #ffffff 74%);
-  background:
-    radial-gradient(circle at 50% 50%, #ffffff 0 32%, transparent 33%),
-    radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--accent) 12%, #ffffff 88%) 0 62%, transparent 63%),
-    linear-gradient(140deg, #f7f9ff, #f2f8f6);
-  box-shadow: 0 6px 20px rgba(16, 28, 42, 0.08);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, #ffffff 70%);
+  background: color-mix(in srgb, var(--accent-light) 86%, #ffffff 14%);
+  box-shadow: 0 8px 22px rgba(16, 28, 42, 0.08);
   display: flex;
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: 0.85rem;
+  padding: 1rem;
   animation: mergePulse 1.2s ease-out both;
 }
-.flow-merge span {
+.flow-merge-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.24rem;
+}
+.flow-merge-kicker {
+  font-family: var(--font-mono);
+  font-size: 0.86rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.flow-merge-title {
   font-family: var(--font-mono);
   font-size: 0.72rem;
-  line-height: 1.45;
+  line-height: 1.35;
   color: var(--ink-2);
   letter-spacing: 0.01em;
 }
@@ -432,6 +368,13 @@ nav {
   color: var(--accent);
   margin-bottom: 0.5rem;
 }
+.flow-card .step-label {
+  text-align: center;
+  font-size: 0.9rem;
+  letter-spacing: 0.14em;
+  margin-bottom: 1rem;
+  padding: 0.2rem 0;
+}
 .flow-card h3 {
   font-size: 1.05rem;
   font-weight: 600;
@@ -442,6 +385,12 @@ nav {
   font-size: 0.9rem;
   color: var(--ink-2);
   margin-bottom: 0;
+}
+.flow-card-left .step-label { color: var(--accent); }
+.flow-card-right .step-label { color: color-mix(in srgb, var(--ink) 78%, #ffffff 22%); }
+.flow-card-right h3,
+.flow-card-right p {
+  text-align: right;
 }
 /* Inline code in flow text (feature cards and release bodies have their own rules). */
 .flow-card code {
@@ -636,6 +585,8 @@ footer {
     min-height: 0;
     clip-path: none;
     border-radius: 10px;
+    filter: none;
+    border: 1px solid var(--rule);
   }
   .flow-merge {
     width: 100%;
@@ -647,9 +598,8 @@ footer {
   nav { padding: 1.25rem 1.25rem; }
   .nav-links { gap: 0.75rem; }
   .nav-links a:not(.nav-github) { display: none; }
-  .hero-install { width: 100%; }
-  .hero-links { width: 100%; }
-  .btn { flex: 1 1 auto; justify-content: center; }
+  .hero-install-row { width: 100%; }
+  .hero-install-label { min-width: 2.85rem; }
 }
 
 /* ── FOCUS ── */
@@ -667,7 +617,7 @@ a:focus-visible {
   <a class="nav-logo" href="/">
     specsync
     <span class="nav-badge"><!-- VERSION:start -->
-v0.7.0
+v0.8.0
 <!-- VERSION:end --></span>
   </a>
   <div class="nav-links">
@@ -684,68 +634,31 @@ v0.7.0
 <section class="hero">
   <p class="hero-eyebrow">OpenSpec × GitHub Issues</p>
   <h1>The issue <em>is</em> the spec.</h1>
-  <p class="hero-sub">Plan locally with your AI teammates in OpenSpec, then project that source of truth to issues and boards. State stays visible while work moves, and the changelog records spec history when you ship.</p>
-  <div class="hero-proof" aria-label="Core capabilities">
-    <span class="hero-proof-pill">Priority dispatch</span>
-    <span class="hero-proof-pill">Workflow state</span>
-    <span class="hero-proof-pill">Board sync</span>
-  </div>
+  <p class="hero-sub">Plan locally with your AI teammates in OpenSpec, then project that source of truth to issues and boards. Or grab an issue from the board and start planning implementation tasks for it.</p>
 
   <div class="hero-cta">
-    <div class="hero-install">
-      <span class="install-prompt">$</span>
-      <span class="install-cmd" id="hero-install-cmd">npm install -g @androidand/specsync</span>
-      <button class="hero-copy-btn" type="button" onclick="specsyncCopyInstall(this)" aria-label="Copy install command">
+    <div class="hero-install-row">
+      <span class="hero-install-label">npm</span>
+      <span class="install-cmd">npm install -g @androidand/specsync</span>
+      <button class="hero-copy-btn" type="button" onclick="specsyncCopyInstall(this)" data-copy="npm install -g @androidand/specsync" aria-label="Copy npm install command">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M3.5 10.5h-1a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v1"/></svg>
       </button>
     </div>
-    <p class="hero-install-alt">Or: <code>go install github.com/androidand/specsync/cmd/specsync@latest</code></p>
-    <div class="hero-links">
-      <a class="btn btn-primary" href="https://github.com/androidand/specsync" target="_blank" rel="noopener">View on GitHub</a>
-    </div>
-  </div>
-
-  <p class="sr-only" id="terminal-desc">Example: running specsync on a planned change updates the linked issue and reports a concise sync summary for humans and agents.</p>
-  <div class="terminal" aria-hidden="true">
-    <div class="terminal-bar">
-      <span class="dot dot-r"></span>
-      <span class="dot dot-y"></span>
-      <span class="dot dot-g"></span>
-    </div>
-    <div class="terminal-body">
-      <span class="t-line">
-        <span class="t-prompt">~ </span><span class="t-cmd typewriter">specsync -slug feature-state</span>
-      </span>
-      <span class="t-line t-after" style="animation-delay:2.2s">
-        <span class="t-out">&nbsp;&nbsp;updated  https://github.com/org/repo/issues/46  (feature-state)</span>
-      </span>
-      <span class="t-line t-after" style="animation-delay:2.35s">
-        <span class="t-out">&nbsp;&nbsp;reconciled from issue: add board status guard → checked</span>
-      </span>
-      <span class="t-line t-after" style="animation-delay:2.5s">&nbsp;</span>
-      <span class="t-line t-after" style="animation-delay:2.6s">
-        <span class="t-green">&nbsp;&nbsp;specsync:</span><span class="t-out"> 0 created, 1 updated</span>
-      </span>
+    <div class="hero-install-row">
+      <span class="hero-install-label">go</span>
+      <span class="install-cmd">go install github.com/androidand/specsync/cmd/specsync@latest</span>
+      <button class="hero-copy-btn" type="button" onclick="specsyncCopyInstall(this)" data-copy="go install github.com/androidand/specsync/cmd/specsync@latest" aria-label="Copy go install command">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M3.5 10.5h-1a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v1"/></svg>
+      </button>
     </div>
   </div>
 </section>
-
-<hr class="divider">
-
-<!-- WHY -->
-<section class="section" id="why">
-  <p class="section-label">Why specsync</p>
-  <h2>Specs and issues shouldn't be two jobs.</h2>
-  <p>People and agents plan locally; teams need shared visibility. specsync projects local OpenSpec changes into a live backlog of issues and board state, so coordination happens in one place without rewriting work.</p>
-</section>
-
-<hr class="divider">
 
 <!-- HOW IT WORKS -->
 <section class="section" id="how-it-works">
   <p class="section-label">How it works</p>
   <h2>Two flows. One source of truth.</h2>
-  <p>specsync supports both entry points: <strong>spec-first</strong> and <strong>issue-first</strong>. Start from either side, keep OpenSpec as the source of truth, and synchronize issues/boards as work evolves.</p>
+  <p>specsync supports both entry points: <strong>spec-first</strong> and <strong>issue-first</strong> (from your issue tracker). Start from either side, keep OpenSpec as the source of truth, and synchronize issue tracker issues/boards as work evolves.</p>
 
   <div class="flow-converge" aria-label="Spec-first and issue-first converge into one source of truth">
     <article class="flow-card flow-card-left">
@@ -755,13 +668,16 @@ v0.7.0
     </article>
 
     <div class="flow-merge" aria-hidden="true">
-      <span>OpenSpec<br>source of truth</span>
+      <div class="flow-merge-content">
+        <span class="flow-merge-kicker">OpenSpec</span>
+        <span class="flow-merge-title">Authoritative source of truth</span>
+      </div>
     </div>
 
     <article class="flow-card flow-card-right">
       <p class="step-label">Issue-first</p>
       <h3>Pull inward, then evolve in spec</h3>
-      <p>Start from an existing issue via <code>specsync pull</code>, refine locally, and keep issue plus board state aligned.</p>
+      <p>Start from an existing issue tracker issue via <code>specsync pull</code>, refine locally, and keep issue plus board state aligned.</p>
     </article>
   </div>
 </section>
@@ -779,7 +695,7 @@ v0.7.0
         <div class="features">
         <div class="feature">
         <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h6"/><path d="M4 18h6"/><path d="M10 6l3 6"/><path d="M10 18l3-6"/><path d="M13 12h7"/><path d="M18 9l3 3-3 3"/><circle cx="4" cy="6" r="1.5"/><circle cx="4" cy="18" r="1.5"/></svg></span><span class="feature-title">Spec-first or issue-first</span></h4>
-          <p>Start from local <code>proposal.md</code>/<code>tasks.md</code> or pull an existing issue with <code>specsync pull</code>.</p>
+          <p>Start from local <code>proposal.md</code>/<code>tasks.md</code> or pull an existing issue tracker issue with <code>specsync pull</code>.</p>
         </div>
         <div class="feature">
         <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5.5"/><circle cx="12" cy="12" r="1.2"/><path d="M12 12L19.5 8"/></svg></span><span class="feature-title">Planning scan</span></h4>
@@ -792,14 +708,14 @@ v0.7.0
         <div class="features">
         <div class="feature">
         <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M6 10a6 6 0 0 1 10-4"/><path d="M16 6h4v4"/><path d="M18 14a6 6 0 0 1-10 4"/><path d="M8 18H4v-4"/></svg></span><span class="feature-title">Idempotent</span></h4>
-          <p>Run <code>specsync -slug my-change</code> as often as needed. If the issue already exists, specsync updates it (same identity marker) instead of creating a duplicate.</p>
+          <p>Run <code>specsync -slug my-change</code> as often as needed. If the issue tracker issue already exists, specsync updates it (same identity marker) instead of creating a duplicate.</p>
         </div>
         <div class="feature">
         <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h5"/><path d="M5 12h9"/><path d="M5 17h13"/><circle cx="4" cy="7" r="1.2"/><circle cx="4" cy="12" r="1.2"/><circle cx="4" cy="17" r="1.2"/><path d="M19 17l1.8 1.8L23 16.6"/></svg></span><span class="feature-title">Workflow state management</span></h4>
           <p>Set stage explicitly with <code>specsync set-stage my-change [active|blocked|in-review|complete]</code> so progress is visible and committed in metadata.</p>
         </div>
         <div class="feature">
-        <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2c1.1 0 2 .9 2 2v2h2c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H6c-1.1 0-2-.9-2-2V8c0-1.1.9-2 2-2h2V4c0-1.1.9-2 2-2zm0 2h-2v2h2V4zm-6 4v12h12V8h-3v2h-2V8H8v2H6V8H6z"/><path d="M8 12h8"/><path d="M8 14h6"/></svg></span><span class="feature-title">Priority-driven dispatch</span></h4>
+        <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h6"/><path d="M4 18h6"/><path d="M10 6l3 6"/><path d="M10 18l3-6"/><path d="M13 12h7"/><path d="M18 9l3 3-3 3"/><circle cx="4" cy="6" r="1.5"/><circle cx="4" cy="18" r="1.5"/></svg></span><span class="feature-title">Priority-driven dispatch</span></h4>
           <p>Set priorities (1-100) with <code>specsync set-priority my-change 85</code>. Agents respect priority when deciding what to work on next — humans direct focus.</p>
         </div>
         <div class="feature">
@@ -828,20 +744,20 @@ v0.7.0
 
 <!-- PROOF -->
 <section class="section" id="proof">
-  <p class="section-label">Dogfooding proof</p>
-  <h2>specsync manages its own repository.</h2>
-  <p>Every specsync issue is projected from an OpenSpec change. Here's one real example, end to end:</p>
+  <p class="section-label">Repository Evidence</p>
+  <h2>specsync is dogfooded on specsync itself.</h2>
+  <p>This project runs the full loop in public: planning artifact, tracker projection, and shipped release output.</p>
   <div class="proof-card">
     <div class="proof-item">
-      <p class="proof-item-label">OpenSpec change</p>
+      <p class="proof-item-label">Planning artifact</p>
       <a href="https://github.com/androidand/specsync/tree/main/openspec/changes/archive/fix-completion-lifecycle" target="_blank" rel="noopener">openspec/changes/archive/fix-completion-lifecycle</a>
     </div>
     <div class="proof-item">
-      <p class="proof-item-label">Projected issue</p>
+      <p class="proof-item-label">Tracker projection</p>
       <a href="https://github.com/androidand/specsync/issues/29" target="_blank" rel="noopener">specsync#29 — Fix completion lifecycle</a>
     </div>
     <div class="proof-item">
-      <p class="proof-item-label">Generated release note</p>
+      <p class="proof-item-label">Shipped output</p>
       <a href="https://github.com/androidand/specsync/releases/tag/v0.7.0" target="_blank" rel="noopener">v0.7.0 changelog entry</a>
     </div>
   </div>
@@ -855,6 +771,14 @@ v0.7.0
   <p class="section-label">Changelog</p>
   <h2 style="font-size:1.75rem;font-weight:700;letter-spacing:-0.025em;margin-bottom:2rem">Recent releases</h2>
   <!-- CHANGELOG:start -->
+        <div class="release">
+          <div class="release-header">
+            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.8.0" target="_blank" rel="noopener">v0.8.0</a>
+            <span class="release-date">Jul 16, 2026</span>
+          </div>
+          <div class="release-body"><p class="release-empty">No rendered changelog entries for this release yet.</p></div>
+          <a class="release-full-link" href="https://github.com/androidand/specsync/releases/tag/v0.8.0" target="_blank" rel="noopener">View complete release details on GitHub →</a>
+        </div>
         <div class="release">
           <div class="release-header">
             <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.7.0" target="_blank" rel="noopener">v0.7.0</a>
@@ -895,17 +819,17 @@ v0.7.0
 
 <script>
 function specsyncCopyInstall(btn) {
-  var text = document.getElementById("hero-install-cmd").textContent;
+  var text = btn.getAttribute("data-copy") || "";
   var showCopied = function () {
     var original = btn.innerHTML;
     btn.setAttribute("aria-label", "Copied!");
     btn.innerHTML = "<svg viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" aria-hidden=\"true\"><path d=\"M3 8.5l3.2 3.2L13 4.5\"/></svg>";
     setTimeout(function () {
-      btn.setAttribute("aria-label", "Copy install command");
+      btn.setAttribute("aria-label", "Copy command");
       btn.innerHTML = original;
     }, 1500);
   };
-  if (navigator.clipboard && navigator.clipboard.writeText) {
+  if (navigator.clipboard && navigator.clipboard.writeText && text) {
     navigator.clipboard.writeText(text).then(showCopied, function () {
       btn.setAttribute("aria-label", "Copy failed — select the command manually");
     });
