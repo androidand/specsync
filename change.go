@@ -176,8 +176,8 @@ func LoadChange(dir string, archived bool, openspecDir string) (*Change, error) 
 	return c, nil
 }
 
-// loadChangeBySlug finds a change by slug, checking active then archived dirs.
-func loadChangeBySlug(openspecDir, slug string) (*Change, error) {
+// LoadChangeBySlug finds a change by slug, checking active then archived dirs.
+func LoadChangeBySlug(openspecDir, slug string) (*Change, error) {
 	dir := filepath.Join(openspecDir, "changes", slug)
 	c, err := LoadChange(dir, false, openspecDir)
 	if err != nil {

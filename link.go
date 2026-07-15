@@ -40,7 +40,7 @@ func Link(opts LinkOptions) ([]LinkedPair, error) {
 	}
 	entries := make([]entry, len(opts.Slugs))
 	for i, slug := range opts.Slugs {
-		c, err := loadChangeBySlug(opts.OpenSpecDir, slug)
+		c, err := LoadChangeBySlug(opts.OpenSpecDir, slug)
 		if err != nil {
 			return nil, err
 		}

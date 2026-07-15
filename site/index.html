@@ -147,6 +147,13 @@ nav {
   color: var(--ink);
   margin-bottom: 1.25rem;
 }
+.hero h1 .hero-h1-sub {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: clamp(1.5rem, 3.6vw, 2.25rem);
+  font-weight: 600;
+  line-height: 1.15;
+}
 .hero h1 em {
   font-style: normal;
   color: var(--accent);
@@ -625,7 +632,10 @@ v0.7.0
 <!-- HERO -->
 <section class="hero">
   <p class="hero-eyebrow">OpenSpec × GitHub Issues</p>
-  <h1>The issue <em>is</em> the spec.<br>The changelog <em>is</em> the spec history.</h1>
+  <h1>
+    The issue <em>is</em> the spec.
+    <span class="hero-h1-sub">The changelog <em>is</em> the spec history.</span>
+  </h1>
   <p class="hero-sub">specsync projects your OpenSpec change specs into your issue tracker — automatically. Plan locally, sync with one command, collaborate everywhere. And when you ship, the changelog writes itself from the specs — in user language, never a commit dump.</p>
 
   <div class="hero-cta">

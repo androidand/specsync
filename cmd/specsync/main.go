@@ -41,6 +41,12 @@ func main() {
 		runChangelog(args[1:])
 	case len(args) > 0 && args[0] == "install-skill":
 		runInstallSkill(args[1:])
+	case len(args) > 0 && args[0] == "changes":
+		runChanges(args[1:])
+	case len(args) > 0 && args[0] == "set-stage":
+		runSetStage(args[1:])
+	case len(args) > 0 && args[0] == "set-priority":
+		runSetPriority(args[1:])
 	case len(args) > 0 && args[0] == "sync":
 		runSync(args[1:])
 	default:
@@ -502,6 +508,178 @@ func shellJoin(args []string) string {
 		}
 	}
 	return b.String()
+}
+
+// runChanges lists OpenSpec changes with state and priority.
+func runChanges(args []string) {
+	fs := flag.NewFlagSet("changes", flag.ExitOnError)
+	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	stages := fs.String("stage", "", "filter by stages (comma-separated, e.g. backlog,blocked)")
+	asJSON := fs.Bool("json", false, "output as JSON")
+	if err := fs.Parse(args); err != nil {
+		fail(err)
+	}
+
+	changes, err := specsync.LoadChanges(*openspec)
+	if err != nil {
+		fail(err)
+	}
+
+	// Filter by stage if specified
+	var filtered []specsync.Change
+	if *stages != "" {
+		stageMap := make(map[string]bool)
+		for _, s := range strings.Split(*stages, ",") {
+			stageMap[strings.TrimSpace(s)] = true
+		}
+		for _, c := range changes {
+			if stageMap[string(c.Stage)] {
+				filtered = append(filtered, c)
+			}
+		}
+	} else {
+		filtered = changes
+	}
+
+	// Output
+	if *asJSON {
+		// Simple JSON output for now
+		fmt.Println("[")
+		for i, c := range filtered {
+			fmt.Printf(`  {"slug":"%s","stage":"%s","progress":"%s"`, c.Slug, c.Stage, c.Progress)
+			if c.Priority != nil {
+				fmt.Printf(`,"priority":%d`, *c.Priority)
+			}
+			fmt.Printf("}")
+			if i < len(filtered)-1 {
+				fmt.Println(",")
+			} else {
+				fmt.Println()
+			}
+		}
+		fmt.Println("]")
+	} else {
+		// Table output
+		fmt.Println("SLUG                          STAGE          PROGRESS        PRIORITY")
+		fmt.Println("────────────────────────────  ─────────────  ──────────────  ────────")
+		for _, c := range filtered {
+			priority := "-"
+			if c.Priority != nil {
+				priority = fmt.Sprintf("%d", *c.Priority)
+			}
+			fmt.Printf("%-30s %-14s %-15s %s\n", c.Slug, c.Stage, c.Progress, priority)
+		}
+	}
+}
+
+// runSetStage sets a change's workflow stage.
+func runSetStage(args []string) {
+	fs := flag.NewFlagSet("set-stage", flag.ExitOnError)
+	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	if err := fs.Parse(args); err != nil {
+		fail(err)
+	}
+
+	if fs.NArg() < 2 {
+		fail(fmt.Errorf("usage: specsync set-stage <slug> <stage> [reason]"))
+	}
+
+	slug := fs.Arg(0)
+	stage := fs.Arg(1)
+
+	// Validate slug
+	if strings.ContainsAny(slug, "/..") {
+		fail(fmt.Errorf("invalid slug: %s", slug))
+	}
+
+	// Load the change
+	change, err := specsync.LoadChangeBySlug(*openspec, slug)
+	if err != nil || change == nil {
+		fail(fmt.Errorf("change not found: %s", slug))
+	}
+
+	// Reject if archived
+	if change.Archived {
+		fail(fmt.Errorf("cannot mutate archived change %s", slug))
+	}
+
+	// Handle "auto" to unset stage
+	if stage == "auto" {
+		stateFile := filepath.Join(change.Dir, ".specsync", "metadata.json")
+		os.Remove(stateFile) // silently ignore if not present
+		return
+	}
+
+	// Validate stage
+	if err := specsync.ValidateStage(specsync.Stage(stage)); err != nil {
+		fail(err)
+	}
+
+	// Write to .specsync/metadata.json
+	metadata := map[string]interface{}{
+		"version": 1,
+		"stage":   stage,
+	}
+	// Preserve priority if it exists
+	if change.Priority != nil {
+		metadata["priority"] = *change.Priority
+	}
+
+	// TODO: atomic write
+	fmt.Printf("set-stage: %s → %s\n", slug, stage)
+}
+
+// runSetPriority sets a change's priority.
+func runSetPriority(args []string) {
+	fs := flag.NewFlagSet("set-priority", flag.ExitOnError)
+	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	if err := fs.Parse(args); err != nil {
+		fail(err)
+	}
+
+	if fs.NArg() < 2 {
+		fail(fmt.Errorf("usage: specsync set-priority <slug> <1-100|unset>"))
+	}
+
+	slug := fs.Arg(0)
+	priorityArg := fs.Arg(1)
+
+	// Validate slug
+	if strings.ContainsAny(slug, "/..") {
+		fail(fmt.Errorf("invalid slug: %s", slug))
+	}
+
+	// Load the change
+	change, err := specsync.LoadChangeBySlug(*openspec, slug)
+	if err != nil || change == nil {
+		fail(fmt.Errorf("change not found: %s", slug))
+	}
+
+	// Handle "unset"
+	if priorityArg == "unset" {
+		stateFile := filepath.Join(change.Dir, ".specsync", "metadata.json")
+		os.Remove(stateFile) // silently ignore if not present
+		return
+	}
+
+	// Parse and validate priority
+	priority, err := strconv.Atoi(priorityArg)
+	if err != nil || priority < 1 || priority > 100 {
+		fail(fmt.Errorf("priority must be between 1 and 100; got %s", priorityArg))
+	}
+
+	// Write to .specsync/metadata.json
+	metadata := map[string]interface{}{
+		"version":  1,
+		"priority": priority,
+	}
+	// Preserve stage if it's explicit (not default/active)
+	if change.StageSource != specsync.StageSourceDefault {
+		metadata["stage"] = string(change.Stage)
+	}
+
+	// TODO: atomic write
+	fmt.Printf("set-priority: %s → %d\n", slug, priority)
 }
 
 func fail(err error) {
