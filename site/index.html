@@ -3,19 +3,19 @@
 <head>
 <meta charset="utf-8">
 <title>specsync — Keep OpenSpec and GitHub Issues in sync</title>
-<meta name="description" content="The issue is the spec. The changelog is the spec history. specsync keeps OpenSpec changes in sync with GitHub issues.">
+<meta name="description" content="The issue is the spec. The changelog is the spec history. specsync keeps OpenSpec changes in sync with GitHub issues, plus workflow state and Skein prioritization.">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="canonical" href="https://specsync.se/">
 
 <meta property="og:type" content="website">
 <meta property="og:title" content="specsync — The issue is the spec">
-<meta property="og:description" content="Keep OpenSpec changes, GitHub issues, project status and release notes synchronized.">
+<meta property="og:description" content="Keep OpenSpec changes, GitHub issues, workflow state, project status and release notes synchronized. Integrates with Skein for priority-driven dispatch.">
 <meta property="og:url" content="https://specsync.se/">
 <meta property="og:image" content="https://specsync.se/og-image.png">
 
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="specsync — The issue is the spec">
-<meta name="twitter:description" content="Keep OpenSpec changes, GitHub issues, project status and release notes synchronized.">
+<meta name="twitter:description" content="Keep OpenSpec changes, GitHub issues, workflow state, project status and release notes synchronized. Integrates with Skein for priority-driven dispatch.">
 <meta name="twitter:image" content="https://specsync.se/og-image.png">
 
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -788,6 +788,10 @@ specsync link feature-api feature-ui
           <h4>Agent-friendly</h4>
           <p>A bundled skill installs for Claude Code, Codex, OpenCode, Copilot, or any agentskills.io-compatible <code>.agents</code> directory.</p>
         </div>
+        <div class="feature">
+          <h4>Priority-driven dispatch</h4>
+          <p><code>skein focus</code> tells the agent orchestrator what matters most. specsync reads <code>.specsync/metadata.json</code> priority field; Skein's dispatcher picks work in priority order, not randomly.</p>
+        </div>
         </div>
       </div>
       <div class="feature-theme">
@@ -817,6 +821,18 @@ specsync link feature-api feature-ui
           <h4>Projects boards</h4>
           <p>Point <code>-project owner/number</code> at a GitHub Projects board: synced issues land on the board, Status follows the change lifecycle, and human curation is respected.</p>
         </div>
+        <div class="feature">
+          <h4>Workflow state management</h4>
+          <p>Track change lifecycle: <code>backlog → active → in-review → complete</code>. Stages live in committed <code>.specsync/metadata.json</code> alongside priority. Agents update state via hooks — no manual commands needed.</p>
+        </div>
+        <div class="feature">
+          <h4>Automatic board sync</h4>
+          <p>Priority and stage changes sync to GitHub Projects automatically. Three-way merge respects human board moves (won't clobber). Background task every 5 min, or immediate via file watcher.</p>
+        </div>
+        <div class="feature">
+          <h4>Human-move detection</h4>
+          <p>Manually moved a card on the board? specsync detects it and skips the update. Human intent is preserved. Audit log shows what happened: <code>"human moved the card; specsync won't clobber it"</code>.</p>
+        </div>
         </div>
       </div>
       <div class="feature-theme">
@@ -838,11 +854,75 @@ specsync link feature-api feature-ui
           <h4>Spec-driven changelog</h4>
           <p><code>specsync changelog</code> writes a Keep a Changelog section from your shipped changes — one entry per change, release notes authored at planning time, never a raw commit dump.</p>
         </div>
+        <div class="feature">
+          <h4>Block &amp; unblock workflow</h4>
+          <p><code>skein block feature-x "waiting for design"</code> marks it blocked; dispatcher skips it. <code>skein unblock</code> resumes. Clean separation: external blockers don't block other work.</p>
+        </div>
         </div>
       </div>
 <!-- FEATURES:end -->
   </div>
 </div>
+
+<!-- SKEIN INTEGRATION -->
+<section class="section" id="workflow-state">
+  <p class="section-label">Agent-Driven Workflows</p>
+  <h2>Priority-aware dispatch with automatic state tracking</h2>
+  <p>specsync integrates with <a href="https://github.com/skein-dev/skein" target="_blank" rel="noopener">Skein</a>, an agentic development orchestrator, to enable human-directed work prioritization and automatic workflow state management.</p>
+
+  <div style="margin-top: 2rem; padding: 2rem; background: var(--surface); border: 1px solid var(--rule); border-radius: 10px;">
+    <h3 style="font-size: 1.125rem; font-weight: 600; margin-bottom: 1.5rem;">What this enables:</h3>
+    <ul style="list-style: none; padding: 0; display: grid; gap: 1rem; grid-template-columns: 1fr 1fr;">
+      <li style="padding-left: 0;">
+        <strong style="display: block; margin-bottom: 0.25rem; color: var(--accent);">Human-Directed Focus</strong>
+        <span style="color: var(--ink-2); font-size: 0.9375rem;"><code>skein focus feature-x</code> tells agents what matters most. Dispatcher picks work by priority, not randomly.</span>
+      </li>
+      <li style="padding-left: 0;">
+        <strong style="display: block; margin-bottom: 0.25rem; color: var(--accent);">Automatic State Updates</strong>
+        <span style="color: var(--ink-2); font-size: 0.9375rem;">Agents update workflow state automatically: <code>backlog → active → in-review → complete</code>. No manual commands needed.</span>
+      </li>
+      <li style="padding-left: 0;">
+        <strong style="display: block; margin-bottom: 0.25rem; color: var(--accent);">Blocker Management</strong>
+        <span style="color: var(--ink-2); font-size: 0.9375rem;"><code>skein block feature-x "reason"</code> marks work blocked. Dispatcher skips it until <code>skein unblock</code>.</span>
+      </li>
+      <li style="padding-left: 0;">
+        <strong style="display: block; margin-bottom: 0.25rem; color: var(--accent);">Automatic Board Sync</strong>
+        <span style="color: var(--ink-2); font-size: 0.9375rem;">Workflow state syncs to GitHub Projects automatically. Human board moves are preserved via three-way merge.</span>
+      </li>
+      <li style="padding-left: 0;">
+        <strong style="display: block; margin-bottom: 0.25rem; color: var(--accent);">Workflow Transparency</strong>
+        <span style="color: var(--ink-2); font-size: 0.9375rem;">Every priority change, state transition, and board sync decision is audited for compliance and debugging.</span>
+      </li>
+      <li style="padding-left: 0;">
+        <strong style="display: block; margin-bottom: 0.25rem; color: var(--accent);">Priority-Driven Dispatch</strong>
+        <span style="color: var(--ink-2); font-size: 0.9375rem;">specsync priority (1-100) in <code>.specsync/metadata.json</code> drives Skein's work selection. Higher = picked first.</span>
+      </li>
+    </ul>
+  </div>
+
+  <h3 style="font-size: 1.125rem; font-weight: 600; margin-top: 2rem; margin-bottom: 1rem;">Quick example:</h3>
+  <div class="code-block" style="text-align:left;max-width:500px;margin:0 auto">
+<code><span class="c-comment"># 1. Human identifies urgent work</span>
+skein focus feature-security-fix
+<span class="c-out">Priority set to 99 ✓</span>
+
+<span class="c-comment"># 2. Skein's dispatcher picks it (highest priority)</span>
+<span class="c-out">Agent assigned to feature-security-fix</span>
+
+<span class="c-comment"># 3. Agent works (hooks update state automatically)</span>
+<span class="c-out">Stage: active (on_assign hook)</span>
+
+<span class="c-comment"># 4. Agent submits for review</span>
+<span class="c-out">Stage: in-review (on_submit_review hook)</span>
+
+<span class="c-comment"># 5. Board syncs automatically</span>
+<span class="c-out">Board Status: "In Review" ✓</span></code>
+  </div>
+
+  <p style="text-align: center; margin-top: 1.5rem; color: var(--ink-2); font-size: 0.9375rem;">
+    <a href="https://github.com/androidand/specsync/blob/main/openspec/changes/skein-specsync-alignment/proposal.md" target="_blank" rel="noopener">Full specification and implementation guide →</a>
+  </p>
+</section>
 
 <!-- PROOF -->
 <section class="section" id="proof">
@@ -911,6 +991,14 @@ specsync <span class="c-flag">-dry-run</span></code></div>
 <h5>Fixed</h5><ul><li>Two-way sync no longer duplicates a GitHub issue after <code>pull</code> — the ref-cache key is now repo-stable, and a legacy pre-fix cache entry can no longer be mistaken for a different repo's issue and edited by accident. <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/35" target="_blank" rel="noopener">#35</a></span></li>
 <li>Board Status option names now resolve case-insensitively (a stock "To do / In Progress / Done" board no longer falls back to "Todo" for active work), and the promised stage→Status mapping is reachable via <code>-status-map</code> (or <code>$SPECSYNC_STATUS_MAP</code>).</li></ul></div>
           <a class="release-full-link" href="https://github.com/androidand/specsync/releases/tag/v0.6.0" target="_blank" rel="noopener">View complete release details on GitHub →</a>
+        </div>
+        <div class="release">
+          <div class="release-header">
+            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.5.1" target="_blank" rel="noopener">v0.5.1</a>
+            <span class="release-date">Jul 13, 2026</span>
+          </div>
+          <div class="release-body"><p class="release-empty">No rendered changelog entries for this release yet.</p></div>
+          <a class="release-full-link" href="https://github.com/androidand/specsync/releases/tag/v0.5.1" target="_blank" rel="noopener">View complete release details on GitHub →</a>
         </div>
 <!-- CHANGELOG:end -->
 </section>

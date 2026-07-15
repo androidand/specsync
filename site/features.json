@@ -68,5 +68,30 @@
     "group": "ship",
     "title": "Spec-driven changelog",
     "body": "<code>specsync changelog</code> writes a Keep a Changelog section from your shipped changes — one entry per change, release notes authored at planning time, never a raw commit dump."
+  },
+  {
+    "group": "plan",
+    "title": "Priority-driven dispatch",
+    "body": "<code>skein focus</code> tells the agent orchestrator what matters most. specsync reads <code>.specsync/metadata.json</code> priority field; Skein's dispatcher picks work in priority order, not randomly."
+  },
+  {
+    "group": "collaborate",
+    "title": "Workflow state management",
+    "body": "Track change lifecycle: <code>backlog → active → in-review → complete</code>. Stages live in committed <code>.specsync/metadata.json</code> alongside priority. Agents update state via hooks — no manual commands needed."
+  },
+  {
+    "group": "collaborate",
+    "title": "Automatic board sync",
+    "body": "Priority and stage changes sync to GitHub Projects automatically. Three-way merge respects human board moves (won't clobber). Background task every 5 min, or immediate via file watcher."
+  },
+  {
+    "group": "collaborate",
+    "title": "Human-move detection",
+    "body": "Manually moved a card on the board? specsync detects it and skips the update. Human intent is preserved. Audit log shows what happened: <code>\"human moved the card; specsync won't clobber it\"</code>."
+  },
+  {
+    "group": "ship",
+    "title": "Block & unblock workflow",
+    "body": "<code>skein block feature-x \"waiting for design\"</code> marks it blocked; dispatcher skips it. <code>skein unblock</code> resumes. Clean separation: external blockers don't block other work."
   }
 ]
