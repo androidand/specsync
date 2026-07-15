@@ -1,0 +1,233 @@
+# Example: Specsync Integration Configuration for .skein/config.yaml
+#
+# Add this section to your .skein/config.yaml to enable priority-driven dispatch
+# and automatic workflow state management via specsync.
+#
+# This configuration integrates specsync's .specsync/metadata.json (priority, stage)
+# with Skein's dispatcher, giving you human-directed work prioritization.
+
+# ─── SPECSYNC INTEGRATION ─────────────────────────────────────────────────────
+
+specsync:
+  # Enable specsync priority/stage integration (default: true)
+  enabled: true
+
+  # Priority interpretation:
+  #   "specsync" — use 1-100 scale from .specsync/metadata.json (recommended)
+  #   "p1-p5" — legacy Skein P1-P5 scale
+  #   "hybrid" — both systems coexist
+  priority_model: specsync
+
+  # Behavior when a change's stage is "blocked":
+  #   "skip" — don't dispatch (default, recommended)
+  #   "wait_with_timeout" — wait for unblock with timeout (future)
+  #   "escalate" — escalate to human for manual intervention (future)
+  blocked_behavior: skip
+
+  # Metadata loading strategy:
+  #   "lenient" — missing/invalid metadata defaults to priority=0, stage=backlog (default)
+  #   "strict" — fail if metadata.json malformed (safer, but less forgiving)
+  metadata_strategy: lenient
+
+  # Path for audit logging (priority/stage/sync decisions).
+  # Empty = stdout only. Useful for compliance and debugging.
+  audit_log: .skein/specsync-audit.log
+
+  # ─── Board Automation ──────────────────────────────────────────────────────
+  # Automatic syncing of workflow state to GitHub Projects board.
+  # Uses three-way merge to respect human board moves (won't clobber).
+
+  board:
+    # Enable automatic board sync
+    enabled: true
+
+    # Background sync interval (e.g., "5m", "10m", "1h").
+    # How often to poll specsync changes and push to board.
+    sync_interval: 5m
+
+    # Trigger immediate sync when .specsync/metadata.json changes.
+    # Useful for real-time updates when priority/stage changes.
+    auto_sync_on_metadata_change: true
+
+    # Conflict strategy when board and local disagree:
+    #   "report" — log and skip (default, respect human moves)
+    #   "prompt_human" — ask human which to use (future)
+    #   "favor_local" — push local, clobber board (use with caution!)
+    conflict_strategy: report
+
+    # Max retries for failed syncs before giving up
+    max_retries: 3
+
+  # ─── Dispatcher Configuration ─────────────────────────────────────────────
+  # Settings for priority-based change selection.
+
+  dispatcher:
+    # Enable priority-aware dispatch (otherwise FIFO).
+    enabled: true
+
+    # Include "active" stage in pickable changes.
+    # If false (default): only "backlog" can be picked up.
+    # If true: "active" can also be picked (allows re-assignment).
+    include_active_in_queue: false
+
+    # Tie-breaker when two changes have same priority:
+    #   "creation_date" — older changes first (FIFO within priority tier)
+    #   "slug" — alphabetical order by slug
+    secondary_sort: creation_date
+
+    # Minimum priority threshold. Changes below this are skipped.
+    # 0 = no floor (default, include all).
+    min_priority: 0
+
+    # Allow negative priority values (reserved for future use).
+    allow_negative_priority: false
+
+# ─── AGENT HOOKS ───────────────────────────────────────────────────────────
+# Commands to run when agent lifecycle events occur.
+# Automatically update specsync state as agents work.
+
+agent_hooks:
+  # on_assign: When work starts (agent picked up the change)
+  on_assign:
+    - specsync set-stage $(SLUG) active
+
+  # on_progress: Optional; called during work (e.g., after commit)
+  # Useful for resetting "no progress" timers. Default: no-op.
+  # on_progress:
+  #   - specsync set-stage $(SLUG) active  # idempotent, ensure still active
+
+  # on_block: When agent hits external dependency
+  on_block:
+    - specsync set-stage $(SLUG) blocked
+
+  # on_submit_review: When work submitted for review (PR opened, etc.)
+  on_submit_review:
+    - specsync set-stage $(SLUG) in-review
+    # Optional: notify on Slack/Telegram
+    # - /send-notification "PR ready: $(PR_URL)"
+
+  # on_complete: When all tasks done and validated
+  on_complete:
+    - specsync set-stage $(SLUG) complete
+    # Optional: notify completion
+    # - /telegram-notify "✅ $(SLUG) complete"
+
+  # ─── Per-Role Overrides ────────────────────────────────────────────────
+  # Customize hooks for specific agent roles.
+
+  # coder:
+  #   on_assign:
+  #     - specsync set-stage $(SLUG) active
+  #     - /run-unit-tests $(SLUG)  # Custom: run tests on pickup
+  #   on_block:
+  #     - specsync set-stage $(SLUG) blocked
+  #     - /slack-notify "🚧 $(SLUG) blocked, needs help"
+
+  # reviewer:
+  #   on_assign:
+  #     - specsync set-stage $(SLUG) active
+  #   on_complete:
+  #     - specsync set-stage $(SLUG) complete
+  #     - /publish-to-changelog $(SLUG)  # Auto-publish when reviewed
+
+# ─── HUMAN COMMANDS ────────────────────────────────────────────────────────
+# Available commands to direct Skein's work:
+
+# Focus on a change (highest priority):
+#   skein focus feature-security-fix
+#   → Sets priority to 99, ensures stage is backlog
+#   → Next dispatch will pick it first
+
+# Unfocus (reset to default priority):
+#   skein unfocus feature-security-fix
+#   → Resets priority to 0
+
+# Block work (external dependency):
+#   skein block feature-x "waiting for design review from @architect"
+#   → Sets stage to blocked, stores reason in tasks.md
+#   → Dispatcher skips it until unblocked
+
+# Unblock work (resume):
+#   skein unblock feature-x
+#   → Sets stage back to backlog
+#   → Available for dispatch again
+
+# List changes by priority:
+#   skein queue --stage backlog
+#   → Shows backlog with priority and stage
+
+# View board sync history:
+#   skein specsync audit
+#   → Shows sync history, human moves, conflicts
+
+# Migrate existing changes:
+#   skein migrate specsync --auto-prioritize [--dry-run]
+#   → Estimate priority from task count + creation date
+#   skein migrate specsync --clear [--dry-run]
+#   → Reset all to backlog for manual reprioritization
+
+# ─── PRIORITY TIERS ───────────────────────────────────────────────────────
+# Semantic interpretation of 1-100 priority scale:
+
+# 99:       FOCUS — human explicitly said "work on this NOW"
+# 90-98:    CRITICAL — security, data loss, major outage
+# 70-89:    HIGH — user-facing features, important bugs
+# 50-69:    NORMAL — regular work, standard features
+# 30-49:    LOW — nice-to-have, refactoring, tech debt
+# 1-29:     VERY_LOW — polish, docs, cleanup
+# 0 (nil):  DEFAULT — no explicit priority; sort by creation date
+
+# ─── WORKFLOW EXAMPLE ──────────────────────────────────────────────────────
+
+# 1. Human identifies urgent work:
+#    specsync set-priority feature-security-fix 95
+#    skein focus feature-security-fix
+
+# 2. Skein's dispatcher picks it on next cycle:
+#    Queue: [feature-security-fix (95), other-work (50), nice-to-have (20)]
+#    Next pick: feature-security-fix
+
+# 3. Agent assigned (on_assign hook fires):
+#    Hook: specsync set-stage feature-security-fix active
+#    Status: change now shows stage=active
+
+# 4. Agent works, makes progress:
+#    Commits, opens PR, etc.
+
+# 5. Agent submits for review (on_submit_review hook fires):
+#    Hook: specsync set-stage feature-security-fix in-review
+#    Board: Automatically synced to "In Review" status
+
+# 6. Reviewer reviews and approves:
+#    PR merged, all tasks checked
+
+# 7. Reviewer marks complete (on_complete hook fires):
+#    Hook: specsync set-stage feature-security-fix complete
+#    Board: Automatically synced to "Done"
+
+# 8. Change closed, clears the active queue:
+#    Queue now has capacity for next priority work
+
+# ─── TROUBLESHOOTING ───────────────────────────────────────────────────────
+
+# Q: Why isn't my priority affecting dispatch?
+# A: Check:
+#    1. specsync.dispatcher.enabled = true
+#    2. .specsync/metadata.json has priority field
+#    3. Change's stage is backlog (not blocked/archived/complete)
+#    4. Run: skein queue --stage backlog (shows all available)
+
+# Q: I manually moved a card on the board, why didn't it change back?
+# A: That's correct! Three-way merge respects human moves.
+#    Check audit: skein specsync audit
+#    Shows: "human moved the card; specsync won't clobber it"
+
+# Q: How often does board sync run?
+# A: Every sync_interval (default 5m), plus immediately when
+#    .specsync/metadata.json changes (if auto_sync_on_metadata_change=true)
+
+# Q: Can I have per-role priorities?
+# A: No, priority is global. But hooks are per-role, so you can have:
+#    - Coder focuses on implementation
+#    - Reviewer focuses on code quality
+#    - Same priority, but different hooks/actions
