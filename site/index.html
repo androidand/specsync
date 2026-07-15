@@ -154,7 +154,7 @@ nav {
 .hero-sub {
   font-size: 1.125rem;
   color: var(--ink-2);
-  max-width: 680px;
+  max-width: 700px;
   line-height: 1.65;
   margin-bottom: 1.5rem;
 }
@@ -184,13 +184,19 @@ nav {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--dark-dim);
-  min-width: 3.2rem;
+  min-width: 2.2rem;
+  text-align: right;
 }
 .hero-install-row .install-cmd {
   color: var(--dark-green);
   flex: 1 1 auto;
   min-width: 0;
   overflow-wrap: anywhere;
+}
+.hero-trust {
+  font-size: 0.82rem;
+  color: var(--ink-3);
+  margin-top: 0.35rem;
 }
 .hero-copy-btn {
   display: inline-flex;
@@ -599,7 +605,7 @@ footer {
   .nav-links { gap: 0.75rem; }
   .nav-links a:not(.nav-github) { display: none; }
   .hero-install-row { width: 100%; }
-  .hero-install-label { min-width: 2.85rem; }
+  .hero-install-label { min-width: 2.2rem; }
 }
 
 /* ── FOCUS ── */
@@ -634,7 +640,7 @@ v0.8.0
 <section class="hero">
   <p class="hero-eyebrow">OpenSpec × GitHub Issues</p>
   <h1>The issue <em>is</em> the spec.</h1>
-  <p class="hero-sub">Plan locally with your AI teammates in OpenSpec, then project that source of truth to issues and boards. Or grab an issue from the board and start planning implementation tasks for it.</p>
+  <p class="hero-sub">Plan in OpenSpec, sync to issues and boards, and ship from one source of truth. Start spec-first or pull an existing board issue and plan implementation tasks locally.</p>
 
   <div class="hero-cta">
     <div class="hero-install-row">
@@ -651,6 +657,7 @@ v0.8.0
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M3.5 10.5h-1a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v1"/></svg>
       </button>
     </div>
+    <p class="hero-trust">Dogfooded here: every shipped change traces from OpenSpec plan to issue to release notes.</p>
   </div>
 </section>
 
@@ -686,8 +693,8 @@ v0.8.0
 <div class="dark-section" id="features">
   <div class="dark-section-inner">
     <p class="section-label">Features</p>
-    <h2 style="font-size:1.75rem;font-weight:700;letter-spacing:-0.025em;margin-bottom:0.75rem;color:var(--dark-ink)">Everything a spec needs. Nothing it doesn't.</h2>
-    <p style="color:var(--dark-ink-2);max-width:520px">specsync is a small, focused binary. No config file, no daemon, no SDK dependency — just <code style="font-family:var(--font-mono);font-size:0.875em;color:var(--dark-green)">gh</code> under the hood.</p>
+    <h2 style="font-size:1.75rem;font-weight:700;letter-spacing:-0.025em;margin-bottom:0.75rem;color:var(--dark-ink)">Everything a spec workflow needs. Nothing heavyweight.</h2>
+    <p style="color:var(--dark-ink-2);max-width:620px">specsync is a small CLI binary: no daemon, no SDK lock-in, and no mandatory central config file. In GitHub mode it uses <code style="font-family:var(--font-mono);font-size:0.875em;color:var(--dark-green)">gh</code>, with flags and env vars controlling behavior.</p>
 
 <!-- FEATURES:start -->
       <div class="feature-theme">

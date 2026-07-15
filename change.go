@@ -43,7 +43,9 @@ func ValidateStage(stage Stage) error {
 	// Custom stages must match token pattern: lowercase alphanumeric + hyphens
 	pattern := regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
 	if !pattern.MatchString(string(stage)) {
-		return fmt.Errorf("invalid stage %q; must be canonical or match ^[a-z0-9][a-z0-9-]{0,63}$", stage)
+		return fmt.Errorf("invalid stage %q\n"+
+			"  Canonical: backlog, active, blocked, in-review, complete, archived\n"+
+			"  Custom: lowercase letters/numbers/hyphens, 1-64 chars (e.g., awaiting-review)", stage)
 	}
 	return nil
 }
@@ -468,7 +470,13 @@ func normalizeMetadata(m *ChangeMetadata) error {
 
 	if m.Priority != nil {
 		if *m.Priority < 1 || *m.Priority > 100 {
-			return fmt.Errorf("priority must be between 1 and 100; got %d", *m.Priority)
+			return fmt.Errorf("priority must be 1–100; got %d\n"+
+				"  1-29   VERY_LOW  (docs, cleanup)\n"+
+				"  30-49  LOW  (nice-to-have)\n"+
+				"  50-69  NORMAL  (regular work)\n"+
+				"  70-89  HIGH  (user-facing features)\n"+
+				"  90-98  CRITICAL  (security, data loss prevention)\n"+
+				"  99     FOCUS  (human priority)", *m.Priority)
 		}
 	}
 

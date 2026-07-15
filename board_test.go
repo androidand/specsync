@@ -424,3 +424,152 @@ func TestSyncWithoutProjectMakesNoBoardCalls(t *testing.T) {
 		t.Fatalf("sync without -project must make no `gh api graphql` calls")
 	}
 }
+
+// === Three-Way Merge Tests (Phase C) ===
+
+// TestThreeWayMergeNoChange verifies that no update is pushed when neither local nor remote changed.
+func TestThreeWayMergeNoChange(t *testing.T) {
+	base := BoardBinding{
+		LocalStageBase:     StageActive,
+		RemoteOptionIDBase: "OPT_PROG",
+	}
+
+	decision := threeWayMerge(StageActive, "OPT_PROG", base)
+
+	if decision.Action != "none" {
+		t.Errorf("action = %q, want %q", decision.Action, "none")
+	}
+	if decision.LocalChanged || decision.RemoteChanged {
+		t.Errorf("changes detected when nothing changed")
+	}
+}
+
+// TestThreeWayMergeLocalChanged verifies that local progress is pushed when remote unchanged.
+func TestThreeWayMergeLocalChanged(t *testing.T) {
+	base := BoardBinding{
+		LocalStageBase:     StageActive,
+		RemoteOptionIDBase: "OPT_PROG",
+	}
+
+	decision := threeWayMerge(StageComplete, "OPT_PROG", base)
+
+	if decision.Action != "push-local" {
+		t.Errorf("action = %q, want %q", decision.Action, "push-local")
+	}
+	if !decision.LocalChanged {
+		t.Errorf("LocalChanged should be true")
+	}
+	if decision.RemoteChanged {
+		t.Errorf("RemoteChanged should be false")
+	}
+}
+
+// TestThreeWayMergeRemoteChanged verifies human board move detection (CRITICAL: prevents clobbering).
+// This is the key safety feature: when a human moves a card on the board, specsync respects it.
+func TestThreeWayMergeRemoteChanged(t *testing.T) {
+	base := BoardBinding{
+		LocalStageBase:     StageActive,
+		RemoteOptionIDBase: "OPT_PROG",
+	}
+
+	// Remote changed (human moved card from "In progress" to "Done")
+	// but local didn't change
+	decision := threeWayMerge(StageActive, "OPT_DONE", base)
+
+	if decision.Action != "report-remote-move" {
+		t.Errorf("action = %q, want %q (human move detection)", decision.Action, "report-remote-move")
+	}
+	if decision.LocalChanged {
+		t.Errorf("LocalChanged should be false")
+	}
+	if !decision.RemoteChanged {
+		t.Errorf("RemoteChanged should be true")
+	}
+}
+
+// TestThreeWayMergeConflict verifies conflict detection when both sides changed.
+func TestThreeWayMergeConflict(t *testing.T) {
+	base := BoardBinding{
+		LocalStageBase:     StageActive,
+		RemoteOptionIDBase: "OPT_PROG",
+	}
+
+	// Both changed: local to complete, remote to blocked
+	decision := threeWayMerge(StageComplete, "OPT_BLOCKED", base)
+
+	if decision.Action != "report-conflict" {
+		t.Errorf("action = %q, want %q", decision.Action, "report-conflict")
+	}
+	if !decision.LocalChanged {
+		t.Errorf("LocalChanged should be true")
+	}
+	if !decision.RemoteChanged {
+		t.Errorf("RemoteChanged should be true")
+	}
+}
+
+// TestThreeWayMergeHumanMoveToBacklog verifies a specific real scenario.
+func TestThreeWayMergeHumanMoveToBacklog(t *testing.T) {
+	base := BoardBinding{
+		LocalStageBase:     StageActive,
+		RemoteOptionIDBase: "OPT_PROG",
+	}
+
+	// Human moved card back to backlog/todo
+	decision := threeWayMerge(StageActive, "OPT_TODO", base)
+
+	if decision.Action != "report-remote-move" {
+		t.Errorf("action = %q, want %q", decision.Action, "report-remote-move")
+	}
+	if !strings.Contains(decision.Reason, "human") {
+		t.Errorf("reason should mention human: %q", decision.Reason)
+	}
+}
+
+// TestLoadBoardState verifies board state can be loaded from .specsync/board.json.
+func TestLoadBoardState(t *testing.T) {
+	root := t.TempDir()
+	changeDir := filepath.Join(root, "test-change")
+
+	// Create board state file
+	mustWrite(t, filepath.Join(changeDir, ".specsync", "board.json"),
+		`{"version":1,"bindings":{"github:owner/5":{"provider":"github","project_id":"PROJ_1","item_id":"ITEM_1","local_stage_base":"active","remote_option_id_base":"OPT_PROG","synced_at":"2026-07-16T00:00:00Z"}}}`)
+
+	state, err := LoadBoardState(changeDir)
+	if err != nil {
+		t.Fatalf("LoadBoardState: %v", err)
+	}
+
+	if state.Version != 1 {
+		t.Errorf("version = %d, want 1", state.Version)
+	}
+	if len(state.Bindings) != 1 {
+		t.Errorf("bindings count = %d, want 1", len(state.Bindings))
+	}
+
+	binding, ok := state.Bindings["github:owner/5"]
+	if !ok {
+		t.Fatalf("binding not found")
+	}
+	if binding.ProjectID != "PROJ_1" {
+		t.Errorf("project_id = %q, want %q", binding.ProjectID, "PROJ_1")
+	}
+}
+
+// TestLoadBoardStateAbsent returns empty state when file is absent (not an error).
+func TestLoadBoardStateAbsent(t *testing.T) {
+	root := t.TempDir()
+	changeDir := filepath.Join(root, "nonexistent-change")
+
+	state, err := LoadBoardState(changeDir)
+	if err != nil {
+		t.Fatalf("LoadBoardState should not error on absent file: %v", err)
+	}
+
+	if state.Version != 1 {
+		t.Errorf("version = %d, want 1", state.Version)
+	}
+	if len(state.Bindings) != 0 {
+		t.Errorf("bindings should be empty, got %d", len(state.Bindings))
+	}
+}
