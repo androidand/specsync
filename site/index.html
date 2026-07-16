@@ -450,6 +450,82 @@ nav {
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* ── FLOW TERMINALS ── */
+.flow-terminals {
+  margin-top: 2.5rem;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+}
+.terminal {
+  background: var(--dark-bg);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(26,31,46,0.18), 0 2px 8px rgba(26,31,46,0.12);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  line-height: 1.75;
+}
+.terminal-bar {
+  background: var(--dark-surface);
+  padding: 0.55rem 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.dot { width: 11px; height: 11px; border-radius: 50%; }
+.dot-r { background: #FF5F56; }
+.dot-y { background: #FFBD2E; }
+.dot-g { background: #27C93F; }
+.terminal-title {
+  margin-left: 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dark-dim);
+}
+.terminal-body {
+  padding: 1.1rem 1.25rem 1.25rem;
+  overflow-x: auto;
+}
+.t-line { display: block; white-space: pre; }
+.t-prompt { color: var(--dark-dim); }
+.t-cmd { color: var(--dark-ink); }
+.t-out { color: var(--dark-ink-2); }
+.t-green { color: var(--dark-green); }
+.t-comment { color: var(--dark-dim); }
+.t-cmd-type { display: inline-block; vertical-align: bottom; }
+/* .armed hides the demo until it scrolls into view; .play runs it.
+   Without JS neither class is added and the content is simply visible. */
+.terminal.armed .t-cmd-type {
+  width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  border-right: 2px solid var(--dark-green);
+}
+.terminal.armed .t-after { opacity: 0; }
+.terminal.play .t-cmd-type {
+  animation: typing 1.3s steps(24) 0.2s both, cursorBlink 0.8s step-end 1.6s 4;
+}
+.terminal.play .t-after { animation: fadein 0.35s ease both; }
+@keyframes typing {
+  from { width: 0; }
+  to { width: var(--cmd-width); }
+}
+@keyframes cursorBlink {
+  50% { border-color: transparent; }
+}
+@keyframes fadein {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .terminal.armed .t-cmd-type { width: auto; border-right: none; animation: none; }
+  .terminal.armed .t-after { opacity: 1; animation: none; }
+}
+
 /* ── DARK SECTION ── */
 .dark-section {
   background: var(--dark-bg);
@@ -651,6 +727,10 @@ footer {
   .flow-merge {
     justify-self: center;
   }
+  .flow-terminals {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
   .hero h1 { font-size: 2rem; }
   nav { padding: 1.25rem 1.25rem; }
   .nav-links { gap: 0.75rem; }
@@ -748,6 +828,39 @@ v0.8.0
       <h3>Pull inward, then evolve in spec</h3>
       <p>Start from an existing issue tracker issue via <code>specsync pull</code>, refine locally, and keep issue plus board state aligned.</p>
     </article>
+  </div>
+
+  <div class="flow-terminals">
+    <div class="terminal" role="img" aria-label="Terminal demo: specsync creates a GitHub issue from a local OpenSpec change" style="--cmd-width: 24ch">
+      <div class="terminal-bar">
+        <span class="dot dot-r"></span>
+        <span class="dot dot-y"></span>
+        <span class="dot dot-g"></span>
+        <span class="terminal-title">Spec-first</span>
+      </div>
+      <div class="terminal-body">
+        <span class="t-line"><span class="t-comment"># plan lives in openspec/changes/dark-mode/</span></span>
+        <span class="t-line"><span class="t-prompt">$ </span><span class="t-cmd t-cmd-type">specsync -slug dark-mode</span></span>
+        <span class="t-line t-after" style="animation-delay:1.7s"><span class="t-green">  created </span><span class="t-out"> github.com/acme/app/issues/42  (dark-mode)</span></span>
+        <span class="t-line t-after" style="animation-delay:1.85s"><span class="t-out">specsync: 1 created, 0 updated</span></span>
+      </div>
+    </div>
+
+    <div class="terminal" role="img" aria-label="Terminal demo: specsync pull turns an existing issue into a local OpenSpec change" style="--cmd-width: 23ch">
+      <div class="terminal-bar">
+        <span class="dot dot-r"></span>
+        <span class="dot dot-y"></span>
+        <span class="dot dot-g"></span>
+        <span class="terminal-title">Issue-first</span>
+      </div>
+      <div class="terminal-body">
+        <span class="t-line"><span class="t-comment"># adopt an issue somebody already filed</span></span>
+        <span class="t-line"><span class="t-prompt">$ </span><span class="t-cmd t-cmd-type">specsync pull -issue 87</span></span>
+        <span class="t-line t-after" style="animation-delay:1.7s"><span class="t-out">specsync: pulled issue 87 -&gt; openspec/changes/retries</span></span>
+        <span class="t-line t-after" style="animation-delay:1.85s"><span class="t-out">  + proposal.md</span></span>
+        <span class="t-line t-after" style="animation-delay:2s"><span class="t-out">  + tasks.md</span></span>
+      </div>
+    </div>
   </div>
 </section>
 
@@ -926,6 +1039,25 @@ function specsyncCopyInstall(btn) {
     });
   }
 }
+
+// Arm the terminal demos so they type when scrolled into view. Without JS
+// (or with reduced motion) the terminals just show their full content.
+(function () {
+  var terminals = document.querySelectorAll(".terminal");
+  if (!terminals.length) return;
+  var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (reduced || !("IntersectionObserver" in window)) return;
+  terminals.forEach(function (t) { t.classList.add("armed"); });
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) {
+      if (e.isIntersecting) {
+        e.target.classList.add("play");
+        io.unobserve(e.target);
+      }
+    });
+  }, { threshold: 0.5 });
+  terminals.forEach(function (t) { io.observe(t); });
+})();
 </script>
 </body>
 </html>
