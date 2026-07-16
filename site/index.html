@@ -1054,19 +1054,26 @@ v0.8.0
 <!-- FOOTER -->
 <footer>
   <div class="footer-note">
-    <svg class="nd-symbol" viewBox="0 0 64 32" width="46" height="23" role="img" aria-label="Neurodiversity symbol: a rainbow infinity loop">
+    <svg class="nd-symbol" viewBox="0 0 96 52" width="84" height="45.5" role="img" aria-label="Neurodiversity symbol: a rainbow infinity loop, styled as a neon road in space">
       <defs>
-        <linearGradient id="nd-rainbow" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0" stop-color="#E40303"/>
-          <stop offset="0.2" stop-color="#FF8C00"/>
-          <stop offset="0.4" stop-color="#FFD500"/>
-          <stop offset="0.6" stop-color="#008026"/>
-          <stop offset="0.8" stop-color="#24408E"/>
-          <stop offset="1" stop-color="#732982"/>
-        </linearGradient>
+        <path id="nd-inf" d="M8 16 C8 8 14 4 20 4 C28 4 36 28 44 28 C50 28 56 24 56 16 C56 8 50 4 44 4 C36 4 28 28 20 28 C14 28 8 24 8 16 Z" fill="none"/>
+        <filter id="nd-glow" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="2"/></filter>
       </defs>
-      <path d="M8 16 C8 8 14 4 20 4 C28 4 36 28 44 28 C50 28 56 24 56 16 C56 8 50 4 44 4 C36 4 28 28 20 28 C14 28 8 24 8 16 Z"
-            fill="none" stroke="url(#nd-rainbow)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <rect width="96" height="52" rx="11" fill="#12162A"/>
+      <circle cx="14" cy="10" r="0.9" fill="#fff" opacity="0.9"/>
+      <circle cx="86" cy="14" r="0.7" fill="#fff" opacity="0.7"/>
+      <circle cx="78" cy="43" r="0.9" fill="#fff" opacity="0.8"/>
+      <circle cx="10" cy="40" r="0.6" fill="#fff" opacity="0.6"/>
+      <circle cx="49" cy="7" r="0.6" fill="#fff" opacity="0.75"/>
+      <g transform="translate(16,10)">
+        <use href="#nd-inf" stroke="#9db8ff" stroke-width="16" opacity="0.5" filter="url(#nd-glow)"/>
+        <use href="#nd-inf" stroke="#FF3355" stroke-width="14"/>
+        <use href="#nd-inf" stroke="#FF9E1F" stroke-width="11.7"/>
+        <use href="#nd-inf" stroke="#FFE81F" stroke-width="9.4"/>
+        <use href="#nd-inf" stroke="#2BD34F" stroke-width="7"/>
+        <use href="#nd-inf" stroke="#21C8FF" stroke-width="4.7"/>
+        <use href="#nd-inf" stroke="#7A5CFF" stroke-width="2.3"/>
+      </g>
     </svg>
     <p>specsync is built on a simple idea: people and AI agents both do their best work with structure they don't have to invent themselves.</p>
   </div>
