@@ -1,4 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="7" fill="#1B5E3E"/>
-  <text x="16" y="23" font-family="'SF Mono','Cascadia Code','Fira Code',Consolas,monospace" font-size="18" font-weight="700" fill="#E8F5EE" text-anchor="middle">s</text>
+  <rect width="32" height="32" rx="7" fill="#1A1F2E"/>
+  <g fill="none" stroke="#F8F7F4" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M11 6v20"/>
+    <path d="M14 14l6 4-5.5 4"/>
+    <circle cx="11" cy="6" r="2.4" fill="#1A1F2E"/>
+    <circle cx="11" cy="16" r="2.8" fill="#1A1F2E" stroke="#4EC994"/>
+    <circle cx="11" cy="26" r="2.4" fill="#1A1F2E"/>
+  </g>
 </svg>

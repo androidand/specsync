@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 150 240" role="img" aria-label="specsync mark">
+  <!-- The change-spine rune: canonical spec spine with identity nodes,
+       a lifecycle branch (issue → implementation → release), and two
+       detached projections. -->
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M64 30V210" stroke="#1A1F2E" stroke-width="9"/>
+    <path d="M87 94V74L122 50" stroke="#1A1F2E" stroke-width="9"/>
+    <path d="M46 170L20 153" stroke="#1A1F2E" stroke-width="9"/>
+    <path d="M84 131L118 150Q127 155 127 163V167Q127 175 118 180L87 197" stroke="#1A1F2E" stroke-width="9"/>
+    <circle cx="64" cy="30" r="13" fill="#F8F7F4" stroke="#1A1F2E" stroke-width="9"/>
+    <circle cx="64" cy="120" r="16" fill="#F8F7F4" stroke="#1B5E3E" stroke-width="9.5"/>
+    <circle cx="64" cy="210" r="13" fill="#F8F7F4" stroke="#1A1F2E" stroke-width="9"/>
+  </g>
+</svg>

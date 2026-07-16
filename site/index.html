@@ -19,8 +19,15 @@
 <meta name="twitter:image" content="https://specsync.se/og-image.png">
 
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<meta name="theme-color" content="#1B5E3E">
+<meta name="theme-color" content="#F8F7F4">
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 <style>
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('https://cdn.jsdelivr.net/npm/geist@1/dist/fonts/geist-mono/GeistMono-Variable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-display: swap;
+}
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
@@ -40,7 +47,7 @@
   --dark-green:   #4EC994;
   --dark-dim:     #4A5270;
   --font-sans:    -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-  --font-mono:    'SF Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  --font-mono:    'Geist Mono', 'SF Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
   --max:          760px;
   --max-layout:   960px;
 }
@@ -580,7 +587,11 @@ footer {
   font-weight: 600;
   color: var(--ink-2);
   text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
 }
+.footer-mark { opacity: 0.75; }
 .footer-links {
   display: flex;
   gap: 1.5rem;
@@ -634,6 +645,17 @@ a:focus-visible {
 <!-- NAV -->
 <nav>
   <a class="nav-logo" href="/">
+    <svg class="nav-mark" width="15" height="24" viewBox="0 0 150 240" aria-hidden="true">
+      <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M64 30V210" stroke-width="14"/>
+        <path d="M87 94V74L122 50" stroke-width="14"/>
+        <path d="M46 170L20 153" stroke-width="14"/>
+        <path d="M84 131L118 150Q127 155 127 163V167Q127 175 118 180L87 197" stroke-width="14"/>
+        <circle cx="64" cy="30" r="15" fill="var(--bg)" stroke-width="13"/>
+        <circle cx="64" cy="120" r="18" fill="var(--bg)" stroke="var(--accent)" stroke-width="14"/>
+        <circle cx="64" cy="210" r="15" fill="var(--bg)" stroke-width="13"/>
+      </g>
+    </svg>
     specsync
     <span class="nav-badge"><!-- VERSION:start -->
 v0.8.0
@@ -836,7 +858,20 @@ v0.8.0
 <!-- FOOTER -->
 <footer>
   <div class="footer-inner">
-    <a class="footer-logo" href="/">specsync</a>
+    <a class="footer-logo" href="/">
+      <svg class="footer-mark" width="11" height="18" viewBox="0 0 150 240" aria-hidden="true">
+        <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M64 30V210" stroke-width="16"/>
+          <path d="M87 94V74L122 50" stroke-width="16"/>
+          <path d="M46 170L20 153" stroke-width="16"/>
+          <path d="M84 131L118 150Q127 155 127 163V167Q127 175 118 180L87 197" stroke-width="16"/>
+          <circle cx="64" cy="30" r="16" fill="var(--bg)" stroke-width="15"/>
+          <circle cx="64" cy="120" r="19" fill="var(--bg)" stroke="var(--accent)" stroke-width="16"/>
+          <circle cx="64" cy="210" r="16" fill="var(--bg)" stroke-width="15"/>
+        </g>
+      </svg>
+      specsync
+    </a>
     <div class="footer-links">
       <a href="https://github.com/androidand/specsync" target="_blank" rel="noopener">GitHub</a>
       <a href="https://www.npmjs.com/package/@androidand/specsync" target="_blank" rel="noopener">npm</a>

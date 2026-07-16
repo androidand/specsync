@@ -13,6 +13,22 @@ node build.sh
 
 The build is idempotent and updates `index.html` in place.
 
+## Brand assets
+
+- `logo.svg` — the standalone "change spine" mark (spec spine, identity
+  nodes, lifecycle branch). The nav and footer embed heavier-stroke inline
+  copies of the same geometry tuned for small sizes; edit those in
+  `index.html` if the mark changes.
+- `favicon.svg` — a simplified spine-and-branch cut of the mark on a dark
+  tile; the detached projections are dropped on purpose because they read
+  as noise at 16–32 px.
+- Type: the mono face is **Geist Mono** (variable woff2 loaded from
+  jsDelivr, `font-display: swap`), falling back to the previous
+  SF Mono/Cascadia/Consolas stack if the CDN is unreachable.
+- Palette lives in the `:root` CSS variables in `index.html` (`--ink`
+  #1A1F2E, `--accent` #1B5E3E, `--bg` #F8F7F4, `--dark-green` #4EC994) and
+  matches the logo colors exactly.
+
 ## Feature cards
 
 Each `features.json` entry carries a `"group"`: `"plan"`, `"collaborate"`, or
