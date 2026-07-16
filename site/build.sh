@@ -59,12 +59,6 @@ function inlineMd(s) {
     .replace(/`([^`]+)`/g, "<code>$1</code>");
 }
 
-function parseChangelogSections(md) {
-  const sections = {};
-  for (const e of parseChangelogEntries(md)) sections[e.version] = e.body;
-  return sections;
-}
-
 function parseChangelogEntries(md) {
   const lines = md.split("\n");
   const entries = [];
@@ -94,86 +88,30 @@ function parseChangelogEntries(md) {
   return entries;
 }
 
+function parseChangelogSections(md) {
+  const sections = {};
+  for (const e of parseChangelogEntries(md)) sections[e.version] = e.body;
+  return sections;
+}
+
+// Both a local CHANGELOG.md section and a GitHub release body (from v0.7.0
+// on — specsync's own `changelog -release-notes`) share this shape:
+// "### Added"-style headings with bullets, each ending in either
+// "(#N[, #M...])" — a commit resolved to an OpenSpec change's issue — or a
+// bare short hash, for a commit that links to no change (chore/docs/ci
+// commits are already rolled into a "N internal commits omitted" comment by
+// specsync itself, and merge commits never appear at all — so what's left
+// unlinked here is real, shipped feat/fix work that just isn't spec-backed
+// yet). Both render: an issue-linked entry gets a prominent "#N" badge — a
+// spec actually stands behind it. An unlinked one still shows — the release
+// shouldn't read as emptier than it was — but with a quiet commit link
+// instead, so the two are never visually confused. A body that doesn't look
+// like this shape at all (older goreleaser-raw releases, pre v0.7.0) falls
+// back to a plain "view full release" link — never a raw dump.
 const ISSUE_SUFFIX = /\s*\(((?:#\d+)(?:,\s*#\d+)*)\)\s*$/;
 const HASH_SUFFIX = /\s*\(([0-9a-f]{7,40})\)\s*$/i;
 
 function renderChangelogSection(section, repoUrl) {
-  const groups = [];
-  let current = null;
-  let item = null;
-
-  const flush = () => {
-    if (item !== null) {
-      if (!current) { current = { heading: null, items: [] }; groups.push(current); }
-      current.items.push(item.trim());
-      item = null;
-    }
-  };
-
-  for (const line of section.split("\n")) {
-    const heading = line.match(/^#{3,6}\s+(.+)$/);
-    const bullet = line.match(/^[-*]\s+(.+)$/);
-    const isComment = /^<!--.*-->$/.test(line.trim());
-
-    if (heading) {
-      flush();
-      current = { heading: heading[1].trim(), items: [] };
-      groups.push(current);
-      continue;
-    }
-    if (bullet) {
-      flush();
-      item = bullet[1].trim();
-      continue;
-    }
-    if (line.trim() === "" || isComment) continue;
-    if (item !== null) {
-      item += " " + line.trim();
-    }
-  }
-  flush();
-
-  const renderItem = (text) => {
-    const issue = text.match(ISSUE_SUFFIX);
-    if (issue) {
-      const desc = text.slice(0, issue.index).trim();
-      const refs = issue[1].split(",").map((r) => r.trim()).map((ref) =>
-        `<a href="${repoUrl}/issues/${ref.slice(1)}" target="_blank" rel="noopener">${ref}</a>`
-      ).join(", ");
-      return `<li>${inlineMd(desc)} <span class="release-ref">${refs}</span></li>`;
-    }
-
-    const hash = text.match(HASH_SUFFIX);
-    if (hash) {
-      const desc = text.slice(0, hash.index).trim();
-      const short = hash[1].slice(0, 8);
-      return `<li>${inlineMd(desc)} <span class="release-ref"><code>${short}</code></span></li>`;
-    }
-
-    return `<li>${inlineMd(text)}</li>`;
-  };
-
-  return groups.map((g) => {
-    const items = g.items.map(renderItem);
-    if (items.length === 0) return "";
-    const heading = g.heading ? `<h5>${escapeHtml(g.heading)}</h5>` : "";
-    return `${heading}<ul>${items.join("\n")}</ul>`;
-  }).filter(Boolean).join("\n");
-}
-
-// specsync's own `changelog -release-notes` (the source of every release body
-// from v0.7.0 on) writes "### Added"-style headings with bullets, each ending
-// in either "(#N[, #M...])" — a commit resolved to an OpenSpec change's issue
-// — or a bare short hash, for a commit that links to no change. Only the
-// former is user-facing evidence the hero's "never a commit dump" claim
-// depends on: a bare hash is exactly the unattributed-commit residue the
-// landing page shouldn't show (this also naturally excludes merge commits
-// and chore/docs/ci entries, none of which ever carry a "#N"). Hand-written
-// bodies that don't look like this shape (older goreleaser-raw releases, pre
-// v0.7.0) fall back to a plain "view full release" link — never a raw dump.
-const REF_SUFFIX = /\s*\(((?:#\d+)(?:,\s*#\d+)*)\)\s*$/;
-
-function renderReleaseBody(body, repoUrl) {
   const groups = [];
   let current = null;
   let item = null;
@@ -184,7 +122,7 @@ function renderReleaseBody(body, repoUrl) {
       item = null;
     }
   };
-  for (const line of body.split("\n")) {
+  for (const line of section.split("\n")) {
     const h = line.match(/^#{1,6}\s+(.+)$/);
     const bullet = line.match(/^[-*]\s+(.+)$/);
     if (h) {
@@ -205,13 +143,21 @@ function renderReleaseBody(body, repoUrl) {
   return groups.map((g) => {
     const items = g.items
       .map((it) => {
-        const m = it.match(REF_SUFFIX);
-        if (!m) return null; // no resolved issue — not shown on the landing page
-        const text = it.slice(0, m.index).trim();
-        const refs = m[1].split(",").map((r) => r.trim()).map((ref) =>
-          `<a href="${repoUrl}/issues/${ref.slice(1)}" target="_blank" rel="noopener">${ref}</a>`
-        ).join(", ");
-        return `<li>${inlineMd(text)} <span class="release-ref">${refs}</span></li>`;
+        const issue = it.match(ISSUE_SUFFIX);
+        if (issue) {
+          const text = it.slice(0, issue.index).trim();
+          const refs = issue[1].split(",").map((r) => r.trim()).map((ref) =>
+            `<a href="${repoUrl}/issues/${ref.slice(1)}" target="_blank" rel="noopener">${ref}</a>`
+          ).join(", ");
+          return `<li>${inlineMd(text)} <span class="release-ref">${refs}</span></li>`;
+        }
+        const hash = it.match(HASH_SUFFIX);
+        if (hash) {
+          const text = it.slice(0, hash.index).trim();
+          const sha = hash[1];
+          return `<li>${inlineMd(text)} <a class="release-ref-commit" href="${repoUrl}/commit/${sha}" target="_blank" rel="noopener">${sha.slice(0, 7)}</a></li>`;
+        }
+        return null; // no reference at all — not shown on the landing page
       })
       .filter(Boolean);
     if (items.length === 0) return "";
@@ -258,9 +204,9 @@ async function build() {
       const changelogBody = changelogSections[version]
         ? renderChangelogSection(changelogSections[version], "https://github.com/androidand/specsync")
         : "";
-      const releaseBody = r.body ? renderReleaseBody(r.body, "https://github.com/androidand/specsync") : "";
+      const releaseBody = r.body ? renderChangelogSection(r.body, "https://github.com/androidand/specsync") : "";
       const body = changelogBody || releaseBody;
-      const empty = `<p class="release-empty">No rendered changelog entries for this release yet.</p>`;
+      const empty = `<p class="release-empty">No spec-derived entries for this release.</p>`;
       return `        <div class="release">
           <div class="release-header">
             <a class="release-tag" href="${r.html_url}" target="_blank" rel="noopener">${escapeHtml(r.tag_name)}</a>
@@ -279,7 +225,7 @@ async function build() {
       html = replaceRegion(html, "VERSION", `v${released[0].version}`);
       const changelog = released.map((e) => {
         const body = renderChangelogSection(e.body, repoUrl);
-        const empty = `<p class="release-empty">No rendered changelog entries for this release yet.</p>`;
+        const empty = `<p class="release-empty">No spec-derived entries for this release.</p>`;
         const date = /^\d{4}-\d{2}-\d{2}$/.test(e.date)
           ? new Date(`${e.date}T00:00:00Z`).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
           : (e.date || "");

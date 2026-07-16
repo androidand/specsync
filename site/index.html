@@ -531,8 +531,21 @@ nav {
 .release-body code { font-family: var(--font-mono); font-size: 0.85em; background: var(--accent-light); color: var(--accent); padding: 0.1em 0.3em; border-radius: 3px; }
 .release-body h4, .release-body h5 { font-size: 0.875rem; font-weight: 600; margin: 0.75rem 0 0.25rem; color: var(--ink); }
 .release-ref { font-family: var(--font-mono); font-size: 0.8em; }
-.release-ref a { color: var(--ink-3); text-decoration: none; }
-.release-ref a:hover { color: var(--accent); text-decoration: underline; }
+.release-ref a {
+  color: var(--accent);
+  background: var(--accent-light);
+  text-decoration: none;
+  padding: 0.05em 0.4em;
+  border-radius: 999px;
+}
+.release-ref a:hover { text-decoration: underline; }
+.release-ref-commit {
+  font-family: var(--font-mono);
+  font-size: 0.8em;
+  color: var(--ink-3);
+  text-decoration: none;
+}
+.release-ref-commit:hover { color: var(--accent); text-decoration: underline; }
 .release-empty { color: var(--ink-3); font-size: 0.9rem; font-style: italic; }
 .release-full-link {
   display: inline-block;
@@ -791,10 +804,10 @@ v0.8.0
             <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.7.0" target="_blank" rel="noopener">v0.7.0</a>
             <span class="release-date">Jul 14, 2026</span>
           </div>
-          <div class="release-body"><h5>Added</h5><ul><li>resolve refs live at release time, wire into release CI <span class="release-ref"><code>d0578292</code></span></li>
-<li>render changelog from CHANGELOG.md, not the GitHub API <span class="release-ref"><code>e2c18f8d</code></span></li></ul>
-<h5>Fixed</h5><ul><li>never let a failed build degrade committed content <span class="release-ref"><code>9035465c</code></span></li>
-<li>stop reading bare #N in commit prose as issue evidence <span class="release-ref"><code>aeee62a9</code></span></li></ul></div>
+          <div class="release-body"><h5>Added</h5><ul><li>resolve refs live at release time, wire into release CI <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/d0578292" target="_blank" rel="noopener">d057829</a></li>
+<li>render changelog from CHANGELOG.md, not the GitHub API <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/e2c18f8d" target="_blank" rel="noopener">e2c18f8</a></li></ul>
+<h5>Fixed</h5><ul><li>never let a failed build degrade committed content <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/9035465c" target="_blank" rel="noopener">9035465</a></li>
+<li>stop reading bare #N in commit prose as issue evidence <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/aeee62a9" target="_blank" rel="noopener">aeee62a</a></li></ul></div>
           <a class="release-full-link" href="https://github.com/androidand/specsync/releases/tag/v0.7.0" target="_blank" rel="noopener">View complete release details on GitHub →</a>
         </div>
         <div class="release">
@@ -802,11 +815,17 @@ v0.8.0
             <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.6.0" target="_blank" rel="noopener">v0.6.0</a>
             <span class="release-date">Jul 14, 2026</span>
           </div>
-          <div class="release-body"><h5>Added</h5><ul><li>GitHub Projects (board) projection: opt-in <code>-project owner/number</code> (or <code>$SPECSYNC_PROJECT</code>) syncs an issue onto a GitHub Projects v2 board, maps the change's stage to the board's Status field, and assigns the acting viewer — unconfigured stays a complete no-op, zero board calls. <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/37" target="_blank" rel="noopener">#37</a></span></li>
-<li><code>specsync changelog</code>: a Keep a Changelog section built from shipped OpenSpec changes via the trace graph — one entry per change, release notes authored at planning time, never a raw commit dump.</li></ul>
-<h5>Fixed</h5><ul><li>Two-way sync no longer duplicates a GitHub issue after <code>pull</code> — the ref-cache key is now repo-stable, and a legacy pre-fix cache entry can no longer be mistaken for a different repo's issue and edited by accident. <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/35" target="_blank" rel="noopener">#35</a></span></li>
-<li>Board Status option names now resolve case-insensitively (a stock "To do / In Progress / Done" board no longer falls back to "Todo" for active work), and the promised stage→Status mapping is reachable via <code>-status-map</code> (or <code>$SPECSYNC_STATUS_MAP</code>).</li></ul></div>
+          <div class="release-body"><h5>Added</h5><ul><li>GitHub Projects (board) projection: opt-in <code>-project owner/number</code> (or <code>$SPECSYNC_PROJECT</code>) syncs an issue onto a GitHub Projects v2 board, maps the change's stage to the board's Status field, and assigns the acting viewer — unconfigured stays a complete no-op, zero board calls. <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/37" target="_blank" rel="noopener">#37</a></span></li></ul>
+<h5>Fixed</h5><ul><li>Two-way sync no longer duplicates a GitHub issue after <code>pull</code> — the ref-cache key is now repo-stable, and a legacy pre-fix cache entry can no longer be mistaken for a different repo's issue and edited by accident. <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/35" target="_blank" rel="noopener">#35</a></span></li></ul></div>
           <a class="release-full-link" href="https://github.com/androidand/specsync/releases/tag/v0.6.0" target="_blank" rel="noopener">View complete release details on GitHub →</a>
+        </div>
+        <div class="release">
+          <div class="release-header">
+            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.5.1" target="_blank" rel="noopener">v0.5.1</a>
+            <span class="release-date">Jul 13, 2026</span>
+          </div>
+          <div class="release-body"><p class="release-empty">No spec-derived entries for this release.</p></div>
+          <a class="release-full-link" href="https://github.com/androidand/specsync/releases/tag/v0.5.1" target="_blank" rel="noopener">View complete release details on GitHub →</a>
         </div>
 <!-- CHANGELOG:end -->
 </section>

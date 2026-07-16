@@ -15,3 +15,8 @@ logs/
 
 # OS / editor noise
 .DS_Store
+
+# Local tool caches — never source, and .wrangler/cache in particular can
+# carry account identifiers that shouldn't reach a public repo
+.wrangler/
+site/.vite/
