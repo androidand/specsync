@@ -796,7 +796,18 @@ v0.8.0
             <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.8.0" target="_blank" rel="noopener">v0.8.0</a>
             <span class="release-date">Jul 16, 2026</span>
           </div>
-          <div class="release-body"><p class="release-empty">No rendered changelog entries for this release yet.</p></div>
+          <div class="release-body"><h5>Added</h5><ul><li>add three-phase workflow state management for SpecSync <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/0ba30bd4" target="_blank" rel="noopener">0ba30bd</a></li>
+<li>phase 1 - implement SpecSource interface and OpenSpec implementation <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/1065b593" target="_blank" rel="noopener">1065b59</a></li>
+<li>add SpecSourceFactory and --spec CLI flag <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/1094ca19" target="_blank" rel="noopener">1094ca1</a></li>
+<li>implement rich-change-state foundation <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/1ae74b8a" target="_blank" rel="noopener">1ae74b8</a></li>
+<li>add change-status commands (partial) <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/36c7ddeb" target="_blank" rel="noopener">36c7dde</a></li>
+<li>implement three-way merge reconciliation with human-move detection <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/4b7bc5a2" target="_blank" rel="noopener">4b7bc5a</a></li>
+<li>add three-way merge infrastructure for board-state-reconciliation <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/8386fe9c" target="_blank" rel="noopener">8386fe9</a></li>
+<li>add explicit archive-completed execution <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/83898732" target="_blank" rel="noopener">8389873</a></li>
+<li>rework changelog, hero, IA, and a11y per review feedback <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/d0de2e57" target="_blank" rel="noopener">d0de2e5</a></li>
+<li>complete change-status-cli with atomic writes and JSON output <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/fe6e6a39" target="_blank" rel="noopener">fe6e6a3</a></li></ul>
+<h5>Changed</h5><ul><li><strong>Breaking:</strong> repair set-stage/set-priority semantics; drop dead code and artifact docs <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/3cd81b7f" target="_blank" rel="noopener">3cd81b7</a></li></ul>
+<h5>Fixed</h5><ul><li>show unlinked-but-shipped commits too, not just spec-backed ones <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/07602bd3" target="_blank" rel="noopener">07602bd</a></li></ul></div>
           <a class="release-full-link" href="https://github.com/androidand/specsync/releases/tag/v0.8.0" target="_blank" rel="noopener">View complete release details on GitHub →</a>
         </div>
         <div class="release">
@@ -818,14 +829,6 @@ v0.8.0
           <div class="release-body"><h5>Added</h5><ul><li>GitHub Projects (board) projection: opt-in <code>-project owner/number</code> (or <code>$SPECSYNC_PROJECT</code>) syncs an issue onto a GitHub Projects v2 board, maps the change's stage to the board's Status field, and assigns the acting viewer — unconfigured stays a complete no-op, zero board calls. <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/37" target="_blank" rel="noopener">#37</a></span></li></ul>
 <h5>Fixed</h5><ul><li>Two-way sync no longer duplicates a GitHub issue after <code>pull</code> — the ref-cache key is now repo-stable, and a legacy pre-fix cache entry can no longer be mistaken for a different repo's issue and edited by accident. <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/35" target="_blank" rel="noopener">#35</a></span></li></ul></div>
           <a class="release-full-link" href="https://github.com/androidand/specsync/releases/tag/v0.6.0" target="_blank" rel="noopener">View complete release details on GitHub →</a>
-        </div>
-        <div class="release">
-          <div class="release-header">
-            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.5.1" target="_blank" rel="noopener">v0.5.1</a>
-            <span class="release-date">Jul 13, 2026</span>
-          </div>
-          <div class="release-body"><p class="release-empty">No spec-derived entries for this release.</p></div>
-          <a class="release-full-link" href="https://github.com/androidand/specsync/releases/tag/v0.5.1" target="_blank" rel="noopener">View complete release details on GitHub →</a>
         </div>
 <!-- CHANGELOG:end -->
 </section>
