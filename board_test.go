@@ -148,7 +148,7 @@ func project(t *testing.T, f *fakeBoard, target BoardTarget, ref Ref, item WorkI
 	return plan
 }
 
-func orgTarget() BoardTarget { return BoardTarget{Owner: "ExopenGitHub", Number: 6} }
+func orgTarget() BoardTarget { return BoardTarget{Owner: "org", Number: 6} }
 
 func TestBoardResolvesOrgProject(t *testing.T) {
 	f := defaultFake()

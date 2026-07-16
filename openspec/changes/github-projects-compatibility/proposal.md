@@ -12,8 +12,8 @@ list / close) plus labels — verified in `github.go`:
 - there is **no ProjectV2 / `gh project` / GraphQL** usage at all.
 
 For a team whose backlog **is** a GitHub Projects board, this breaks the mental
-model. Reproduced with ExopenGitHub Project #6 ("the backlog board"): specsync
-created issue `ExopenGitHub/ExoKit#16`, and on the board it showed
+model. Reproduced with org Project #1 ("the backlog board"): specsync
+created issue `org/widget-app#16`, and on the board it showed
 `onBoard: false`, `status: null`, `assignees: []`. It carried only the
 `stage:active` **label**. So the issue never appeared as active work on the board
 — because on a Projects board "active" means *on the board* + a **Status** field
@@ -37,7 +37,7 @@ The create-vs-existing distinction is the hard part:
 ## What Changes
 
 - **Opt-in target project.** A new setting names the board to project onto — an
-  org or user ProjectV2 by number, e.g. `-project ExopenGitHub/6` (flag on `sync`
+  org or user ProjectV2 by number, e.g. `-project org/6` (flag on `sync`
   and `pull`, mirroring `-repo`; also readable from a persisted config so it need
   not be retyped). **When unset, behavior is unchanged** — no board calls, exactly
   as today. This keeps the feature backward-compatible and off by default.
@@ -74,10 +74,10 @@ The create-vs-existing distinction is the hard part:
 - Providers other than GitHub — Projects is GitHub-specific; Beads is unaffected.
 - Auto-creating a board or Status options — specsync targets an existing board.
 
-## Prior art: the ExopenGitHub `backlog` MCP
+## Prior art: the org `backlog` MCP
 
-The `backlog` MCP server (`metaverse/backlog/src`) already drives this exact board
-(ExopenGitHub ProjectV2, node id `PVT_kwDOBFiKmc05Iw`) and is the reference for the
+The `backlog` MCP server (`internal-tools/backlog-mcp/src`) already drives this exact board
+(org ProjectV2, node id `PVT_xxxxxxxxxxxxxxxxxxxxx`) and is the reference for the
 mechanisms specsync should adopt:
 
 - **Resolve number → node id, then address by node id.** The board is always

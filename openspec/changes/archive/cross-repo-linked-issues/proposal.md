@@ -17,15 +17,15 @@ Today specsync is strictly 1:1: one slug → one issue in the auto-detected repo
 ```
 # Agent has read the PR context and decided to create two linked follow-up issues
 
-mkdir -p openspec/changes/atomic-design-exokit
-# write proposal.md and tasks.md for ExoKit work
-specsync -slug atomic-design-exokit -repo ExopenGitHub/ExoKit   # creates ExoKit issue
+mkdir -p openspec/changes/atomic-design-widget-app
+# write proposal.md and tasks.md for widget-app work
+specsync -slug atomic-design-widget-app -repo org/widget-app   # creates widget-app issue
 
-mkdir -p openspec/changes/atomic-design-portal
-# write proposal.md and tasks.md for portal cleanup
-specsync -slug atomic-design-portal                              # creates Portal issue
+mkdir -p openspec/changes/atomic-design-dashboard
+# write proposal.md and tasks.md for dashboard cleanup
+specsync -slug atomic-design-dashboard                              # creates Dashboard issue
 
-specsync link atomic-design-exokit atomic-design-portal          # cross-links both
+specsync link atomic-design-widget-app atomic-design-dashboard          # cross-links both
 ```
 
 Both GitHub issues now reference each other and share enough context for any engineer (or agent) to find the sibling issue.

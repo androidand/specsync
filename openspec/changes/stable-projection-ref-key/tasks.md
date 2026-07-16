@@ -18,4 +18,4 @@
 ## Verification
 - [x] `go build ./...` and `go test ./...` green
 - [x] `gofmt` clean
-- [ ] Manual: re-run the ExoKit repro (pull-linked issue + auto-detect push) updates, not duplicates
+- [ ] Manual: re-run the widget-app repro (pull-linked issue + auto-detect push) updates, not duplicates

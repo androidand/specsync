@@ -14,7 +14,7 @@ operations and behave exactly as it does today.
 - **AND** issue create/update behaves exactly as before
 
 #### Scenario: Target project resolves to a node id
-- **WHEN** `-project ExopenGitHub/6` is given
+- **WHEN** `-project org/1` is given
 - **THEN** specsync resolves the project's node id once and reuses it for the run
 
 ### Requirement: Resolve the Status field and options from the project schema
@@ -56,7 +56,7 @@ acting viewer by default (`"me"`), or a configured assignee, resolved login → 
 id.
 
 #### Scenario: A synced change appears as active work on the board
-- **WHEN** an active change is synced with `-project ExopenGitHub/6`
+- **WHEN** an active change is synced with `-project org/1`
 - **THEN** its issue is on the board, its Status is the mapped active option, and it is assigned
 - **AND** it no longer appears only as a `stage:active`-labelled issue off the board
 
@@ -93,6 +93,6 @@ GraphQL/permission error.
 set assignee — and SHALL make no ProjectV2 mutations.
 
 #### Scenario: Preview the board plan
-- **WHEN** `sync -dry-run -project ExopenGitHub/6` runs for an off-board change
+- **WHEN** `sync -dry-run -project org/1` runs for an off-board change
 - **THEN** it prints that it would add the issue, set Status, and assign it
 - **AND** no GraphQL mutation is sent

@@ -5,7 +5,7 @@
 `specsync link` today accepts only local change **slugs**, and each must already
 be synced to an issue (`link.go` errors with "has no synced ref" otherwise). So
 to cross-reference two issues that already exist — especially across repos, e.g.
-`FusionHub#3489 ↔ portal#4084` — you must first `pull` each into a local OpenSpec
+`billing-service#3489 ↔ dashboard#4084` — you must first `pull` each into a local OpenSpec
 change just to add a `## Related` line, littering two repos with specs you never
 wanted. The visible outcome is one cross-reference; the cost is full spec
 scaffolding on both sides.

@@ -29,4 +29,4 @@
 
 ## Verification
 - [x] `go build ./...`, `go test ./...`, `gofmt` clean
-- [ ] Manual: sync a change with `-project ExopenGitHub/6` → issue appears on the board, In progress, assigned; re-run is a no-op
+- [ ] Manual: sync a change with `-project org/6` → issue appears on the board, In progress, assigned; re-run is a no-op

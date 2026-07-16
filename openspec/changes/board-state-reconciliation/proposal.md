@@ -22,8 +22,8 @@ This change implements three-way merge: local stage, remote status, and the exac
   "bindings": {
     "github-projects:owner/5": {
       "provider": "github-projects",
-      "project_id": "PVT_kwDOBx1M-s4Ae5nM",
-      "item_id": "PVTI_lADOBx1M-s4Ae5nMzgABCDE",
+      "project_id": "PVT_xxxxxxxxxxxxxxxxxxxxx",
+      "item_id": "PVTI_xxxxxxxxxxxxxxxxxxxxxxxxxxxx",
       "base": {
         "local_stage": "active",
         "remote_status_option_id": "47fc9ee4"

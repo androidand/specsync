@@ -120,7 +120,7 @@ type OpenSpecChange struct {
 // means "no board" and MUST result in no board operations at all.
 type BoardTarget struct {
 	Owner  string // org or user login that owns the project
-	Number int    // project number, e.g. 6 in ExopenGitHub/6
+	Number int    // project number, e.g. 6 in owner/6
 
 	// Assignee is the login to assign; "" or "me"/"@me" means the acting viewer.
 	Assignee string

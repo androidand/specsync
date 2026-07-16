@@ -65,7 +65,7 @@ func TestParseCommitRefs(t *testing.T) {
 		{
 			"bare ref in narrative prose is not evidence",
 			"fix(sync): guard legacy ref fallback against cross-repo clobber\n\n" +
-				"Two-way sync created a duplicate GitHub issue (ExoKit #15 -> #16) instead\n" +
+				"Two-way sync created a duplicate GitHub issue (widget-app #15 -> #16) instead\n" +
 				"of updating the existing one.",
 			nil, nil,
 		},

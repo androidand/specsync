@@ -8,7 +8,7 @@ specsync SHALL parse `## Blocked by` and `## Blocks` sections in a change's
 directed edges, distinct from the symmetric `## Related` section.
 
 #### Scenario: A frontend change blocked by a backend issue
-- **WHEN** a change's `links.md` has `## Blocked by` → `ExopenGitHub/FusionHub#3489`
+- **WHEN** a change's `links.md` has `## Blocked by` → `org/billing-service#3489`
 - **THEN** specsync treats that backend issue as blocking this change's issue
 - **AND** the dependency direction is preserved (not flattened to "related")
 

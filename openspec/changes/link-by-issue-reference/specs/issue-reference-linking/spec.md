@@ -10,14 +10,14 @@ references MAY be mixed in one invocation. The reference forms SHALL be the same
 shorthands that `links.md` entries accept.
 
 #### Scenario: Link two issues by shorthand
-- **WHEN** `specsync link ExopenGitHub/FusionHub#3489 ExopenGitHub/portal#4084` runs
+- **WHEN** `specsync link org/billing-service#3489 org/dashboard#4084` runs
 - **THEN** each issue is cross-referenced to the other
 - **AND** no local change directory is created for either
 
 #### Scenario: A slug linked to a reference
-- **WHEN** `specsync link my-change ExopenGitHub/portal#4084` runs
+- **WHEN** `specsync link my-change org/dashboard#4084` runs
 - **THEN** the change `my-change` records the issue in its `links.md` as today
-- **AND** issue `portal#4084` is edited to reference `my-change`'s issue
+- **AND** issue `dashboard#4084` is edited to reference `my-change`'s issue
 
 ### Requirement: Cross-reference existing issues without a local spec
 When a `link` argument is an issue reference, specsync SHALL resolve the existing

@@ -3,11 +3,11 @@
 ## Why
 
 Two-way sync silently created a **duplicate issue** in a real run, defeating the
-whole point of the ref cache. Reproduced against `ExopenGitHub/ExoKit`:
+whole point of the ref cache. Reproduced against `org/widget-app`:
 
 1. A change was created by `specsync pull -issue 15` (issue-first flow). `pull`
    constructs a repo-scoped provider, so the ref was cached under the key
-   `"github:ExopenGitHub/ExoKit"` (see `GitHubProvider.Name()` in `github.go:51`).
+   `"github:org/widget-app"` (see `GitHubProvider.Name()` in `github.go:51`).
 2. A later `specsync -slug <change>` was run **without `-repo`**. That provider
    auto-detects the repo via the git remote but leaves `p.repo` empty, so
    `Name()` returns the bare `"github"`.
