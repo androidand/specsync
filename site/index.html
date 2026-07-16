@@ -322,6 +322,10 @@ nav {
   justify-content: center;
 }
 .flow-card-left {
+  /* solid fallbacks first: without them, browsers lacking color-mix() drop
+     every declaration below and the card renders invisible */
+  background: #E8EFEC;
+  box-shadow: inset 0 0 0 1px #CDDCD4;
   background: linear-gradient(
     150deg,
     color-mix(in srgb, var(--accent) 10%, #ffffff 90%) 0%,
@@ -333,6 +337,8 @@ nav {
   animation: flowInLeft 0.7s ease-out both;
 }
 .flow-card-right {
+  background: #EFEFF0;
+  box-shadow: inset 0 0 0 1px #DFE0E2;
   background: linear-gradient(
     210deg,
     color-mix(in srgb, var(--ink) 7%, #ffffff 93%) 0%,
@@ -349,7 +355,9 @@ nav {
   width: 166px;
   height: 166px;
   border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, #ffffff 70%);
+  border: 1px solid #BBCFC5;
+  background: #EBF6F0;
+  border-color: color-mix(in srgb, var(--accent) 30%, #ffffff 70%);
   background: color-mix(in srgb, var(--accent-light) 86%, #ffffff 14%);
   box-shadow: 0 8px 22px rgba(16, 28, 42, 0.08);
   display: flex;
@@ -406,7 +414,7 @@ nav {
   margin-bottom: 0;
 }
 .flow-card-left .step-label { color: var(--accent); }
-.flow-card-right .step-label { color: color-mix(in srgb, var(--ink) 78%, #ffffff 22%); }
+.flow-card-right .step-label { color: #4C505C; color: color-mix(in srgb, var(--ink) 78%, #ffffff 22%); }
 .flow-card-right h3,
 .flow-card-right p {
   text-align: right;
@@ -432,6 +440,14 @@ nav {
 @keyframes mergePulse {
   from { opacity: 0; transform: scale(0.92); }
   to { opacity: 1; transform: scale(1); }
+}
+@keyframes flowInTop {
+  from { opacity: 0; transform: translateY(-20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes flowInBottom {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 /* ── DARK SECTION ── */
@@ -613,22 +629,27 @@ footer {
 
 /* ── RESPONSIVE ── */
 @media (max-width: 640px) {
+  /* Stacked: the convergence rotates 90° — the top card's arrow points down
+     into the circle and the bottom card's points up, instead of vanishing. */
   .flow-converge {
     grid-template-columns: 1fr;
     gap: 0.9rem;
   }
   .flow-card {
     min-height: 0;
-    clip-path: none;
-    border-radius: 10px;
-    filter: none;
-    border: 1px solid var(--rule);
+  }
+  .flow-card-left {
+    clip-path: polygon(0 0, 100% 0, 100% calc(100% - 16px), 50% 100%, 0 calc(100% - 16px));
+    padding-bottom: calc(1.25rem + 16px);
+    animation-name: flowInTop;
+  }
+  .flow-card-right {
+    clip-path: polygon(0 16px, 50% 0, 100% 16px, 100% 100%, 0 100%);
+    padding-top: calc(1.25rem + 16px);
+    animation-name: flowInBottom;
   }
   .flow-merge {
-    width: 100%;
-    height: auto;
-    border-radius: 10px;
-    min-height: 74px;
+    justify-self: center;
   }
   .hero h1 { font-size: 2rem; }
   nav { padding: 1.25rem 1.25rem; }
