@@ -690,7 +690,19 @@ nav {
 /* ── FOOTER ── */
 footer {
   border-top: 1px solid var(--rule);
-  padding: 2rem;
+  padding: 2.5rem 2rem 2rem;
+}
+.footer-note {
+  max-width: var(--max);
+  margin: 0 auto 2rem;
+  text-align: center;
+}
+.footer-note p {
+  font-size: 0.82rem;
+  color: var(--ink-3);
+  max-width: 460px;
+  margin: 0.65rem auto 0;
+  line-height: 1.6;
 }
 .footer-inner {
   max-width: var(--max);
@@ -1041,6 +1053,23 @@ v0.8.0
 
 <!-- FOOTER -->
 <footer>
+  <div class="footer-note">
+    <svg class="nd-symbol" viewBox="0 0 64 32" width="46" height="23" role="img" aria-label="Neurodiversity symbol: a rainbow infinity loop">
+      <defs>
+        <linearGradient id="nd-rainbow" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#E40303"/>
+          <stop offset="0.2" stop-color="#FF8C00"/>
+          <stop offset="0.4" stop-color="#FFD500"/>
+          <stop offset="0.6" stop-color="#008026"/>
+          <stop offset="0.8" stop-color="#24408E"/>
+          <stop offset="1" stop-color="#732982"/>
+        </linearGradient>
+      </defs>
+      <path d="M8 16 C8 8 14 4 20 4 C28 4 36 28 44 28 C50 28 56 24 56 16 C56 8 50 4 44 4 C36 4 28 28 20 28 C14 28 8 24 8 16 Z"
+            fill="none" stroke="url(#nd-rainbow)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <p>I built specsync because both I and the AI agents I work with need structure&nbsp;— and neither of us is very good at creating it without guidelines.</p>
+  </div>
   <div class="footer-inner">
     <a class="footer-logo" href="/">
       <svg class="footer-mark" width="11" height="18" viewBox="0 0 150 240" aria-hidden="true">
