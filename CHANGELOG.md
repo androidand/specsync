@@ -8,30 +8,26 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- Workflow state and priority: `specsync changes` (with `-stage` filter and
-  `-json`), `specsync set-stage <slug> <stage|auto>`, and
-  `specsync set-priority <slug> <1-100|unset>`, backed by a committed
-  `.specsync/metadata.json` per change. Stage derives with the precedence
-  archived folder → metadata → legacy `.status` → task completion → default.
-- Board reconciliation base state in a gitignored `.specsync/board.json`:
-  a three-way merge (local stage vs. remote Status vs. last-synced base)
-  detects human board moves and skips them instead of clobbering.
+- add three-phase workflow state management for SpecSync (0ba30bd4)
+- phase 1 - implement SpecSource interface and OpenSpec implementation (1065b593)
+- add SpecSourceFactory and --spec CLI flag (1094ca19)
+- implement rich-change-state foundation (1ae74b8a)
+- add change-status commands (partial) (36c7ddeb)
+- implement three-way merge reconciliation with human-move detection (4b7bc5a2)
+- add three-way merge infrastructure for board-state-reconciliation (8386fe9c)
+- add explicit archive-completed execution (83898732)
+- rework changelog, hero, IA, and a11y per review feedback (d0de2e57)
+- complete change-status-cli with atomic writes and JSON output (fe6e6a39)
 
 ### Changed
 
-- `Change` gained `Progress`, `Stage`, `StageSource`, and `Priority` fields
-  (additive; changes without metadata behave as before). Library consumers
-  that serialize `Change` should account for the new fields.
-- Archived changes are immutable: `set-stage` and `set-priority` refuse them.
+- **Breaking:** repair set-stage/set-priority semantics; drop dead code and artifact docs (3cd81b7f)
 
 ### Fixed
 
-- `set-stage <slug> auto` and `set-priority <slug> unset` now clear only
-  their own field instead of deleting the whole metadata file (an explicit
-  priority survives unsetting the stage, and vice versa).
-- `set-priority` no longer freezes a tasks- or `.status`-derived stage into
-  an explicit metadata override as a side effect.
-- `set-priority` now rejects archived changes, matching `set-stage`.
+- show unlinked-but-shipped commits too, not just spec-backed ones (07602bd3)
+
+<!-- 15 internal commit(s) omitted (chore/docs/ci/...) -->
 
 ## [0.7.0] - 2026-07-14
 
