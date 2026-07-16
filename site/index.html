@@ -476,7 +476,9 @@ nav {
 .flow-terminals {
   margin-top: 2.5rem;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* each terminal claims ~360px; when two don't fit they wrap to a single
+     column instead of squeezing side by side */
+  grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr));
   gap: 1.25rem;
 }
 .terminal {
@@ -773,10 +775,6 @@ footer {
   }
   .flow-merge {
     justify-self: center;
-  }
-  .flow-terminals {
-    grid-template-columns: 1fr;
-    gap: 1rem;
   }
   .trace-chain {
     grid-template-columns: 1fr;
