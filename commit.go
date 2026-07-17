@@ -25,6 +25,11 @@ type Commit struct {
 	Date           string
 	Raw            string
 	ConventionalOK bool
+	// RevertsHash is the hash named by a "This reverts commit <hash>." body
+	// line (git's standard revert message), "" otherwise. Lets the changelog
+	// cancel a commit against its in-range revert instead of publishing an
+	// entry for behavior the release doesn't contain.
+	RevertsHash string
 }
 
 // headerRE matches a Conventional Commits 1.0.0 header: type(scope)!: description.
@@ -33,6 +38,9 @@ var headerRE = regexp.MustCompile(`^([A-Za-z]+)(?:\(([^)]*)\))?(!)?:[ \t]+(.+)$`
 
 // breakingRE matches a BREAKING CHANGE / BREAKING-CHANGE footer and captures its value.
 var breakingRE = regexp.MustCompile(`(?m)^BREAKING[ -]CHANGE:[ \t]*(.*)$`)
+
+// revertsRE matches git's standard revert body line "This reverts commit <hash>."
+var revertsRE = regexp.MustCompile(`(?im)^this reverts commit ([0-9a-f]{7,40})\.?\s*$`)
 
 // trailingPRRE matches the squash-merge convention of a trailing "(#123)" in the header.
 var trailingPRRE = regexp.MustCompile(`\(#(\d+)\)\s*$`)
@@ -79,6 +87,10 @@ func ParseCommit(hash, author, date, message string) Commit {
 	if bm := breakingRE.FindStringSubmatch(message); bm != nil {
 		c.Breaking = true
 		c.BreakingFooter = strings.TrimSpace(bm[1])
+	}
+
+	if rm := revertsRE.FindStringSubmatch(message); rm != nil {
+		c.RevertsHash = strings.ToLower(rm[1])
 	}
 
 	c.IssueRefs, c.PRRefs = extractRefs(header, message)
