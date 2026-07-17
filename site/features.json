@@ -15,7 +15,7 @@
     "group": "collaborate",
     "icon": "idempotent",
     "title": "Idempotent",
-    "body": "Run <code>specsync -slug my-change</code> as often as needed. If the issue tracker issue already exists, specsync updates it (same identity marker) instead of creating a duplicate."
+    "body": "Run <code>specsync -change my-change</code> as often as needed. If the issue tracker issue already exists, specsync updates it (same identity marker) instead of creating a duplicate."
   },
   {
     "group": "collaborate",
@@ -33,7 +33,7 @@
     "group": "collaborate",
     "icon": "board",
     "title": "Projects board sync",
-    "body": "Project and sync with <code>specsync -slug my-change -project my-org/6</code>. Add <code>-status-map \"active=In Progress,complete=Done\"</code> to align board columns with change stages."
+    "body": "Project and sync with <code>specsync -change my-change -project my-org/6</code>. Add <code>-status-map \"active=In Progress,complete=Done\"</code> to align board columns with change stages."
   },
   {
     "group": "ship",

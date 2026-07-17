@@ -83,11 +83,53 @@ changelog entry as a real bug in this project, same severity as a failing test.
 - When work is complete, ensure tasks are checked, sync once more, and archive
   the completed OpenSpec change.
 
+## Branches, Worktrees & PRs
+
+Feature work goes through a branch and a PR; `main` is for merges and small
+direct commits (docs, typo-level chores). A PR per change closes the loop the
+rest of this file assumes: change ↔ issue ↔ PR, with CI (including the
+unlinked-commit check) gating before merge instead of complaining after.
+
+- **One change, one branch, one PR.** Branch from `main`, named after the
+  change: `feat/<issue>-<change-slug>` (e.g. `feat/52-advisory-title-suggestions`).
+- **Prefer a worktree over switching branches** in the main checkout, so `main`
+  stays clean for pulls and quick fixes:
+  ```
+  git worktree add ../worktrees/specsync-<issue> -b feat/<issue>-<slug>
+  ```
+  Worktrees live under `../worktrees/`, never inside the repo. specsync works
+  the same from a worktree as from the repo root.
+- **Flow**: create/pull the change → implement in the worktree → `specsync
+  -dry-run`, then sync → push branch, open PR referencing the issue
+  (`Closes #<n>`).
+- **Squash-merge; the PR body is what survives.** Iterative commits on the
+  branch are fine (useful for review and bisect). Write the PR body as a short
+  bullet list of what actually shipped — it becomes the permanent commit
+  message on `main`. Rewrite it just before merging if the branch drifted.
+- **Clean up when merged**: `git worktree remove ../worktrees/specsync-<issue>`,
+  delete the branch, archive the OpenSpec change.
+
+### Title conventions
+
+**Title = WHAT, not HOW.** The proposal H1 (which becomes the issue title)
+answers "what will be different after this is done?" — not which files, tools,
+or techniques.
+
+- Good: `Migrate to Prisma 7`, `Fix login SSO reuse`
+- Bad: `Migrate to Prisma 7 prisma-client generator (rewrite ~450 imports)`
+
+specsync never rewrites a title; it prints `title could be tighter: "..."` on
+sync and pull when the title carries scope detail that belongs in the body.
+Treat that as review feedback: fix the H1 at the source. Tight prefixes
+(`refactor:`, `fix:`, `ci:`) are fine.
+
 ## Commit Messages
 
 - Brief, concise, informative — describe the change and why.
 - MUST NOT mention people or agents (no co-author trailers, no attributions).
 - Conventional-commit prefixes (`feat:`, `fix:`, `build:`, `chore:`) are fine.
+- `feat:`/`fix:` commits MUST reference their change's issue (e.g. `(#42)`) —
+  CI fails otherwise, and the changelog degrades to a raw commit line.
 
 ## Documentation Style
 
