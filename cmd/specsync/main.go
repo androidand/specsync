@@ -20,38 +20,77 @@ import (
 // version is the binary version, stamped at release time via -ldflags "-X main.version=...".
 var version = "dev"
 
+// knownSubcommands lists every recognized subcommand name, including "push"
+// as an alias for "sync" and the literal "sync" name itself. Anything else
+// that doesn't start with "-" is an unrecognized bare word, not a flag set
+// for the default sync action.
+var knownSubcommands = map[string]bool{
+	"pull": true, "link": true, "scan": true, "trace": true,
+	"release-plan": true, "changelog": true, "install-skill": true,
+	"changes": true, "set-stage": true, "set-priority": true,
+	"sync": true, "push": true,
+}
+
+// resolveSubcommand decides which subcommand os.Args[1:] selects and returns
+// its remaining arguments. A missing first argument, or one starting with
+// "-", both select "sync" (bare invocation with flags only) — that keeps
+// `specsync -slug foo` working. "push" is a recognized alias for "sync". Any
+// other bare word that isn't in knownSubcommands is an error: Go's flag
+// package stops parsing at the first non-flag argument, so letting an
+// unrecognized word like a typo'd subcommand name reach runSync's
+// flag.Parse would silently discard every flag after it (including
+// -dry-run) instead of failing loud.
+func resolveSubcommand(args []string) (cmd string, rest []string, err error) {
+	if len(args) == 0 {
+		return "sync", args, nil
+	}
+	first := args[0]
+	if isVersionArg(first) {
+		return "version", args[1:], nil
+	}
+	if first == "push" {
+		return "sync", args[1:], nil
+	}
+	if knownSubcommands[first] {
+		return first, args[1:], nil
+	}
+	if strings.HasPrefix(first, "-") {
+		return "sync", args, nil
+	}
+	return "", nil, fmt.Errorf("unknown subcommand %q", first)
+}
+
 func main() {
-	// Subcommands: "pull" reads an issue into a local change; "link" cross-links
-	// two or more specs; the default (no subcommand, or "sync") projects changes
-	// outward to issues.
-	args := os.Args[1:]
-	switch {
-	case len(args) > 0 && isVersionArg(args[0]):
+	cmd, rest, err := resolveSubcommand(os.Args[1:])
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "specsync: %v\n\nRun with no subcommand (optionally with flags) to sync, or use one of: pull, link, scan, trace, release-plan, changelog, install-skill, changes, set-stage, set-priority\n", err)
+		os.Exit(2)
+	}
+	switch cmd {
+	case "version":
 		fmt.Println("specsync " + version)
-	case len(args) > 0 && args[0] == "pull":
-		runPull(args[1:])
-	case len(args) > 0 && args[0] == "link":
-		runLink(args[1:])
-	case len(args) > 0 && args[0] == "scan":
-		runScan(args[1:])
-	case len(args) > 0 && args[0] == "trace":
-		runTrace(args[1:])
-	case len(args) > 0 && args[0] == "release-plan":
-		runReleasePlan(args[1:])
-	case len(args) > 0 && args[0] == "changelog":
-		runChangelog(args[1:])
-	case len(args) > 0 && args[0] == "install-skill":
-		runInstallSkill(args[1:])
-	case len(args) > 0 && args[0] == "changes":
-		runChanges(args[1:])
-	case len(args) > 0 && args[0] == "set-stage":
-		runSetStage(args[1:])
-	case len(args) > 0 && args[0] == "set-priority":
-		runSetPriority(args[1:])
-	case len(args) > 0 && args[0] == "sync":
-		runSync(args[1:])
-	default:
-		runSync(args)
+	case "pull":
+		runPull(rest)
+	case "link":
+		runLink(rest)
+	case "scan":
+		runScan(rest)
+	case "trace":
+		runTrace(rest)
+	case "release-plan":
+		runReleasePlan(rest)
+	case "changelog":
+		runChangelog(rest)
+	case "install-skill":
+		runInstallSkill(rest)
+	case "changes":
+		runChanges(rest)
+	case "set-stage":
+		runSetStage(rest)
+	case "set-priority":
+		runSetPriority(rest)
+	case "sync":
+		runSync(rest)
 	}
 }
 

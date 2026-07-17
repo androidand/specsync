@@ -22,6 +22,58 @@ func TestIsVersionArg(t *testing.T) {
 	}
 }
 
+// TestResolveSubcommand pins dispatch: known subcommands route with their
+// remaining args intact, "push" is a transparent alias for "sync", bare
+// invocations (no args, or flags-only) default to "sync", and any other bare
+// word is rejected rather than silently reaching runSync's flag.Parse (which
+// would otherwise discard every flag typed after it — see the doc comment on
+// resolveSubcommand for the incident this pins).
+func TestResolveSubcommand(t *testing.T) {
+	cases := []struct {
+		name     string
+		args     []string
+		wantCmd  string
+		wantRest []string
+		wantErr  bool
+	}{
+		{"empty", nil, "sync", nil, false},
+		{"flags only", []string{"-slug", "foo"}, "sync", []string{"-slug", "foo"}, false},
+		{"explicit sync", []string{"sync", "-slug", "foo"}, "sync", []string{"-slug", "foo"}, false},
+		{"push alias", []string{"push", "-slug", "foo", "-dry-run"}, "sync", []string{"-slug", "foo", "-dry-run"}, false},
+		{"push alone", []string{"push"}, "sync", []string{}, false},
+		{"pull", []string{"pull", "-issue", "3"}, "pull", []string{"-issue", "3"}, false},
+		{"version word", []string{"version"}, "version", []string{}, false},
+		{"version flag", []string{"-version"}, "version", []string{}, false},
+		{"unknown word", []string{"frobnicate", "-dry-run"}, "", nil, true},
+		{"typo of push", []string{"psh", "-slug", "foo"}, "", nil, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cmd, rest, err := resolveSubcommand(tc.args)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("resolveSubcommand(%v): expected an error, got cmd=%q rest=%v", tc.args, cmd, rest)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("resolveSubcommand(%v): unexpected error: %v", tc.args, err)
+			}
+			if cmd != tc.wantCmd {
+				t.Fatalf("resolveSubcommand(%v) cmd = %q, want %q", tc.args, cmd, tc.wantCmd)
+			}
+			if len(rest) != len(tc.wantRest) {
+				t.Fatalf("resolveSubcommand(%v) rest = %v, want %v", tc.args, rest, tc.wantRest)
+			}
+			for i := range rest {
+				if rest[i] != tc.wantRest[i] {
+					t.Fatalf("resolveSubcommand(%v) rest = %v, want %v", tc.args, rest, tc.wantRest)
+				}
+			}
+		})
+	}
+}
+
 // TestVersionDefault ensures source builds report a non-empty placeholder.
 func TestVersionDefault(t *testing.T) {
 	if version == "" {
