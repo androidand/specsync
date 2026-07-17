@@ -9,10 +9,10 @@ else — including typos and words that aren't subcommands at all, like `push`.
 
 `runSync` builds its `flag.FlagSet` and calls `fs.Parse(args)`. Go's `flag` package
 stops parsing at the first non-flag argument. If that first argument is an unrecognized
-word like `push`, every flag after it — including `-slug` and, critically, `-dry-run` —
+word like `push`, every flag after it — including `-change` and, critically, `-dry-run` —
 is silently never parsed and keeps its zero value.
 
-This was discovered live: `specsync push -slug some-change -dry-run` executed a real,
+This was discovered live: `specsync push -change some-change -dry-run` executed a real,
 unscoped sync of *every* change in the repo and wrote to GitHub, despite `-dry-run`
 being passed. FusionHub's docs (AGENTS.md, `.claude/tools/openspec.md`, etc.) already
 tell agents to run `specsync push` in several places, so this isn't a hypothetical typo

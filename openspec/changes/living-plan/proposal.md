@@ -16,7 +16,7 @@ of OpenSpec's intent history: not "what the patch was" but "how the plan moved."
 append to mid-work without triaging:
 
 ```
-specsync note -slug <slug> "auth refresh races with logout"
+specsync note -change <slug> "auth refresh races with logout"
 ```
 
 It is a managed section (rendered into the issue like `## Tasks` / `## Related`,

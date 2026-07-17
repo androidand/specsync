@@ -6,7 +6,7 @@ Today specsync is strictly 1:1: one slug → one issue in the auto-detected repo
 
 ## Solution
 
-**`-repo` flag on sync**: `specsync -slug <slug> -repo owner/name` creates or updates an issue in an explicit repo instead of the git-remote-detected one. The ref cache key becomes `github:owner/name` (instead of `github`) so a single spec can accumulate refs across multiple repos without conflict.
+**`-repo` flag on sync**: `specsync -change <slug> -repo owner/name` creates or updates an issue in an explicit repo instead of the git-remote-detected one. The ref cache key becomes `github:owner/name` (instead of `github`) so a single spec can accumulate refs across multiple repos without conflict.
 
 **`specsync link <slug1> <slug2>`**: After both issues exist, this command writes `.specsync/links.json` in each change directory (recording the other's issue URL), then syncs both specs. The next push renders a `## Related` section in each issue body, pointing at the other issue by URL. Fully idempotent and re-runnable.
 
@@ -19,11 +19,11 @@ Today specsync is strictly 1:1: one slug → one issue in the auto-detected repo
 
 mkdir -p openspec/changes/atomic-design-widget-app
 # write proposal.md and tasks.md for widget-app work
-specsync -slug atomic-design-widget-app -repo org/widget-app   # creates widget-app issue
+specsync -change atomic-design-widget-app -repo org/widget-app   # creates widget-app issue
 
 mkdir -p openspec/changes/atomic-design-dashboard
 # write proposal.md and tasks.md for dashboard cleanup
-specsync -slug atomic-design-dashboard                              # creates Dashboard issue
+specsync -change atomic-design-dashboard                              # creates Dashboard issue
 
 specsync link atomic-design-widget-app atomic-design-dashboard          # cross-links both
 ```

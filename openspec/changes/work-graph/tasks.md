@@ -3,9 +3,9 @@
 - [ ] Derive issue↔PR↔commit edges via `gh` (search PRs/commits by issue number); route through the existing gh runner abstraction so it is mockable
 - [ ] Derive commit↔release edges via `gh release` / `git tag --contains`
 - [ ] Derive work↔files edges from changed files of the linked PRs/commits
-- [ ] Add `relate` subcommand to `cmd/specsync/main.go`: `-slug` or `-path`, builds the graph, prints the connected slice (related specs + issue/stage, PRs, commits, releases) in stable order
+- [ ] Add `relate` subcommand to `cmd/specsync/main.go`: `-change` or `-path`, builds the graph, prints the connected slice (related specs + issue/stage, PRs, commits, releases) in stable order
 - [ ] Guarantee `relate` is read-only — no tracker writes, no `refs.json`/`links.md` mutation
 - [ ] Optional delta annotation: if `openspec` is on PATH, tag spec nodes with ADDED/MODIFIED/REMOVED counts; no-op and identical output when absent
 - [ ] Tests: deterministic slice for a fixture repo (git/gh calls mocked via the runner); delta gate off → byte-identical output; isolated spec (no edges) handled
 - [ ] Document `relate` + the asserted-graph principle in the skill + README; list the parked non-goals (graph.json, Graphify, release-plan)
-- [ ] Build, install, smoke-test `specsync relate -slug <x>` and `-path <file>`
+- [ ] Build, install, smoke-test `specsync relate -change <x>` and `-path <file>`

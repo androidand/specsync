@@ -67,6 +67,10 @@ func resolveSubcommand(args []string) (cmd string, rest []string, err error) {
 	if suggestion, ok := knownConfusions[first]; ok {
 		return "", nil, fmt.Errorf("unknown subcommand %q — did you mean %q? specsync's sync also reconciles tracker state back into tasks.md, so it isn't a one-way push", first, suggestion)
 	}
+	// Check for deprecated -slug flag used as a subcommand.
+	if first == "-slug" || first == "--slug" {
+		return "", nil, fmt.Errorf("unknown subcommand %q — did you mean -change? (specsync defaults to syncing all changes; use -change <name> to sync a single change)", first)
+	}
 	return "", nil, fmt.Errorf("unknown subcommand %q", first)
 }
 
@@ -113,7 +117,7 @@ func isVersionArg(arg string) bool {
 func runSync(args []string) {
 	fs := flag.NewFlagSet("sync", flag.ExitOnError)
 	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
-	slug := fs.String("slug", "", "sync only this change (default: all changes)")
+	change := fs.String("change", "", "sync only this change (default: all changes)")
 	repo := fs.String("repo", "", "target repo as owner/name (default: auto-detect from git remote)")
 	providerName := fs.String("provider", "github", "work provider: github (default, human-facing) or beads (agent-facing)")
 	dryRun := fs.Bool("dry-run", false, "print the provider commands and rendered body without executing")
@@ -122,6 +126,12 @@ func runSync(args []string) {
 	project := fs.String("project", "", "target GitHub Projects board as owner/number (default: $SPECSYNC_PROJECT; unset = no board)")
 	assignee := fs.String("assignee", "", "board assignee login (default: the acting viewer, \"me\")")
 	statusMap := fs.String("status-map", "", "stage→Status overrides as stage=Name pairs, e.g. \"active=In Progress,archived=Done\" (default: $SPECSYNC_STATUS_MAP)")
+	// Handle deprecated -slug flag with helpful error.
+	for _, arg := range args {
+		if arg == "-slug" || arg == "--slug" {
+			fail(fmt.Errorf("unknown flag %s — did you mean -change?", arg))
+		}
+	}
 	_ = fs.Parse(args)
 
 	abs, err := filepath.Abs(*openspec)
@@ -154,7 +164,7 @@ func runSync(args []string) {
 	res, err := specsync.Sync(context.Background(), specsync.Options{
 		OpenSpecDir:    abs,
 		Provider:       provider,
-		Slug:           *slug,
+		Slug:           *change,
 		DryRun:         *dryRun,
 		Reconcile:      *reconcile,
 		CloseCompleted: *closeCompleted,
@@ -193,12 +203,18 @@ func runPull(args []string) {
 	fs := flag.NewFlagSet("pull", flag.ExitOnError)
 	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
 	issue := fs.String("issue", "", "issue number to pull into a local change (required)")
-	slug := fs.String("slug", "", "change slug (default: derived from the issue title)")
+	change := fs.String("change", "", "change name (default: derived from the issue title)")
 	repo := fs.String("repo", "", "source repo as owner/name (default: auto-detect from git remote)")
 	dryRun := fs.Bool("dry-run", false, "show what would be written without touching disk")
 	project := fs.String("project", "", "target GitHub Projects board as owner/number (default: $SPECSYNC_PROJECT; unset = no board)")
 	assignee := fs.String("assignee", "", "board assignee login (default: the acting viewer, \"me\")")
 	statusMap := fs.String("status-map", "", "stage→Status overrides as stage=Name pairs, e.g. \"active=In Progress,archived=Done\" (default: $SPECSYNC_STATUS_MAP)")
+	// Handle deprecated -slug flag with helpful error.
+	for _, arg := range args {
+		if arg == "-slug" || arg == "--slug" {
+			fail(fmt.Errorf("unknown flag %s — did you mean -change?", arg))
+		}
+	}
 	_ = fs.Parse(args)
 
 	if strings.TrimSpace(*issue) == "" {
@@ -217,7 +233,7 @@ func runPull(args []string) {
 		OpenSpecDir: abs,
 		Provider:    makeProvider(*repo, false, "github"),
 		IssueID:     *issue,
-		Slug:        *slug,
+		Slug:        *change,
 		DryRun:      *dryRun,
 		Project:     target,
 	})
@@ -258,19 +274,19 @@ func runPull(args []string) {
 	}
 }
 
-// runLink writes links.md for each slug (recording the other's issue URL) and
+// runLink writes links.md for each change (recording the other's issue URL) and
 // then syncs each spec so the "## Related" section appears in both GitHub issues.
 //
-// Usage: specsync link [flags] <slug1> <slug2> [slug3...]
+// Usage: specsync link [flags] <change1> <change2> [<change3>...]
 func runLink(args []string) {
 	fs := flag.NewFlagSet("link", flag.ExitOnError)
 	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
 	dryRun := fs.Bool("dry-run", false, "show what would change without writing files or calling GitHub")
 	_ = fs.Parse(args)
 
-	slugs := fs.Args()
-	if len(slugs) < 2 {
-		fail(fmt.Errorf("link: at least 2 slugs required\nusage: specsync link <slug1> <slug2> [slug3...]"))
+	changes := fs.Args()
+	if len(changes) < 2 {
+		fail(fmt.Errorf("link: at least 2 changes required\nusage: specsync link <change1> <change2> [<change3>...]"))
 	}
 
 	abs, err := filepath.Abs(*openspec)
@@ -280,7 +296,7 @@ func runLink(args []string) {
 
 	pairs, err := specsync.Link(specsync.LinkOptions{
 		OpenSpecDir: abs,
-		Slugs:       slugs,
+		Slugs:       changes,
 		DryRun:      *dryRun,
 	})
 	if err != nil {
@@ -683,11 +699,11 @@ func runSetStage(args []string) {
 		fail(err)
 	}
 	if fs.NArg() < 2 {
-		fail(fmt.Errorf("usage: specsync set-stage <slug> <stage|auto>"))
+		fail(fmt.Errorf("usage: specsync set-stage <change> <stage|auto>"))
 	}
-	slug, stage := fs.Arg(0), fs.Arg(1)
+	changeName, stage := fs.Arg(0), fs.Arg(1)
 
-	change := mutableChange(*openspec, slug)
+	change := mutableChange(*openspec, changeName)
 	meta := changeMetadata(change)
 
 	if stage == "auto" {
@@ -703,7 +719,7 @@ func runSetStage(args []string) {
 	if err := specsync.SaveChangeMetadata(change.Dir, meta); err != nil {
 		fail(err)
 	}
-	fmt.Printf("set-stage: %s → %s\n", slug, stage)
+	fmt.Printf("set-stage: %s → %s\n", changeName, stage)
 }
 
 // runSetPriority sets a change's priority.
@@ -714,11 +730,11 @@ func runSetPriority(args []string) {
 		fail(err)
 	}
 	if fs.NArg() < 2 {
-		fail(fmt.Errorf("usage: specsync set-priority <slug> <1-100|unset>"))
+		fail(fmt.Errorf("usage: specsync set-priority <change> <1-100|unset>"))
 	}
-	slug, priorityArg := fs.Arg(0), fs.Arg(1)
+	changeName, priorityArg := fs.Arg(0), fs.Arg(1)
 
-	change := mutableChange(*openspec, slug)
+	change := mutableChange(*openspec, changeName)
 	meta := changeMetadata(change)
 
 	if priorityArg == "unset" {
@@ -736,7 +752,7 @@ func runSetPriority(args []string) {
 	if err := specsync.SaveChangeMetadata(change.Dir, meta); err != nil {
 		fail(err)
 	}
-	fmt.Printf("set-priority: %s → %s\n", slug, priorityArg)
+	fmt.Printf("set-priority: %s → %s\n", changeName, priorityArg)
 }
 
 func fail(err error) {

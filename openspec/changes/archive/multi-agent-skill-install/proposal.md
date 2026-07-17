@@ -18,7 +18,7 @@ The agentskills.io open standard (converged on by Claude Code, Codex, OpenCode, 
 
 - MUST add `skills/specsync/SKILL.md` as the single source of truth for the specsync skill content.
 - The file MUST use the agentskills.io frontmatter schema (`name`, `description`).
-- Content MUST match the verified CLI behavior (scan requires path/topic; flags before positional args; -slug always required for single-change sync; etc.).
+- Content MUST match the verified CLI behavior (scan requires path/topic; flags before positional args; -change always required for single-change sync; etc.).
 
 ### In-repo project skill
 

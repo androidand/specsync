@@ -25,17 +25,17 @@
 ## Slice 3: BranchName() and CreateWorktree()
 - [x] Add `BranchName()` and `CreateWorktree()`
   - File: `pkg/specsync/worktree.go`
-  - Validation: `go test ./pkg/specsync/ -run TestBranchName` covers zero-issue fallback (`feat/0-slug` or `feat/<slug>`)
-  - Validation: `go test ./pkg/specsync/ -run TestBranchName` covers zero-issue fallback (`feat/0-slug` or `feat/<slug>`)
+  - Validation: `go test ./pkg/specsync/ -run TestBranchName` covers zero-issue fallback (`feat/0-change` or `feat/<slug>`)
+  - Validation: `go test ./pkg/specsync/ -run TestBranchName` covers zero-issue fallback (`feat/0-change` or `feat/<slug>`)
 - [x] Add `CreateWorktree(repoRoot, branch, path string) error` wrapping `git worktree add -b <branch> <path>`
   - File: `pkg/specsync/worktree.go`
   - Validation: `go test ./pkg/specsync/ -run TestCreateWorktree` creates and removes a real worktree in a temp repo
 
 ## Slice 4: CLI worktree subcommand
-- [x] Add `specsync worktree -slug <slug>` subcommand: reads `.specsync/` for issue number, calls `BranchName` + `CreateWorktree`
+- [x] Add `specsync worktree -change <slug>` subcommand: reads `.specsync/` for issue number, calls `BranchName` + `CreateWorktree`
   - File: `cmd/specsync/main.go`
-  - Validation: `specsync worktree -slug test-slug -dry-run` prints branch name and worktree path without creating anything
-  - Validation: `specsync worktree -slug test-slug -dry-run` prints branch name and worktree path without creating anything
+  - Validation: `specsync worktree -change test-change -dry-run` prints branch name and worktree path without creating anything
+  - Validation: `specsync worktree -change test-change -dry-run` prints branch name and worktree path without creating anything
 
 ## Slice 5: go.work and README
 - [x] Add `go.work` example to README showing local co-development setup with skein

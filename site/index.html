@@ -910,7 +910,7 @@ v0.8.0
         <div class="features">
         <div class="feature">
         <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M6 10a6 6 0 0 1 10-4"/><path d="M16 6h4v4"/><path d="M18 14a6 6 0 0 1-10 4"/><path d="M8 18H4v-4"/></svg></span><span class="feature-title">Idempotent</span></h4>
-          <p>Run <code>specsync -slug my-change</code> as often as needed. If the issue tracker issue already exists, specsync updates it (same identity marker) instead of creating a duplicate.</p>
+          <p>Run <code>specsync -change my-change</code> as often as needed. If the issue tracker issue already exists, specsync updates it (same identity marker) instead of creating a duplicate.</p>
         </div>
         <div class="feature">
         <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h5"/><path d="M5 12h9"/><path d="M5 17h13"/><circle cx="4" cy="7" r="1.2"/><circle cx="4" cy="12" r="1.2"/><circle cx="4" cy="17" r="1.2"/><path d="M19 17l1.8 1.8L23 16.6"/></svg></span><span class="feature-title">Workflow state management</span></h4>
@@ -922,7 +922,7 @@ v0.8.0
         </div>
         <div class="feature">
         <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path d="M15 4v16"/><path d="M5 8h2"/><path d="M11 11h2"/><path d="M17 7h2"/></svg></span><span class="feature-title">Projects board sync</span></h4>
-          <p>Project and sync with <code>specsync -slug my-change -project my-org/6</code>. Add <code>-status-map "active=In Progress,complete=Done"</code> to align board columns with change stages.</p>
+          <p>Project and sync with <code>specsync -change my-change -project my-org/6</code>. Add <code>-status-map "active=In Progress,complete=Done"</code> to align board columns with change stages.</p>
         </div>
         </div>
       </div>
@@ -960,7 +960,7 @@ v0.8.0
       </div>
       <div class="terminal-body">
         <span class="t-line"><span class="t-comment"># plan lives in openspec/changes/dark-mode/</span></span>
-        <span class="t-line"><span class="t-prompt">$ </span><span class="t-cmd t-cmd-type">specsync -slug dark-mode</span></span>
+        <span class="t-line"><span class="t-prompt">$ </span><span class="t-cmd t-cmd-type">specsync -change dark-mode</span></span>
         <span class="t-line t-after" style="animation-delay:1.7s"><span class="t-green">  created </span><span class="t-out"> github.com/acme/app/issues/42  (dark-mode)</span></span>
         <span class="t-line t-after" style="animation-delay:1.85s"><span class="t-out">specsync: 1 created, 0 updated</span></span>
       </div>

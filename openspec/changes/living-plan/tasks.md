@@ -4,7 +4,7 @@
 - [ ] Add `## Original ask` as a preserved section: `pull` seeds it from the first issue body; treated as read-only on sync (never overwritten on push or re-pull, only rendered)
 - [ ] Verify push/re-pull round-trips leave `## Original ask` byte-identical; intent changes go in appended "Revised scope:" notes, not edits to the block
 - [ ] Add `## Discoveries` as a managed section: rendered into the issue, stripped in `splitBody` on pull (like `## Tasks` / `## Related`)
-- [ ] Add `specsync note -slug <slug> "<text>"` to append a line to `## Discoveries`
+- [ ] Add `specsync note -change <slug> "<text>"` to append a line to `## Discoveries`
 - [ ] Track "added" count: derive from tasks present that were not in the originating issue/pull baseline (or a simple `+` author marker) — keep it lightweight
 - [ ] Dry-run for `note`: show the would-append line, write nothing
 - [ ] Tests: dropped/moved excluded from progress; footer counts; `## Discoveries` round-trips (rendered, then stripped on pull); `note` append is idempotent-safe

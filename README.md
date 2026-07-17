@@ -77,9 +77,9 @@ touches local state:
 
 ```bash
 specsync -dry-run            # preview the gh commands + rendered issue bodies (safe)
-specsync -dry-run -slug X    # preview a single change
+specsync -dry-run -change X    # preview a single change
 specsync                     # create/update issues for every change
-specsync -slug X             # sync just one change
+specsync -change X             # sync just one change
 specsync -openspec path/to/openspec   # point at a non-default openspec dir
 ```
 
@@ -114,7 +114,7 @@ The default provider is `github` — human-facing issues via the `gh` CLI. Pass
 
 ```bash
 specsync -dry-run -provider beads    # preview the bd commands
-specsync -provider beads -slug X     # project one change into the beads graph
+specsync -provider beads -change X     # project one change into the beads graph
 ```
 
 ### Issue-first: pull an issue into a change
@@ -126,7 +126,7 @@ it as a spec and keep syncing:
 ```bash
 specsync pull -issue 42              # issue 42 -> openspec/changes/<slug>/
 specsync pull -issue 42 -dry-run     # read the issue, show what would be written
-specsync pull -issue 42 -slug my-feature   # override the derived slug
+specsync pull -issue 42 -change my-feature   # override the derived slug
 ```
 
 `pull` writes `proposal.md` (from the issue body, titled by the issue) and

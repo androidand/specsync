@@ -27,6 +27,38 @@ layer.
 - MUST NOT commit `.beads/` artifacts.
 - MUST NOT commit local `.specsync/` caches from change folders.
 
+## Dogfooding (non-negotiable)
+
+This repo's own backlog, changelog, and site are the public proof that specsync
+works — not a marketing claim, a live artifact anyone can check. Treat a bad
+changelog entry as a real bug in this project, same severity as a failing test.
+
+- MUST NOT commit code changes without a linked `openspec/changes/<slug>/`
+  change and its synced issue. A commit with no linked issue silently degrades
+  `specsync changelog` from an authored release note to a raw
+  `<commit description> (<hash>)` line — the exact failure mode that makes past
+  releases here read like an unfiltered `git log`, not a product changelog.
+- MUST reference the change's issue number in the commit message or PR (e.g.
+  `(#42)`) so `specsync changelog` can bind the commit to its change. An
+  unlinked but otherwise-fine commit is what produces the embarrassing
+  fallback entries — this is the single most common way dogfooding quietly
+  breaks.
+- MUST run `specsync changelog -since <last tag>` (read-only) before
+  considering a change complete, and actually read the rendered section. If an
+  entry you'd expect to be clean prose instead shows a bare title-plus-hash,
+  that's a defect: either link the commit to its issue, or add a
+  `## Release note` section to the change's `proposal.md` (see `ReleaseNote()`
+  in `changelog.go` — it prefers that section, falling back to the proposal
+  title only when absent).
+- MUST update `site/features.json` (and `README.md` where relevant) in the
+  same change when it adds or changes a user-facing capability. The site is
+  not a follow-up task — it ships with the change, not after it.
+- Title hygiene feeds this directly: `ReleaseNote()` falls back to the
+  proposal's raw H1 when there's no release-note section, so an unclean title
+  (parentheticals, backtick tool names, implementation detail) becomes the
+  permanent changelog line, not just an ugly issue title. See
+  `openspec/changes/title-hygiene-on-pull/`.
+
 ## Security
 
 - This is a public repository.
@@ -38,13 +70,13 @@ layer.
 
 - Spec-first path:
   1. Create/update change in `openspec/changes/<slug>/`.
-  2. `specsync -dry-run -slug <slug>`.
-  3. `specsync -slug <slug>`.
+  2. `specsync -dry-run -change <slug>`.
+  3. `specsync -change <slug>`.
 
 - Issue-first path:
-  1. `specsync pull -issue <n> [-slug <slug>]`.
+  1. `specsync pull -issue <n> [-change <slug>]`.
   2. Refine `proposal.md` and `tasks.md`.
-  3. `specsync -dry-run -slug <slug>` then `specsync -slug <slug>`.
+  3. `specsync -dry-run -change <slug>` then `specsync -change <slug>`.
 
 ## Completion Rule
 

@@ -9,7 +9,7 @@ auto-detected from the git remote. Two providers targeting the same repository S
 produce the same cache key.
 
 #### Scenario: Auto-detected and explicit-repo providers share a key
-- **WHEN** a change is bound by `specsync pull -issue N` (repo-scoped provider) and later synced by `specsync -slug <change>` without `-repo`
+- **WHEN** a change is bound by `specsync pull -issue N` (repo-scoped provider) and later synced by `specsync -change <change>` without `-repo`
 - **THEN** both operations resolve the same `"github:owner/repo"` cache key
 - **AND** the later sync sees the cached ref (`hadRef` is true) and updates the existing issue
 
@@ -35,7 +35,7 @@ identity marker `<!-- specsync:change=<slug> -->` into that issue's body (idempo
 upsert), so the link is rediscoverable by `Find` even if the local ref cache is lost.
 
 #### Scenario: Rediscovery after cache loss
-- **WHEN** a change is pulled from issue `#N`, then its `.specsync/` cache is deleted, then `specsync -slug <change>` runs
+- **WHEN** a change is pulled from issue `#N`, then its `.specsync/` cache is deleted, then `specsync -change <change>` runs
 - **THEN** `Find` locates `#N` by its marker
 - **AND** sync updates `#N` instead of creating a duplicate
 

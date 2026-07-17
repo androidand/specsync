@@ -19,10 +19,10 @@ specsync handles **tracker sync** (OpenSpec ↔ GitHub/Beads). Use the **OPSX wo
 ### Sync a change to GitHub Issues
 
 ```
-specsync [-dry-run] [-slug <slug>] [-repo owner/name] [-reconcile=false] [-close-completed] [-openspec <dir>]
+specsync [-dry-run] [-change <change>] [-repo owner/name] [-reconcile=false] [-close-completed] [-openspec <dir>]
 ```
 
-- Without `-slug`: syncs **every** change in `openspec/changes/`. Always pass `-slug` when one change is in scope.
+- Without `-change`: syncs **every** change in `openspec/changes/`. Always pass `-change` when one change is in scope.
 - `-dry-run`: prints the `gh` commands and rendered issue body; makes no GitHub calls. Reconcile reads are also skipped in dry-run mode.
 - `-reconcile` (default true): on a real sync, reads the issue's checkbox state and writes it back into `tasks.md` before pushing. The merge is a monotonic union (checked wins), so a lagging issue can never *uncheck* local progress. Pass `-reconcile=false` only to force a one-way projection.
 - `-close-completed` (default false): keep tracker open/closed state aligned with completion. Completing every task closes the item; adding new unchecked work reopens it. Without the flag, completion updates `stage:complete` but leaves tracker state alone. An explicit `.status` overrides task-derived stage, so only `.status` value `complete` closes with this flag.
@@ -33,10 +33,10 @@ specsync [-dry-run] [-slug <slug>] [-repo owner/name] [-reconcile=false] [-close
 ### Pull an issue into a local change
 
 ```
-specsync pull -issue <n> [-slug <slug>] [-dry-run] [-repo owner/name] [-openspec <dir>]
+specsync pull -issue <n> [-change <change>] [-dry-run] [-repo owner/name] [-openspec <dir>]
 ```
 
-`-issue` is required. Creates `openspec/changes/<slug>/proposal.md` (and `tasks.md` if tasks are detected). `-dry-run` shows what would be written without touching disk.
+`-issue` is required. Creates `openspec/changes/<change>/proposal.md` (and `tasks.md` if tasks are detected). `-dry-run` shows what would be written without touching disk.
 
 ### Scan for existing work in an area
 
@@ -74,7 +74,7 @@ At least 2 slugs required. Writes `links.md` into each change directory and sync
 specsync release-plan [-json] [-since <ref>] [-until <ref>] [-apply] [-openspec <dir>]
 ```
 
-Read-only follow-up report: shipped changes, gaps, advisory semver bump. `-apply` is advisory only — prints `openspec archive <slug>` commands but does not execute them.
+Read-only follow-up report: shipped changes, gaps, advisory semver bump. `-apply` is advisory only — prints `openspec archive <change>` commands but does not execute them.
 
 ### Install skill globally
 
@@ -87,7 +87,7 @@ Writes this skill file into the known global agent dirs. `--all` covers every su
 ### Raw trace graph (debugging)
 
 ```
-specsync trace [-change <slug>] [-since <ref>] [-until <ref>] [-json] [-openspec <dir>]
+specsync trace [-change <change>] [-since <ref>] [-until <ref>] [-json] [-openspec <dir>]
 ```
 
 ## Workflow
@@ -96,32 +96,32 @@ specsync trace [-change <slug>] [-since <ref>] [-until <ref>] [-json] [-openspec
 
 1. `/opsx:propose <title>` — create the change with planning artifacts.
 2. `specsync scan -json <path...> [topic]` — confirm no duplicate change exists.
-3. `specsync -dry-run -slug <slug>` — inspect the inferred title, body, labels, and checklist.
-4. `specsync -slug <slug>` — only when tracker mutation is authorized.
+3. `specsync -dry-run -change <change>` — inspect the inferred title, body, labels, and checklist.
+4. `specsync -change <change>` — only when tracker mutation is authorized.
 
 ### Issue-first (issue → spec)
 
 1. `gh issue list --state open` — find an issue to work on.
-2. `specsync pull -issue <n> -dry-run [-slug <slug>]` — preview generated files.
-3. `specsync pull -issue <n> [-slug <slug>]` — write files locally.
+2. `specsync pull -issue <n> -dry-run [-change <change>]` — preview generated files.
+3. `specsync pull -issue <n> [-change <change>]` — write files locally.
 4. Refine artifacts with `/opsx:continue` or edit directly.
-5. `specsync -dry-run -slug <slug>` then `specsync -slug <slug>`.
+5. `specsync -dry-run -change <change>` then `specsync -change <change>`.
 
 ### Implement
 
 1. `/opsx:apply` — work through tasks, checking them off.
-2. `specsync -slug <slug>` — sync checkbox state to the tracker.
+2. `specsync -change <change>` — sync checkbox state to the tracker.
 
 ### Complete a change
 
 1. Ensure all tasks are checked in `tasks.md`.
-2. `specsync -slug <slug>` — final sync.
-3. `openspec archive <slug> -y` — move to completed.
+2. `specsync -change <change>` — final sync.
+3. `openspec archive <change> -y` — move to completed.
 
 ## Safety rules
 
 - **Always dry-run before any GitHub write.**
-- **Always pass `-slug` when one change is in scope.** Omitting it syncs every change.
+- **Always pass `-change` when one change is in scope.** Omitting it syncs every change.
 - Confirm `git remote` resolves to the right repo, or pass `-repo owner/name` explicitly.
 - Do not commit `.specsync/` cache directories.
 - Never put credentials or sensitive data in issue bodies.

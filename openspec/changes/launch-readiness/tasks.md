@@ -37,7 +37,7 @@
       (Verified sandboxed, non-global, in
       `/private/tmp/.../scratchpad/specsync-npm-test`: `npm install
       @androidand/specsync` downloaded the darwin/arm64 v0.4.0 binary via
-      postinstall; `specsync -dry-run` and `specsync -dry-run -slug X` both
+      postinstall; `specsync -dry-run` and `specsync -dry-run -change X` both
       ran correctly against a scratch `openspec/changes/example-change/`.
       Noted, not a README bug: the published v0.4.0 binary predates the
       Task-1.5 `version` subcommand, so `specsync version` on that binary
