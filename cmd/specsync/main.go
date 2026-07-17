@@ -20,26 +20,36 @@ import (
 // version is the binary version, stamped at release time via -ldflags "-X main.version=...".
 var version = "dev"
 
-// knownSubcommands lists every recognized subcommand name, including "push"
-// as an alias for "sync" and the literal "sync" name itself. Anything else
+// knownSubcommands lists every recognized subcommand name. Anything else
 // that doesn't start with "-" is an unrecognized bare word, not a flag set
 // for the default sync action.
 var knownSubcommands = map[string]bool{
 	"pull": true, "link": true, "scan": true, "trace": true,
 	"release-plan": true, "changelog": true, "install-skill": true,
 	"changes": true, "set-stage": true, "set-priority": true,
-	"sync": true, "push": true,
+	"sync": true,
+}
+
+// knownConfusions maps a word someone might reach for by habit (e.g. git's
+// "push") to the actual subcommand it's confused with, purely to make the
+// unknown-subcommand error more helpful. It is NOT an alias: the word still
+// fails to dispatch. Deliberately not an alias — specsync's default action
+// reconciles tracker state back into tasks.md before writing out (-reconcile
+// defaults to true), so it is not a one-way push the way git's is, and
+// "sync" is the more honest name; teach that instead of encoding the
+// git-habit word permanently into the tool.
+var knownConfusions = map[string]string{
+	"push": "sync",
 }
 
 // resolveSubcommand decides which subcommand os.Args[1:] selects and returns
 // its remaining arguments. A missing first argument, or one starting with
 // "-", both select "sync" (bare invocation with flags only) — that keeps
-// `specsync -slug foo` working. "push" is a recognized alias for "sync". Any
-// other bare word that isn't in knownSubcommands is an error: Go's flag
-// package stops parsing at the first non-flag argument, so letting an
-// unrecognized word like a typo'd subcommand name reach runSync's
-// flag.Parse would silently discard every flag after it (including
-// -dry-run) instead of failing loud.
+// `specsync -slug foo` working. Any other bare word that isn't in
+// knownSubcommands is an error: Go's flag package stops parsing at the first
+// non-flag argument, so letting an unrecognized word like a typo'd
+// subcommand name reach runSync's flag.Parse would silently discard every
+// flag after it (including -dry-run) instead of failing loud.
 func resolveSubcommand(args []string) (cmd string, rest []string, err error) {
 	if len(args) == 0 {
 		return "sync", args, nil
@@ -48,14 +58,14 @@ func resolveSubcommand(args []string) (cmd string, rest []string, err error) {
 	if isVersionArg(first) {
 		return "version", args[1:], nil
 	}
-	if first == "push" {
-		return "sync", args[1:], nil
-	}
 	if knownSubcommands[first] {
 		return first, args[1:], nil
 	}
 	if strings.HasPrefix(first, "-") {
 		return "sync", args, nil
+	}
+	if suggestion, ok := knownConfusions[first]; ok {
+		return "", nil, fmt.Errorf("unknown subcommand %q — did you mean %q? specsync's sync also reconciles tracker state back into tasks.md, so it isn't a one-way push", first, suggestion)
 	}
 	return "", nil, fmt.Errorf("unknown subcommand %q", first)
 }

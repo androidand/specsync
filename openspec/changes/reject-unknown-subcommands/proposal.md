@@ -25,12 +25,19 @@ every flag typed after it.
    start with `-` is rejected with a clear error and non-zero exit, instead of being
    silently swallowed by `runSync`'s flag parsing. This catches *any* typo'd subcommand
    name, not just `push`.
-2. **`push` as a recognized alias for the default sync action**: since the git-like
-   mental model ("push local state to the tracker") has already emerged organically in
-   docs, make it a real, correctly-flag-parsing subcommand rather than fixing docs to
-   avoid a word people keep reaching for.
+2. **`push` is deliberately NOT made an alias for sync.** Considered it, decided against:
+   the docs that say "specsync push" were almost certainly written by an agent
+   imitating git's vocabulary, not a deliberate human choice — and "push" is actually
+   the wrong mental model here. The default sync action reconciles tracker checkbox
+   state back into `tasks.md` before writing out (`-reconcile` defaults to `true`), so
+   it isn't one-way the way git's push is. Baking a less-accurate name permanently into
+   the tool to match a probably-mistaken doc phrase isn't worth the permanent surface
+   area (two names for one action, forever, for every future reader to wonder about).
+   Instead: `push` fails with an error that says "did you mean sync?" plus the one-line
+   reason why — discoverable for git habit, without entrenching the wrong model.
 
 ## Non-goals
 
 - No change to `runSync`'s actual behavior or flags — only dispatch-time validation.
 - No change to any other subcommand's flag parsing.
+- No alias for `push`. Fix the docs that say it, not the tool.

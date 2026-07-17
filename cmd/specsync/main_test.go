@@ -39,8 +39,7 @@ func TestResolveSubcommand(t *testing.T) {
 		{"empty", nil, "sync", nil, false},
 		{"flags only", []string{"-slug", "foo"}, "sync", []string{"-slug", "foo"}, false},
 		{"explicit sync", []string{"sync", "-slug", "foo"}, "sync", []string{"-slug", "foo"}, false},
-		{"push alias", []string{"push", "-slug", "foo", "-dry-run"}, "sync", []string{"-slug", "foo", "-dry-run"}, false},
-		{"push alone", []string{"push"}, "sync", []string{}, false},
+		{"push is not an alias", []string{"push", "-slug", "foo", "-dry-run"}, "", nil, true},
 		{"pull", []string{"pull", "-issue", "3"}, "pull", []string{"-issue", "3"}, false},
 		{"version word", []string{"version"}, "version", []string{}, false},
 		{"version flag", []string{"-version"}, "version", []string{}, false},
@@ -71,6 +70,23 @@ func TestResolveSubcommand(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestResolveSubcommandPushSuggestsSync: "push" is a deliberate non-alias —
+// it errors, but the message points to "sync" and explains why push isn't
+// the right mental model (sync also reconciles tracker state back into
+// tasks.md, so it isn't one-way like git push).
+func TestResolveSubcommandPushSuggestsSync(t *testing.T) {
+	_, _, err := resolveSubcommand([]string{"push", "-slug", "foo"})
+	if err == nil {
+		t.Fatal("expected an error for \"push\"")
+	}
+	if !strings.Contains(err.Error(), `"sync"`) {
+		t.Fatalf("error %q should suggest \"sync\"", err)
+	}
+	if !strings.Contains(err.Error(), "reconciles") {
+		t.Fatalf("error %q should explain why push isn't a one-way action", err)
 	}
 }
 
