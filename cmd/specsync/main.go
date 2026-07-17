@@ -232,6 +232,9 @@ func runPull(args []string) {
 		if res.Tasks != "" {
 			printPreview("tasks.md", res.Tasks)
 		}
+		if res.TitleCleaned {
+			fmt.Printf("\n  title cleaned: %q -> %q\n", res.TitleBefore, res.TitleAfter)
+		}
 		if res.MarkerPresent {
 			fmt.Printf("\nissue %s already carries the marker %s (no edit needed)\n", *issue, res.Marker)
 		} else {
@@ -246,6 +249,9 @@ func runPull(args []string) {
 	fmt.Println("  + proposal.md")
 	if res.Tasks != "" {
 		fmt.Println("  + tasks.md")
+	}
+	if res.TitleCleaned {
+		fmt.Printf("  title cleaned: %q -> %q\n", res.TitleBefore, res.TitleAfter)
 	}
 	if res.BoardConfigured {
 		printBoardPlan(res.Board, false)

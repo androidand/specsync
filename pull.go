@@ -31,6 +31,14 @@ type PullResult struct {
 	// MarkerPresent reports whether the source issue already carried the marker,
 	// i.e. no write was (or would be) needed. Drives the dry-run preview.
 	MarkerPresent bool
+	// TitleCleaned reports whether the issue title was shortened (cleaned of
+	// parentheticals, backticks, detail words). When true, the proposal H1
+	// differs from the source issue title — the cleaned version is shown.
+	TitleCleaned bool
+	// TitleBefore/After are the original and cleaned titles, shown when
+	// TitleCleaned is true so the user sees what was changed.
+	TitleBefore string
+	TitleAfter  string
 	// Board reports the board projection; BoardConfigured is false when no target
 	// project was configured (Board is zero and no board calls ran).
 	BoardConfigured bool
@@ -69,7 +77,11 @@ func Pull(ctx context.Context, opts PullOptions) (PullResult, error) {
 		return PullResult{}, fmt.Errorf("could not derive a slug from issue %s; pass -slug", opts.IssueID)
 	}
 
-	proposal, tasks, relatedURLs := splitBody(item.Body, item.Title)
+	// Clean the title before writing it into the proposal H1.
+	// This catches messy titles from external tools (gh, backlog MCP, etc.)
+	// so the OpenSpec change gets a clean title from the start.
+	cleanedTitle, titleChanged := shortenTitle(item.Title)
+	proposal, tasks, relatedURLs := splitBody(item.Body, cleanedTitle)
 	res := PullResult{
 		Slug:          slug,
 		Dir:           filepath.Join(opts.OpenSpecDir, "changes", slug),
@@ -79,6 +91,9 @@ func Pull(ctx context.Context, opts PullOptions) (PullResult, error) {
 		Links:         relatedURLs,
 		Marker:        marker(slug),
 		MarkerPresent: strings.Contains(item.Body, marker(slug)),
+		TitleCleaned:  titleChanged,
+		TitleBefore:   item.Title,
+		TitleAfter:    cleanedTitle,
 	}
 
 	// Project onto the board when a target is configured and the provider supports

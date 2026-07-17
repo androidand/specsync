@@ -14,10 +14,10 @@ import (
 type TaskProgress string
 
 const (
-	TaskProgressNoTasks    TaskProgress = "no-tasks"      // no tasks.md file
-	TaskProgressNotStarted TaskProgress = "not-started"   // 0/N tasks complete
-	TaskProgressInProgress TaskProgress = "in-progress"   // 0 < X < N
-	TaskProgressComplete   TaskProgress = "complete"      // N/N tasks complete
+	TaskProgressNoTasks    TaskProgress = "no-tasks"    // no tasks.md file
+	TaskProgressNotStarted TaskProgress = "not-started" // 0/N tasks complete
+	TaskProgressInProgress TaskProgress = "in-progress" // 0 < X < N
+	TaskProgressComplete   TaskProgress = "complete"    // N/N tasks complete
 )
 
 // Stage is the workflow placement of a change. It is distinct from task progress.
@@ -26,12 +26,12 @@ const (
 type Stage string
 
 const (
-	StageBacklog   Stage = "backlog"      // not yet started; pre-discovery or deferred
-	StageBlocked   Stage = "blocked"      // waiting on external blocker or decision
-	StageActive    Stage = "active"       // in flight; has unchecked work
-	StageInReview  Stage = "in-review"    // awaiting approval before proceeding
-	StageComplete  Stage = "complete"     // all work done, not yet archived
-	StageArchived  Stage = "archived"     // moved to changes/archive/ (immutable)
+	StageBacklog  Stage = "backlog"   // not yet started; pre-discovery or deferred
+	StageBlocked  Stage = "blocked"   // waiting on external blocker or decision
+	StageActive   Stage = "active"    // in flight; has unchecked work
+	StageInReview Stage = "in-review" // awaiting approval before proceeding
+	StageComplete Stage = "complete"  // all work done, not yet archived
+	StageArchived Stage = "archived"  // moved to changes/archive/ (immutable)
 )
 
 // ValidateStage checks if a stage value is canonical or matches the custom stage pattern.
@@ -87,12 +87,12 @@ const (
 // Change is a provider-agnostic view of one OpenSpec change folder. It is the
 // only thing this package reads from disk and is fully self-contained.
 type Change struct {
-	Dir           string       // absolute path to the change folder
+	Dir           string // absolute path to the change folder
 	Slug          string
-	Title         string       // first H1 of proposal.md, falling back to Slug
-	Body          string       // proposal.md contents
-	TasksMarkdown string       // tasks.md contents, may be ""
-	Links         []Ref        // resolved related issue refs from links.md
+	Title         string // first H1 of proposal.md, falling back to Slug
+	Body          string // proposal.md contents
+	TasksMarkdown string // tasks.md contents, may be ""
+	Links         []Ref  // resolved related issue refs from links.md
 	Archived      bool
 	Progress      TaskProgress // what the task checklist says
 	Stage         Stage        // current workflow placement
@@ -115,7 +115,6 @@ func LoadChanges(openspecDir string) ([]Change, error) {
 	}
 	return append(active, archived...), nil
 }
-
 
 func loadChangeDir(dir string, archived bool, openspecDir string) ([]Change, error) {
 	entries, err := os.ReadDir(dir)
@@ -542,6 +541,81 @@ func firstHeading(md, fallback string) string {
 		}
 	}
 	return fallback
+}
+
+// shortenTitle produces a concise issue title from a full proposal H1.
+// It strips parentheticals, backtick-enclosed identifiers, and trailing
+// implementation-detail words. Returns (cleaned, changed) so callers can
+// report when the title was modified.
+func shortenTitle(title string) (string, bool) {
+	cleaned := stripParentheticals(title)
+	cleaned = stripBackticks(cleaned)
+	cleaned = strings.TrimRight(strings.TrimSpace(cleaned), " .,;:")
+	cleaned = trimDetailWords(cleaned)
+	cleaned = strings.TrimRight(strings.TrimSpace(cleaned), " .,;:")
+	return cleaned, cleaned != title
+}
+
+// stripParentheticals removes all (...) segments from s.
+func stripParentheticals(s string) string {
+	var result []rune
+	depth := 0
+	for _, r := range s {
+		switch r {
+		case '(':
+			depth++
+		case ')':
+			if depth > 0 {
+				depth--
+			}
+		default:
+			if depth == 0 {
+				result = append(result, r)
+			}
+		}
+	}
+	return string(result)
+}
+
+// stripBackticks removes everything inside backticks.
+func stripBackticks(s string) string {
+	var result []rune
+	inBacktick := false
+	for _, r := range s {
+		if r == '`' {
+			inBacktick = !inBacktick
+			continue
+		}
+		if !inBacktick {
+			result = append(result, r)
+		}
+	}
+	return string(result)
+}
+
+// detailWords are implementation-detail nouns that follow a tool/package name.
+var detailWords = map[string]bool{
+	"generator": true,
+	"function":  true,
+	"method":    true,
+	"component": true,
+	"module":    true,
+	"wrapper":   true,
+	"adapter":   true,
+	"client":    true,
+}
+
+// trimDetailWords removes a trailing detail word preceded by whitespace.
+func trimDetailWords(s string) string {
+	words := strings.Fields(s)
+	if len(words) == 0 {
+		return s
+	}
+	last := words[len(words)-1]
+	if detailWords[strings.ToLower(last)] {
+		return strings.Join(words[:len(words)-1], " ")
+	}
+	return s
 }
 
 // atoiSafe parses a non-negative integer, returning 0 on any non-digit input.
