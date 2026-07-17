@@ -10,9 +10,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Advisory title suggestions: warn on unwieldy titles, never rewrite them (#52)
 - The changelog now ignores commits that were reverted within the same release range, so net no-op work no longer produces entries describing behavior the release doesn't contain. (#53)
-
-### Changed
-
 - Fail CI when a commit ships without a linked issue (#51)
 
 ### Fixed
@@ -20,7 +17,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - don't make push an alias — point it at sync instead (46f5478c)
 - reject unrecognized leading arguments instead of silently falling through to sync (5893ebef)
 
-<!-- 20 internal commit(s) omitted (chore/docs/ci/...) -->
+<!-- 21 internal commit(s) omitted (chore/docs/ci/...) -->
 
 ## [0.8.0] - 2026-07-16
 
