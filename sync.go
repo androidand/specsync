@@ -216,7 +216,7 @@ func WorkItemFor(c Change, closeCompleted bool) WorkItem {
 	}
 	return WorkItem{
 		Slug:         c.Slug,
-		Title:        c.Title,
+		Title:        shortenTitle(c.Title, 80),
 		Body:         body,
 		Stage:        c.Stage,
 		Priority:     priority,

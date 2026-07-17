@@ -8,16 +8,17 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 )
 
 // TaskProgress represents the completion state of a change's tasks.
 type TaskProgress string
 
 const (
-	TaskProgressNoTasks    TaskProgress = "no-tasks"      // no tasks.md file
-	TaskProgressNotStarted TaskProgress = "not-started"   // 0/N tasks complete
-	TaskProgressInProgress TaskProgress = "in-progress"   // 0 < X < N
-	TaskProgressComplete   TaskProgress = "complete"      // N/N tasks complete
+	TaskProgressNoTasks    TaskProgress = "no-tasks"    // no tasks.md file
+	TaskProgressNotStarted TaskProgress = "not-started" // 0/N tasks complete
+	TaskProgressInProgress TaskProgress = "in-progress" // 0 < X < N
+	TaskProgressComplete   TaskProgress = "complete"    // N/N tasks complete
 )
 
 // Stage is the workflow placement of a change. It is distinct from task progress.
@@ -26,12 +27,12 @@ const (
 type Stage string
 
 const (
-	StageBacklog   Stage = "backlog"      // not yet started; pre-discovery or deferred
-	StageBlocked   Stage = "blocked"      // waiting on external blocker or decision
-	StageActive    Stage = "active"       // in flight; has unchecked work
-	StageInReview  Stage = "in-review"    // awaiting approval before proceeding
-	StageComplete  Stage = "complete"     // all work done, not yet archived
-	StageArchived  Stage = "archived"     // moved to changes/archive/ (immutable)
+	StageBacklog  Stage = "backlog"   // not yet started; pre-discovery or deferred
+	StageBlocked  Stage = "blocked"   // waiting on external blocker or decision
+	StageActive   Stage = "active"    // in flight; has unchecked work
+	StageInReview Stage = "in-review" // awaiting approval before proceeding
+	StageComplete Stage = "complete"  // all work done, not yet archived
+	StageArchived Stage = "archived"  // moved to changes/archive/ (immutable)
 )
 
 // ValidateStage checks if a stage value is canonical or matches the custom stage pattern.
@@ -87,12 +88,12 @@ const (
 // Change is a provider-agnostic view of one OpenSpec change folder. It is the
 // only thing this package reads from disk and is fully self-contained.
 type Change struct {
-	Dir           string       // absolute path to the change folder
+	Dir           string // absolute path to the change folder
 	Slug          string
-	Title         string       // first H1 of proposal.md, falling back to Slug
-	Body          string       // proposal.md contents
-	TasksMarkdown string       // tasks.md contents, may be ""
-	Links         []Ref        // resolved related issue refs from links.md
+	Title         string // first H1 of proposal.md, falling back to Slug
+	Body          string // proposal.md contents
+	TasksMarkdown string // tasks.md contents, may be ""
+	Links         []Ref  // resolved related issue refs from links.md
 	Archived      bool
 	Progress      TaskProgress // what the task checklist says
 	Stage         Stage        // current workflow placement
@@ -115,7 +116,6 @@ func LoadChanges(openspecDir string) ([]Change, error) {
 	}
 	return append(active, archived...), nil
 }
-
 
 func loadChangeDir(dir string, archived bool, openspecDir string) ([]Change, error) {
 	entries, err := os.ReadDir(dir)
@@ -542,6 +542,123 @@ func firstHeading(md, fallback string) string {
 		}
 	}
 	return fallback
+}
+
+// shortenTitle produces a concise issue title from a full proposal H1.
+// It strips parentheticals, backtick-enclosed identifiers (package/tool names),
+// and implementation-detail words, then truncates to maxLen characters (runes).
+// The full title remains in proposal.md for documentation.
+func shortenTitle(title string, maxLen int) string {
+	// Strip parenthetical content: remove everything inside (...)
+	// This removes design notes like "(credential → list resources → multi-create)"
+	// and implementation details like "(rewrite ~450 imports)".
+	cleaned := stripParentheticals(title)
+
+	// Strip backtick-enclosed identifiers: `prisma-client`, `prisma`, etc.
+	// These are tool/package names — implementation detail, not scope.
+	cleaned = stripBackticks(cleaned)
+
+	// Trim trailing punctuation/whitespace left by paren/backtick removal
+	cleaned = strings.TrimRight(strings.TrimSpace(cleaned), " .,;:")
+
+	// Remove trailing implementation-detail words that are just noise:
+	// "generator", "function", "method", "component", "module" when they
+	// follow a package/tool name. e.g. "Migrate to Prisma 7 `prisma-client` generator"
+	// → "Migrate to Prisma 7"
+	cleaned = trimDetailWords(cleaned)
+
+	cleaned = strings.TrimRight(strings.TrimSpace(cleaned), " .,;:")
+
+	runeCount := utf8.RuneCountInString(cleaned)
+	if runeCount <= maxLen {
+		return cleaned
+	}
+
+	// Truncate at word boundary using byte offset for the rune limit
+	cut := cleaned
+	byteLimit := 0
+	runesSeen := 0
+	for i := 0; i < len(cleaned); i++ {
+		if runesSeen >= maxLen {
+			break
+		}
+		byteLimit = i
+		_, size := utf8.DecodeRuneInString(cleaned[i:])
+		runesSeen += size
+	}
+	if i := strings.LastIndexByte(cleaned[:byteLimit], ' '); i > 0 {
+		cut = strings.TrimSpace(cleaned[:i])
+	} else {
+		cut = strings.TrimSpace(cleaned[:byteLimit])
+	}
+
+	return cut
+}
+
+// stripBackticks removes everything inside backticks: `prisma-client` → "".
+func stripBackticks(s string) string {
+	var result []rune
+	inBacktick := false
+	for _, r := range s {
+		if r == '`' {
+			inBacktick = !inBacktick
+			continue
+		}
+		if !inBacktick {
+			result = append(result, r)
+		}
+	}
+	return string(result)
+}
+
+// detailWords are implementation-detail nouns that follow a tool/package name.
+// When a title ends with one of these (after stripping backticks/parens),
+// they're just describing the mechanism, not the outcome.
+var detailWords = map[string]bool{
+	"generator": true,
+	"function":  true,
+	"method":    true,
+	"component": true,
+	"module":    true,
+	"wrapper":   true,
+	"adapter":   true,
+	"client":    true,
+}
+
+// trimDetailWords removes a trailing detail word preceded by whitespace.
+// e.g. "Migrate to Prisma 7 generator" → "Migrate to Prisma 7"
+func trimDetailWords(s string) string {
+	words := strings.Fields(s)
+	if len(words) == 0 {
+		return s
+	}
+	last := words[len(words)-1]
+	if detailWords[strings.ToLower(last)] {
+		return strings.Join(words[:len(words)-1], " ")
+	}
+	return s
+}
+
+// stripParentheticals removes all (...) segments from s.
+// Handles nested parens by always consuming to the matching close.
+func stripParentheticals(s string) string {
+	var result []rune
+	depth := 0
+	for _, r := range s {
+		switch r {
+		case '(':
+			depth++
+		case ')':
+			if depth > 0 {
+				depth--
+			}
+		default:
+			if depth == 0 {
+				result = append(result, r)
+			}
+		}
+	}
+	return string(result)
 }
 
 // atoiSafe parses a non-negative integer, returning 0 on any non-digit input.
