@@ -43,13 +43,13 @@ changelog entry as a real bug in this project, same severity as a failing test.
   unlinked but otherwise-fine commit is what produces the embarrassing
   fallback entries — this is the single most common way dogfooding quietly
   breaks.
-- MUST run `specsync changelog -since <last tag>` (read-only) before
-  considering a change complete, and actually read the rendered section. If an
-  entry you'd expect to be clean prose instead shows a bare title-plus-hash,
-  that's a defect: either link the commit to its issue, or add a
-  `## Release note` section to the change's `proposal.md` (see `ReleaseNote()`
-  in `changelog.go` — it prefers that section, falling back to the proposal
-  title only when absent).
+- MUST run `specsync changelog -fail-on-unlinked-commits` before considering a
+  change complete — CI runs this on every PR too (`.github/workflows/ci.yml`),
+  so a commit missing an issue reference fails the build rather than silently
+  degrading `CHANGELOG.md`. If it fails, either link the commit to its issue,
+  or add a `## Release note` section to the change's `proposal.md` (see
+  `ReleaseNote()` in `changelog.go` — it prefers that section, falling back to
+  the proposal title only when absent).
 - MUST update `site/features.json` (and `README.md` where relevant) in the
   same change when it adds or changes a user-facing capability. The site is
   not a follow-up task — it ships with the change, not after it.

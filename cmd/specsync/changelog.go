@@ -31,6 +31,7 @@ func runChangelog(args []string) {
 	resolveRefs := fs.Bool("resolve-refs", false, "look up a change's issue live (read-only) when its ref cache is missing, e.g. on a fresh CI checkout")
 	repo := fs.String("repo", "", "repo as owner/name for -resolve-refs (default: auto-detect from git remote)")
 	providerName := fs.String("provider", "github", "work provider for -resolve-refs: github (default) or beads")
+	failOnUnlinkedCommits := fs.Bool("fail-on-unlinked-commits", false, "exit non-zero when a conventional commit in range isn't linked to its change's issue (would otherwise render as a raw title+hash fallback)")
 	_ = fs.Parse(args)
 
 	abs, err := filepath.Abs(*openspec)
@@ -65,6 +66,10 @@ func runChangelog(args []string) {
 	}
 
 	cl := specsync.BuildChangelog(in, deltas)
+
+	if err := unlinkedCommitsError(cl, *failOnUnlinkedCommits); err != nil {
+		fail(err)
+	}
 
 	version := strings.TrimPrefix(strings.TrimSpace(*versionFlag), "v")
 	if version == "" {
@@ -109,6 +114,30 @@ func runChangelog(args []string) {
 	}
 	// Status goes to stderr so -json stdout stays a single valid document.
 	fmt.Fprintf(os.Stderr, "specsync: wrote [%s] section to %s\n", label, *changelogPath)
+}
+
+// unlinkedCommitsError reports entries that reached the raw fallback:
+// conventional commits with no change bound (Slug == "") that carry a hash
+// (Hash != ""). These are exactly the entries looseEntry produces for a
+// commit whose message has no recognized issue reference — see extractRefs
+// in commit.go. A properly-linked change entry has Slug set and no Hash; a
+// silently-omitted non-conventional loose commit never becomes an entry at
+// all, so it can't appear here and isn't this check's concern.
+func unlinkedCommitsError(cl specsync.Changelog, failOnUnlinkedCommits bool) error {
+	if !failOnUnlinkedCommits {
+		return nil
+	}
+	var offenders []string
+	for _, e := range cl.Entries {
+		if e.Hash != "" && e.Slug == "" {
+			offenders = append(offenders, fmt.Sprintf("%s (%s)", e.Text, e.Hash))
+		}
+	}
+	if len(offenders) == 0 {
+		return nil
+	}
+	return fmt.Errorf("changelog: %d commit(s) not linked to a change's issue: %s — reference the issue (e.g. \"(#42)\", \"Closes #42\") so this renders as an authored release note instead of a raw commit line",
+		len(offenders), strings.Join(offenders, ", "))
 }
 
 func ownsChangelog(tool specsync.ReleaseTool) bool {
