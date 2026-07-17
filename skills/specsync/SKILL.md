@@ -65,10 +65,10 @@ specsync scan github.go
 ### Cross-link two or more changes
 
 ```
-specsync link [-dry-run] [-openspec <dir>] <slug1> <slug2> [slug3...]
+specsync link [-dry-run] [-openspec <dir>] <change1> <change2> [<change3>...]
 ```
 
-At least 2 slugs required. Writes `links.md` into each change directory and syncs them so a "## Related" section appears in each GitHub issue.
+At least 2 changes required. Writes `links.md` into each change directory and syncs them so a "## Related" section appears in each GitHub issue.
 
 ### Inspect release impact
 

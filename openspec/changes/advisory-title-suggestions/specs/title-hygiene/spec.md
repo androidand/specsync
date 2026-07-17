@@ -6,20 +6,20 @@
 specsync SHALL treat titles as author content in both directions: `pull` writes the issue title verbatim as the `proposal.md` H1, and `sync` pushes the proposal H1 verbatim as the tracker item title. No command modifies a title automatically.
 
 #### Scenario: Pull a verbose issue title
-- **WHEN** `specsync pull -issue 7` runs against an issue titled `"Migrate to Prisma 7 \`prisma-client\` generator (rewrite ~450 imports)"`
+- **WHEN** `specsync pull -issue 7` runs against an issue titled `"Migrate to Postgres 17 \`pgx/v6\` driver (rewrite ~450 call sites)"`
 - **THEN** the `proposal.md` H1 is that title verbatim
 
 #### Scenario: Sync a verbose proposal H1
-- **WHEN** `specsync` syncs a change whose H1 is `"Migrate to Prisma 7 \`prisma-client\` generator (rewrite ~450 imports)"`
+- **WHEN** `specsync` syncs a change whose H1 is `"Migrate to Postgres 17 \`pgx/v6\` driver (rewrite ~450 call sites)"`
 - **THEN** the tracker item title is that H1 verbatim
 
 ### Requirement: Unwieldy titles get an advisory suggestion
 When `shortenTitle()` would tighten a title, specsync SHALL surface the suggestion to the user — `ItemResult.TitleSuggestion` on sync, `PullResult.TitleSuggestion` on pull, and a printed `title could be tighter: "..."` line in both dry-run and real mode — without modifying the proposal or the tracker item.
 
 #### Scenario: Verbose title synced
-- **WHEN** `specsync` syncs a change whose H1 is `"Migrate to Prisma 7 \`prisma-client\` generator (rewrite ~450 imports)"`
-- **THEN** `ItemResult.TitleSuggestion` is `"Migrate to Prisma 7 prisma-client generator"`
-- **AND** the CLI prints `title could be tighter: "Migrate to Prisma 7 prisma-client generator"`
+- **WHEN** `specsync` syncs a change whose H1 is `"Migrate to Postgres 17 \`pgx/v6\` driver (rewrite ~450 call sites)"`
+- **THEN** `ItemResult.TitleSuggestion` is `"Migrate to Postgres 17 pgx/v6 driver"`
+- **AND** the CLI prints `title could be tighter: "Migrate to Postgres 17 pgx/v6 driver"`
 
 #### Scenario: Clean title synced
 - **WHEN** `specsync` syncs a change whose H1 is `"Portal 2026 Q3"`

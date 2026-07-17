@@ -25,14 +25,14 @@ func TestShortenTitle(t *testing.T) {
 		},
 		{
 			"parenthetical scope stripped",
-			"Design: resource-select flavor of the integration fields schema (credential → list resources → multi-create)",
-			"Design: resource-select flavor of the integration fields schema",
+			"Design: multi-select flavor of the export fields schema (load → list fields → multi-create)",
+			"Design: multi-select flavor of the export fields schema",
 			true,
 		},
 		{
 			"backtick markers removed, content kept",
-			"Migrate to Prisma 7 `prisma-client` generator (rewrite ~450 imports)",
-			"Migrate to Prisma 7 prisma-client generator",
+			"Migrate to Postgres 17 `pgx/v6` driver (rewrite ~450 call sites)",
+			"Migrate to Postgres 17 pgx/v6 driver",
 			true,
 		},
 		{
@@ -118,7 +118,7 @@ func (r *titleRecorder) Find(context.Context, string) (*Ref, error) { return nil
 // author can fix it at the source.
 func TestSyncSurfacesTitleSuggestionWithoutMutating(t *testing.T) {
 	root := t.TempDir()
-	verbose := "Migrate to Prisma 7 `prisma-client` generator (rewrite ~450 imports)"
+	verbose := "Migrate to Postgres 17 `pgx/v6` driver (rewrite ~450 call sites)"
 	mustWrite(t, filepath.Join(root, "changes", "verbose", "proposal.md"), "# "+verbose+"\n")
 	mustWrite(t, filepath.Join(root, "changes", "clean", "proposal.md"), "# Portal 2026 Q3\n")
 	mustWrite(t, filepath.Join(root, "changes", "archive", "verbose-old", "proposal.md"), "# "+verbose+"\n")
@@ -141,7 +141,7 @@ func TestSyncSurfacesTitleSuggestionWithoutMutating(t *testing.T) {
 	for _, it := range res.Items {
 		suggestions[it.Slug] = it.TitleSuggestion
 	}
-	if want := "Migrate to Prisma 7 prisma-client generator"; suggestions["verbose"] != want {
+	if want := "Migrate to Postgres 17 pgx/v6 driver"; suggestions["verbose"] != want {
 		t.Errorf("TitleSuggestion = %q, want %q", suggestions["verbose"], want)
 	}
 	if suggestions["clean"] != "" {
@@ -158,7 +158,7 @@ func TestSyncSurfacesTitleSuggestionWithoutMutating(t *testing.T) {
 // so the author can edit the H1 after pulling.
 func TestPullSurfacesTitleSuggestionWithoutMutating(t *testing.T) {
 	dir := t.TempDir()
-	verbose := "Migrate to Prisma 7 `prisma-client` generator (rewrite ~450 imports)"
+	verbose := "Migrate to Postgres 17 `pgx/v6` driver (rewrite ~450 call sites)"
 	var calls [][]string
 	prov := NewGitHubProviderFunc(ghRunner(fakeIssue{
 		Number: 7,
@@ -174,7 +174,7 @@ func TestPullSurfacesTitleSuggestionWithoutMutating(t *testing.T) {
 	if want := "# " + verbose; !strings.HasPrefix(res.Proposal, want) {
 		t.Errorf("pull must keep the issue title verbatim as H1, got proposal starting %q", res.Proposal[:min(len(res.Proposal), 80)])
 	}
-	if want := "Migrate to Prisma 7 prisma-client generator"; res.TitleSuggestion != want {
+	if want := "Migrate to Postgres 17 pgx/v6 driver"; res.TitleSuggestion != want {
 		t.Errorf("TitleSuggestion = %q, want %q", res.TitleSuggestion, want)
 	}
 }
@@ -185,8 +185,8 @@ func TestPullSurfacesTitleSuggestionWithoutMutating(t *testing.T) {
 func TestShortenTitleIdempotent(t *testing.T) {
 	inputs := []string{
 		"Portal 2026 Q3",
-		"Design: resource-select flavor of the integration fields schema (credential → list resources → multi-create)",
-		"Migrate to Prisma 7 `prisma-client` generator (rewrite ~450 imports)",
+		"Design: multi-select flavor of the export fields schema (load → list fields → multi-create)",
+		"Migrate to Postgres 17 `pgx/v6` driver (rewrite ~450 call sites)",
 		"Refactor auth client adapter",
 		"Fix `parseFoo",
 		"(everything in parens)",

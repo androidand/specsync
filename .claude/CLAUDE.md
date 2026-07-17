@@ -24,7 +24,19 @@ specsync set-priority my-change 75
 
 # Unset manual override (use derived state)
 specsync set-stage my-change auto
+
+# Cross-link related changes (writes links.md in each; a "## Related"
+# section appears in both GitHub issues on the next sync)
+specsync link my-change other-change
+
+# Pull an existing issue into a local change / scan an area for related work
+specsync pull -issue 42
+specsync scan <path...> [topic words]
 ```
+
+specsync covers the full loop — sync, pull, cross-link (`link`), scan, trace,
+release-plan, changelog. Don't fall back to raw `gh` for something specsync
+already does; check `specsync <cmd> -h` or the specsync skill first.
 
 ## Stage Meanings for Dispatch
 

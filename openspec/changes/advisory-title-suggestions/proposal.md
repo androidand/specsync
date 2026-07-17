@@ -4,8 +4,8 @@
 
 Agents write full scope into titles — `proposal.md` H1s locally, issue titles via `gh` or the backlog MCP externally. Those verbose titles become issue titles, board cards, and (via `ReleaseNote()`'s fallback) permanent changelog entries:
 
-- `Design: resource-select flavor of the integration fields schema (credential → list resources → multi-create)`
-- `Migrate to Prisma 7 \`prisma-client\` generator (rewrite ~450 imports)`
+- `Design: multi-select flavor of the export fields schema (load → list fields → multi-create)`
+- `Migrate to Postgres 17 \`pgx/v6\` driver (rewrite ~450 call sites)`
 
 Two earlier attempts rewrote titles automatically and both were reverted:
 

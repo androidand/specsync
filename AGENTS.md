@@ -57,7 +57,9 @@ changelog entry as a real bug in this project, same severity as a failing test.
   proposal's raw H1 when there's no release-note section, so an unclean title
   (parentheticals, backtick tool names, implementation detail) becomes the
   permanent changelog line, not just an ugly issue title. See
-  `openspec/changes/title-hygiene-on-pull/`.
+  `openspec/changes/advisory-title-suggestions/` — specsync surfaces a
+  `title could be tighter` suggestion but never rewrites; fixing the H1 is
+  on the author.
 
 ## Security
 
@@ -77,6 +79,10 @@ changelog entry as a real bug in this project, same severity as a failing test.
   1. `specsync pull -issue <n> [-change <slug>]`.
   2. Refine `proposal.md` and `tasks.md`.
   3. `specsync -dry-run -change <slug>` then `specsync -change <slug>`.
+
+- Related changes: `specsync link <change1> <change2>` cross-links them
+  (`links.md` locally, "## Related" in both issues). Use it instead of
+  hand-editing issue bodies with `gh`.
 
 ## Completion Rule
 
@@ -115,8 +121,8 @@ unlinked-commit check) gating before merge instead of complaining after.
 answers "what will be different after this is done?" — not which files, tools,
 or techniques.
 
-- Good: `Migrate to Prisma 7`, `Fix login SSO reuse`
-- Bad: `Migrate to Prisma 7 prisma-client generator (rewrite ~450 imports)`
+- Good: `Migrate to Postgres 17`, `Fix login SSO reuse`
+- Bad: `Migrate to Postgres 17 pgx/v6 driver (rewrite ~450 call sites)`
 
 specsync never rewrites a title; it prints `title could be tighter: "..."` on
 sync and pull when the title carries scope detail that belongs in the body.
