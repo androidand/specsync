@@ -7,6 +7,35 @@ import (
 	"github.com/androidand/specsync"
 )
 
+// TestDeprecatedSlugFlag pins the removed -slug flag's error path: every
+// spelling a user might type points at -change, and positional words that
+// merely contain "slug" are left for flag.Parse to handle.
+func TestDeprecatedSlugFlag(t *testing.T) {
+	for _, args := range [][]string{
+		{"-slug", "foo"},
+		{"--slug", "foo"},
+		{"-slug=foo"},
+		{"--slug=foo"},
+		{"-dry-run", "-slug", "foo"},
+	} {
+		if err := deprecatedSlugFlag(args); err == nil {
+			t.Errorf("deprecatedSlugFlag(%v) = nil, want an error naming -change", args)
+		} else if !strings.Contains(err.Error(), "-change") {
+			t.Errorf("deprecatedSlugFlag(%v) error %q does not mention -change", args, err)
+		}
+	}
+	for _, args := range [][]string{
+		nil,
+		{"-change", "foo"},
+		{"-change", "slug"},
+		{"set-stage", "slug", "active"},
+	} {
+		if err := deprecatedSlugFlag(args); err != nil {
+			t.Errorf("deprecatedSlugFlag(%v) = %v, want nil", args, err)
+		}
+	}
+}
+
 // TestIsVersionArg pins the dispatch predicate the main switch uses for the
 // version subcommand, so the wiring cannot silently regress.
 func TestIsVersionArg(t *testing.T) {
@@ -37,14 +66,17 @@ func TestResolveSubcommand(t *testing.T) {
 		wantErr  bool
 	}{
 		{"empty", nil, "sync", nil, false},
-		{"flags only", []string{"-slug", "foo"}, "sync", []string{"-slug", "foo"}, false},
-		{"explicit sync", []string{"sync", "-slug", "foo"}, "sync", []string{"-slug", "foo"}, false},
-		{"push is not an alias", []string{"push", "-slug", "foo", "-dry-run"}, "", nil, true},
+		{"flags only", []string{"-change", "foo"}, "sync", []string{"-change", "foo"}, false},
+		{"explicit sync", []string{"sync", "-change", "foo"}, "sync", []string{"-change", "foo"}, false},
+		// The deprecated -slug flag routes to sync like any flag, where
+		// deprecatedSlugFlag produces the "did you mean -change?" error.
+		{"deprecated slug flag routes to sync", []string{"-slug", "foo"}, "sync", []string{"-slug", "foo"}, false},
+		{"push is not an alias", []string{"push", "-change", "foo", "-dry-run"}, "", nil, true},
 		{"pull", []string{"pull", "-issue", "3"}, "pull", []string{"-issue", "3"}, false},
 		{"version word", []string{"version"}, "version", []string{}, false},
 		{"version flag", []string{"-version"}, "version", []string{}, false},
 		{"unknown word", []string{"frobnicate", "-dry-run"}, "", nil, true},
-		{"typo of push", []string{"psh", "-slug", "foo"}, "", nil, true},
+		{"typo of push", []string{"psh", "-change", "foo"}, "", nil, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -78,7 +110,7 @@ func TestResolveSubcommand(t *testing.T) {
 // the right mental model (sync also reconciles tracker state back into
 // tasks.md, so it isn't one-way like git push).
 func TestResolveSubcommandPushSuggestsSync(t *testing.T) {
-	_, _, err := resolveSubcommand([]string{"push", "-slug", "foo"})
+	_, _, err := resolveSubcommand([]string{"push", "-change", "foo"})
 	if err == nil {
 		t.Fatal("expected an error for \"push\"")
 	}

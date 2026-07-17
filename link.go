@@ -49,7 +49,7 @@ func Link(opts LinkOptions) ([]LinkedPair, error) {
 			return nil, err
 		}
 		if len(refs) == 0 {
-			return nil, fmt.Errorf("slug %q has no synced ref; run specsync -slug %s first", slug, slug)
+			return nil, fmt.Errorf("change %q has no synced ref; run specsync -change %s first", slug, slug)
 		}
 		// Prefer the plain "github" key (same-repo); fall back to first available.
 		key, ref := firstRef(refs)

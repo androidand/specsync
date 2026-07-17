@@ -38,6 +38,8 @@ specsync pull -issue <n> [-change <change>] [-dry-run] [-repo owner/name] [-open
 
 `-issue` is required. Creates `openspec/changes/<change>/proposal.md` (and `tasks.md` if tasks are detected). `-dry-run` shows what would be written without touching disk.
 
+**Title hygiene.** specsync never rewrites a title, in either direction: pull writes the issue title verbatim as the proposal H1, and sync pushes the H1 verbatim to the tracker. When a title carries scope detail that belongs in the body (parenthetical asides, backtick markup), both commands print `title could be tighter: "..."` with a suggested variant — edit the proposal H1 yourself if you agree. Write H1s as WHAT, not HOW; put scope in the proposal body.
+
 ### Scan for existing work in an area
 
 ```

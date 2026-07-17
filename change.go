@@ -14,10 +14,10 @@ import (
 type TaskProgress string
 
 const (
-	TaskProgressNoTasks    TaskProgress = "no-tasks"      // no tasks.md file
-	TaskProgressNotStarted TaskProgress = "not-started"   // 0/N tasks complete
-	TaskProgressInProgress TaskProgress = "in-progress"   // 0 < X < N
-	TaskProgressComplete   TaskProgress = "complete"      // N/N tasks complete
+	TaskProgressNoTasks    TaskProgress = "no-tasks"    // no tasks.md file
+	TaskProgressNotStarted TaskProgress = "not-started" // 0/N tasks complete
+	TaskProgressInProgress TaskProgress = "in-progress" // 0 < X < N
+	TaskProgressComplete   TaskProgress = "complete"    // N/N tasks complete
 )
 
 // Stage is the workflow placement of a change. It is distinct from task progress.
@@ -26,12 +26,12 @@ const (
 type Stage string
 
 const (
-	StageBacklog   Stage = "backlog"      // not yet started; pre-discovery or deferred
-	StageBlocked   Stage = "blocked"      // waiting on external blocker or decision
-	StageActive    Stage = "active"       // in flight; has unchecked work
-	StageInReview  Stage = "in-review"    // awaiting approval before proceeding
-	StageComplete  Stage = "complete"     // all work done, not yet archived
-	StageArchived  Stage = "archived"     // moved to changes/archive/ (immutable)
+	StageBacklog  Stage = "backlog"   // not yet started; pre-discovery or deferred
+	StageBlocked  Stage = "blocked"   // waiting on external blocker or decision
+	StageActive   Stage = "active"    // in flight; has unchecked work
+	StageInReview Stage = "in-review" // awaiting approval before proceeding
+	StageComplete Stage = "complete"  // all work done, not yet archived
+	StageArchived Stage = "archived"  // moved to changes/archive/ (immutable)
 )
 
 // ValidateStage checks if a stage value is canonical or matches the custom stage pattern.
@@ -87,12 +87,12 @@ const (
 // Change is a provider-agnostic view of one OpenSpec change folder. It is the
 // only thing this package reads from disk and is fully self-contained.
 type Change struct {
-	Dir           string       // absolute path to the change folder
+	Dir           string // absolute path to the change folder
 	Slug          string
-	Title         string       // first H1 of proposal.md, falling back to Slug
-	Body          string       // proposal.md contents
-	TasksMarkdown string       // tasks.md contents, may be ""
-	Links         []Ref        // resolved related issue refs from links.md
+	Title         string // first H1 of proposal.md, falling back to Slug
+	Body          string // proposal.md contents
+	TasksMarkdown string // tasks.md contents, may be ""
+	Links         []Ref  // resolved related issue refs from links.md
 	Archived      bool
 	Progress      TaskProgress // what the task checklist says
 	Stage         Stage        // current workflow placement
@@ -115,7 +115,6 @@ func LoadChanges(openspecDir string) ([]Change, error) {
 	}
 	return append(active, archived...), nil
 }
-
 
 func loadChangeDir(dir string, archived bool, openspecDir string) ([]Change, error) {
 	entries, err := os.ReadDir(dir)
@@ -542,6 +541,70 @@ func firstHeading(md, fallback string) string {
 		}
 	}
 	return fallback
+}
+
+// titleSuggestion returns a tighter variant of title for advisory display,
+// or "" when the title is already tight. specsync never rewrites a title —
+// the suggestion is surfaced to the user, who edits the proposal H1 (or not)
+// themselves.
+func titleSuggestion(title string) string {
+	if s, changed := shortenTitle(title); changed {
+		return s
+	}
+	return ""
+}
+
+// shortenTitle produces the concise variant behind titleSuggestion. It
+// strips parenthetical asides and backtick characters (the text inside
+// backticks is kept — tracker titles don't render markdown, so the markers
+// are pure noise). The transform is a fixpoint: applying it to its own
+// output changes nothing. A title that would clean down to nothing is
+// returned unchanged.
+func shortenTitle(title string) (string, bool) {
+	cleaned := stripParentheticals(title)
+	cleaned = strings.ReplaceAll(cleaned, "`", "")
+	cleaned = strings.Join(strings.Fields(cleaned), " ")
+	cleaned = strings.TrimRight(cleaned, " .,;:")
+	if cleaned == "" {
+		return title, false
+	}
+	return cleaned, cleaned != title
+}
+
+// stripParentheticals removes all (...) segments from s. Unbalanced parens
+// (a smiley, a typo) leave s untouched — stripping would otherwise silently
+// drop everything after the stray '('.
+func stripParentheticals(s string) string {
+	depth := 0
+	for _, r := range s {
+		switch r {
+		case '(':
+			depth++
+		case ')':
+			depth--
+			if depth < 0 {
+				return s
+			}
+		}
+	}
+	if depth != 0 {
+		return s
+	}
+	var result []rune
+	depth = 0
+	for _, r := range s {
+		switch r {
+		case '(':
+			depth++
+		case ')':
+			depth--
+		default:
+			if depth == 0 {
+				result = append(result, r)
+			}
+		}
+	}
+	return string(result)
 }
 
 // atoiSafe parses a non-negative integer, returning 0 on any non-digit input.

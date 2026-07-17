@@ -30,6 +30,11 @@ type ItemResult struct {
 	URL     string
 	Created bool
 	Flips   []TaskFlip // task states merged in from the issue (reconcile)
+	// TitleSuggestion is a tighter variant of the change's title, set only
+	// when shortenTitle would modify it. Sync always pushes the proposal H1
+	// verbatim — the title is the author's content, not specsync's to edit —
+	// but surfaces the suggestion so the author can shorten it at the source.
+	TitleSuggestion string
 	// Board reports the board projection; BoardConfigured is false when no target
 	// project was configured (in which case Board is zero and no board calls ran).
 	BoardConfigured bool
@@ -61,11 +66,18 @@ func Sync(ctx context.Context, opts Options) (Result, error) {
 		} else {
 			res.Updated++
 		}
+		// No suggestion for archived changes: changes/archive/ is immutable
+		// by convention, so "edit the proposal H1" is not actionable there.
+		var suggestion string
+		if !c.Archived {
+			suggestion = titleSuggestion(c.Title)
+		}
 		res.Items = append(res.Items, ItemResult{
 			Slug:            c.Slug,
 			URL:             ref.URL,
 			Created:         created,
 			Flips:           flips,
+			TitleSuggestion: suggestion,
 			BoardConfigured: opts.Project.Configured(),
 			Board:           plan,
 		})

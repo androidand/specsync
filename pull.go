@@ -31,6 +31,11 @@ type PullResult struct {
 	// MarkerPresent reports whether the source issue already carried the marker,
 	// i.e. no write was (or would be) needed. Drives the dry-run preview.
 	MarkerPresent bool
+	// TitleSuggestion is a tighter variant of the issue title, set only when
+	// shortenTitle would modify it. Pull writes the title verbatim — rewriting
+	// someone else's issue title is not specsync's call — but surfaces the
+	// suggestion so the author can tighten the proposal H1 after pulling.
+	TitleSuggestion string
 	// Board reports the board projection; BoardConfigured is false when no target
 	// project was configured (Board is zero and no board calls ran).
 	BoardConfigured bool
@@ -66,19 +71,20 @@ func Pull(ctx context.Context, opts PullOptions) (PullResult, error) {
 		slug = slugify(item.Title)
 	}
 	if slug == "" {
-		return PullResult{}, fmt.Errorf("could not derive a slug from issue %s; pass -slug", opts.IssueID)
+		return PullResult{}, fmt.Errorf("could not derive a change name from issue %s; pass -change", opts.IssueID)
 	}
 
 	proposal, tasks, relatedURLs := splitBody(item.Body, item.Title)
 	res := PullResult{
-		Slug:          slug,
-		Dir:           filepath.Join(opts.OpenSpecDir, "changes", slug),
-		IssueURL:      item.URL,
-		Proposal:      proposal,
-		Tasks:         tasks,
-		Links:         relatedURLs,
-		Marker:        marker(slug),
-		MarkerPresent: strings.Contains(item.Body, marker(slug)),
+		Slug:            slug,
+		Dir:             filepath.Join(opts.OpenSpecDir, "changes", slug),
+		IssueURL:        item.URL,
+		Proposal:        proposal,
+		Tasks:           tasks,
+		Links:           relatedURLs,
+		Marker:          marker(slug),
+		MarkerPresent:   strings.Contains(item.Body, marker(slug)),
+		TitleSuggestion: titleSuggestion(item.Title),
 	}
 
 	// Project onto the board when a target is configured and the provider supports

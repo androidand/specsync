@@ -45,7 +45,7 @@ var knownConfusions = map[string]string{
 // resolveSubcommand decides which subcommand os.Args[1:] selects and returns
 // its remaining arguments. A missing first argument, or one starting with
 // "-", both select "sync" (bare invocation with flags only) — that keeps
-// `specsync -slug foo` working. Any other bare word that isn't in
+// `specsync -change foo` working. Any other bare word that isn't in
 // knownSubcommands is an error: Go's flag package stops parsing at the first
 // non-flag argument, so letting an unrecognized word like a typo'd
 // subcommand name reach runSync's flag.Parse would silently discard every
@@ -67,11 +67,22 @@ func resolveSubcommand(args []string) (cmd string, rest []string, err error) {
 	if suggestion, ok := knownConfusions[first]; ok {
 		return "", nil, fmt.Errorf("unknown subcommand %q — did you mean %q? specsync's sync also reconciles tracker state back into tasks.md, so it isn't a one-way push", first, suggestion)
 	}
-	// Check for deprecated -slug flag used as a subcommand.
-	if first == "-slug" || first == "--slug" {
-		return "", nil, fmt.Errorf("unknown subcommand %q — did you mean -change? (specsync defaults to syncing all changes; use -change <name> to sync a single change)", first)
-	}
 	return "", nil, fmt.Errorf("unknown subcommand %q", first)
+}
+
+// deprecatedSlugFlag reports an error pointing at -change when the removed
+// -slug flag appears in args, in either "-slug value" or "-slug=value" form.
+func deprecatedSlugFlag(args []string) error {
+	for _, arg := range args {
+		if !strings.HasPrefix(arg, "-") {
+			continue
+		}
+		name := strings.TrimPrefix(strings.TrimPrefix(arg, "-"), "-")
+		if name == "slug" || strings.HasPrefix(name, "slug=") {
+			return fmt.Errorf("unknown flag %s — did you mean -change?", arg)
+		}
+	}
+	return nil
 }
 
 func main() {
@@ -126,11 +137,8 @@ func runSync(args []string) {
 	project := fs.String("project", "", "target GitHub Projects board as owner/number (default: $SPECSYNC_PROJECT; unset = no board)")
 	assignee := fs.String("assignee", "", "board assignee login (default: the acting viewer, \"me\")")
 	statusMap := fs.String("status-map", "", "stage→Status overrides as stage=Name pairs, e.g. \"active=In Progress,archived=Done\" (default: $SPECSYNC_STATUS_MAP)")
-	// Handle deprecated -slug flag with helpful error.
-	for _, arg := range args {
-		if arg == "-slug" || arg == "--slug" {
-			fail(fmt.Errorf("unknown flag %s — did you mean -change?", arg))
-		}
+	if err := deprecatedSlugFlag(args); err != nil {
+		fail(err)
 	}
 	_ = fs.Parse(args)
 
@@ -190,6 +198,9 @@ func runSync(args []string) {
 			}
 			fmt.Printf("           ↳ reconciled from issue: %s → %s\n", f.Text, state)
 		}
+		if it.TitleSuggestion != "" {
+			fmt.Printf("           ↳ title could be tighter: %q — edit the proposal.md H1 if you agree\n", it.TitleSuggestion)
+		}
 		if it.BoardConfigured {
 			printBoardPlan(it.Board, *dryRun)
 		}
@@ -209,11 +220,8 @@ func runPull(args []string) {
 	project := fs.String("project", "", "target GitHub Projects board as owner/number (default: $SPECSYNC_PROJECT; unset = no board)")
 	assignee := fs.String("assignee", "", "board assignee login (default: the acting viewer, \"me\")")
 	statusMap := fs.String("status-map", "", "stage→Status overrides as stage=Name pairs, e.g. \"active=In Progress,archived=Done\" (default: $SPECSYNC_STATUS_MAP)")
-	// Handle deprecated -slug flag with helpful error.
-	for _, arg := range args {
-		if arg == "-slug" || arg == "--slug" {
-			fail(fmt.Errorf("unknown flag %s — did you mean -change?", arg))
-		}
+	if err := deprecatedSlugFlag(args); err != nil {
+		fail(err)
 	}
 	_ = fs.Parse(args)
 
@@ -253,6 +261,9 @@ func runPull(args []string) {
 		} else {
 			fmt.Printf("\nwould add marker to issue %s body: %s\n", *issue, res.Marker)
 		}
+		if res.TitleSuggestion != "" {
+			fmt.Printf("\ntitle could be tighter: %q — edit the proposal.md H1 if you agree\n", res.TitleSuggestion)
+		}
 		if res.BoardConfigured {
 			printBoardPlan(res.Board, true)
 		}
@@ -262,6 +273,9 @@ func runPull(args []string) {
 	fmt.Println("  + proposal.md")
 	if res.Tasks != "" {
 		fmt.Println("  + tasks.md")
+	}
+	if res.TitleSuggestion != "" {
+		fmt.Printf("  title could be tighter: %q — edit the proposal.md H1 if you agree\n", res.TitleSuggestion)
 	}
 	if res.BoardConfigured {
 		printBoardPlan(res.Board, false)
