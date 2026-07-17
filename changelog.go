@@ -47,6 +47,11 @@ type Changelog struct {
 // deltasBySlug carries each shipped change's OpenSpec requirement deltas; the
 // map may be nil or sparse when the OpenSpec CLI is unavailable.
 func BuildChangelog(in TraceInput, deltasBySlug map[string][]OpenSpecDelta) Changelog {
+	// A commit that was reverted inside the same range is a net no-op: the
+	// release doesn't contain its behavior, so neither commit may publish an
+	// entry (or count as an unlinked commit).
+	in.Commits = cancelRevertPairs(in.Commits)
+
 	// Which commits link to which change — same evidence rule as ResolveTrace:
 	// a commit belongs to the first change whose bound issue ids it references.
 	issueToChange := map[string]string{}
@@ -110,6 +115,49 @@ func BuildChangelog(in TraceInput, deltasBySlug map[string][]OpenSpecDelta) Chan
 
 	sortEntries(cl.Entries)
 	return cl
+}
+
+// cancelRevertPairs drops every commit that is reverted by a later commit in
+// the same range, together with the revert itself. Reverts are matched
+// newest-first so a revert-of-revert chain resolves to its net effect (A,
+// revert(A)=B, revert(B)=C leaves A: C cancels B, and A stands). A revert
+// whose target is outside the range is kept — relative to the previous
+// release it really does change behavior. Hashes match on the shorter
+// prefix, since revert bodies may carry abbreviated hashes.
+func cancelRevertPairs(commits []Commit) []Commit {
+	consumed := make([]bool, len(commits))
+	for i := len(commits) - 1; i >= 0; i-- {
+		if consumed[i] || commits[i].RevertsHash == "" {
+			continue
+		}
+		for j := range commits {
+			if j == i || consumed[j] || !hashMatches(commits[j].Hash, commits[i].RevertsHash) {
+				continue
+			}
+			consumed[i], consumed[j] = true, true
+			break
+		}
+	}
+	var kept []Commit
+	for i, c := range commits {
+		if !consumed[i] {
+			kept = append(kept, c)
+		}
+	}
+	return kept
+}
+
+// hashMatches reports whether two commit hashes name the same commit,
+// tolerating abbreviation on either side (minimum 7 characters).
+func hashMatches(a, b string) bool {
+	a, b = strings.ToLower(a), strings.ToLower(b)
+	if len(a) < 7 || len(b) < 7 {
+		return a != "" && a == b
+	}
+	if len(a) > len(b) {
+		a, b = b, a
+	}
+	return strings.HasPrefix(b, a)
 }
 
 // releaseNoteRE finds a "## Release note" heading (any case, optional "s").
