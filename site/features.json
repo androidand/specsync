@@ -46,5 +46,11 @@
     "icon": "changelog",
     "title": "Spec-driven changelog",
     "body": "<code>specsync changelog</code> writes a Keep a Changelog section from your shipped changes — one entry per change, release notes authored at planning time, never a raw commit dump."
+  },
+  {
+    "group": "ship",
+    "icon": "audit",
+    "title": "Archive audit",
+    "body": "<code>specsync audit</code> cross-references archived changes against GitHub PRs to find archived-but-unmerged work. Add <code>-mark-shipped</code> to record the final lifecycle step."
   }
 ]

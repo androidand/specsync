@@ -93,6 +93,7 @@ specsync trace           # print the raw spec<->commit<->issue link graph
 specsync link            # cross-link two or more changes
 specsync release-plan    # shipped changes + advisory semver bump
 specsync changelog       # Keep a Changelog section from shipped changes
+specsync audit           # archived changes vs. merged PRs
 specsync install-skill   # install the bundled agent skill
 specsync version         # print the binary version
 ```
@@ -212,7 +213,25 @@ silently dropped). `-apply` is idempotent — re-running replaces that version's
 section in place — and defers to a release tool that already owns the
 changelog (release-please, changesets, …) unless you pass `-force`.
 
-### Projects boards: `-project owner/number`
+### `audit` — did the PR actually land?
+
+An archived change means the spec work is done — not that the PR merged. `specsync
+audit` cross-references archived changes against GitHub PRs to find the gap:
+
+```bash
+specsync audit                              # table of archived changes vs. PR state
+specsync audit -json                        # machine-readable, for CI
+specsync audit -fail-on-unmerged            # exit non-zero if any unmerged
+specsync audit -mark-shipped                # write shipped metadata for merged PRs
+```
+
+For each archived change, audit checks: open PR → "unmerged", merged PR →
+"shipped", no PR → "orphaned". PR matching uses the specsync marker in the PR
+body, branch name convention (`feat/<issue>-<slug>`), or PR title.
+
+Use `-mark-shipped` to write `stage: shipped` to each confirmed change's
+`.specsync/metadata.json`. This records the lifecycle step: `active → complete
+→ archived → shipped`.
 
 Project a synced change onto a GitHub Projects (v2) board — the issue is added
 to the board, its Status follows the change's stage, and the acting user is

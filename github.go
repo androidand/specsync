@@ -9,6 +9,16 @@ import (
 	"sync"
 )
 
+// PRState holds the state of a single pull request.
+type PRState struct {
+	Number      int    `json:"number"`
+	URL         string `json:"url"`
+	Title       string `json:"title"`
+	HeadRefName string `json:"headRefName"`
+	Body        string `json:"body"`
+	Merged      bool   `json:"merged"`
+}
+
 // GitHubProvider projects changes onto GitHub Issues using the `gh` CLI. It
 // holds no GitHub SDK dependency; everything is shelled out, which keeps this
 // package free of network/auth code and easy to fake in tests by swapping run.
@@ -271,6 +281,45 @@ func (p *GitHubProvider) SearchOpenIssues(ctx context.Context, query string) ([]
 		})
 	}
 	return out2, nil
+}
+
+// ListOpenPRs returns open pull requests from the target repo.
+func (p *GitHubProvider) ListOpenPRs(ctx context.Context) ([]PRState, error) {
+	args := append([]string{"pr", "list"}, p.repoFlag()...)
+	args = append(args, "--state", "open", "--json", "number,url,title,headRefName,body")
+	out, err := p.run(ctx, args...)
+	if err != nil {
+		return nil, err
+	}
+	if out == "" || out == "[]" {
+		return nil, nil
+	}
+	var items []PRState
+	if err := json.Unmarshal([]byte(out), &items); err != nil {
+		return nil, fmt.Errorf("parse gh pr list: %w", err)
+	}
+	return items, nil
+}
+
+// ListRecentMergedPRs returns recently merged pull requests from the target repo.
+func (p *GitHubProvider) ListRecentMergedPRs(ctx context.Context) ([]PRState, error) {
+	args := append([]string{"pr", "list"}, p.repoFlag()...)
+	args = append(args, "--state", "merged", "--limit", "50", "--json", "number,url,title,headRefName,body")
+	out, err := p.run(ctx, args...)
+	if err != nil {
+		return nil, err
+	}
+	if out == "" || out == "[]" {
+		return nil, nil
+	}
+	var items []PRState
+	if err := json.Unmarshal([]byte(out), &items); err != nil {
+		return nil, fmt.Errorf("parse gh pr list: %w", err)
+	}
+	for i := range items {
+		items[i].Merged = true
+	}
+	return items, nil
 }
 
 func (p *GitHubProvider) close(ctx context.Context, num string) error {
