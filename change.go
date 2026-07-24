@@ -26,12 +26,13 @@ const (
 type Stage string
 
 const (
-	StageBacklog  Stage = "backlog"   // not yet started; pre-discovery or deferred
-	StageBlocked  Stage = "blocked"   // waiting on external blocker or decision
-	StageActive   Stage = "active"    // in flight; has unchecked work
-	StageInReview Stage = "in-review" // awaiting approval before proceeding
-	StageComplete Stage = "complete"  // all work done, not yet archived
-	StageArchived Stage = "archived"  // moved to changes/archive/ (immutable)
+	StageBacklog   Stage = "backlog"      // not yet started; pre-discovery or deferred
+	StageBlocked   Stage = "blocked"      // waiting on external blocker or decision
+	StageActive    Stage = "active"       // in flight; has unchecked work
+	StageInReview  Stage = "in-review"    // awaiting approval before proceeding
+	StageComplete  Stage = "complete"     // all work done, not yet archived
+	StageArchived  Stage = "archived"     // moved to changes/archive/ (immutable)
+	StageShipped   Stage = "shipped"      // archived + PR merged to master
 )
 
 // ValidateStage checks if a stage value is canonical or matches the custom stage pattern.
@@ -43,7 +44,7 @@ func ValidateStage(stage Stage) error {
 	pattern := regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
 	if !pattern.MatchString(string(stage)) {
 		return fmt.Errorf("invalid stage %q\n"+
-			"  Canonical: backlog, active, blocked, in-review, complete, archived\n"+
+			"  Canonical: backlog, active, blocked, in-review, complete, archived, shipped\n"+
 			"  Custom: lowercase letters/numbers/hyphens, 1-64 chars (e.g., awaiting-review)", stage)
 	}
 	return nil
@@ -52,7 +53,7 @@ func ValidateStage(stage Stage) error {
 // IsCanonicalStage reports whether stage is one of the six canonical values.
 func IsCanonicalStage(stage Stage) bool {
 	switch stage {
-	case StageBacklog, StageBlocked, StageActive, StageInReview, StageComplete, StageArchived:
+	case StageBacklog, StageBlocked, StageActive, StageInReview, StageComplete, StageArchived, StageShipped:
 		return true
 	default:
 		return false
@@ -62,7 +63,7 @@ func IsCanonicalStage(stage Stage) bool {
 // CanonicalStageOrder returns the canonical stage ordering for sorting.
 func CanonicalStageOrder() []Stage {
 	return []Stage{
-		StageBacklog, StageBlocked, StageActive, StageInReview, StageComplete, StageArchived,
+		StageBacklog, StageBlocked, StageActive, StageInReview, StageComplete, StageArchived, StageShipped,
 	}
 }
 

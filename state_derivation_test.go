@@ -218,7 +218,7 @@ func TestIsCanonicalStage(t *testing.T) {
 func TestCanonicalStageOrder(t *testing.T) {
 	order := CanonicalStageOrder()
 	expected := []Stage{
-		StageBacklog, StageBlocked, StageActive, StageInReview, StageComplete, StageArchived,
+		StageBacklog, StageBlocked, StageActive, StageInReview, StageComplete, StageArchived, StageShipped,
 	}
 
 	if len(order) != len(expected) {
