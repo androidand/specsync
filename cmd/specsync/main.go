@@ -27,7 +27,7 @@ var knownSubcommands = map[string]bool{
 	"pull": true, "link": true, "scan": true, "trace": true,
 	"release-plan": true, "changelog": true, "install-skill": true,
 	"changes": true, "set-stage": true, "set-priority": true,
-	"sync": true,
+	"sync": true, "audit": true,
 }
 
 // knownConfusions maps a word someone might reach for by habit (e.g. git's
@@ -88,7 +88,7 @@ func deprecatedSlugFlag(args []string) error {
 func main() {
 	cmd, rest, err := resolveSubcommand(os.Args[1:])
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "specsync: %v\n\nRun with no subcommand (optionally with flags) to sync, or use one of: pull, link, scan, trace, release-plan, changelog, install-skill, changes, set-stage, set-priority\n", err)
+		fmt.Fprintf(os.Stderr, "specsync: %v\n\nRun with no subcommand (optionally with flags) to sync, or use one of: pull, link, scan, trace, release-plan, changelog, install-skill, changes, set-stage, set-priority, audit\n", err)
 		os.Exit(2)
 	}
 	switch cmd {
