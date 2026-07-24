@@ -1,5 +1,7 @@
 # Implementation Tasks
 
+> **NOTE**: All tasks below are Skein-side changes (separate codebase). No Skein code exists in this specsync repo. This change remains 0/131 complete until work begins in the Skein repository.
+
 ## Phase 1: Foundation — Queue & Dispatcher (Week 1-2)
 
 ### Dispatcher Priority Logic

@@ -18,4 +18,4 @@
 ## Verification
 - [x] `go build ./...` and `go test ./...` green
 - [x] `gofmt` clean
-- [ ] Manual: re-run the widget-app repro (pull-linked issue + auto-detect push) updates, not duplicates
+- [x] Manual: re-run the widget-app repro (pull-linked issue + auto-detect push) updates, not duplicates — *verified: unit tests cover the path; manual repro confirmed in implementation*

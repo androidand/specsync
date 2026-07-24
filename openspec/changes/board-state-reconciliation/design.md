@@ -12,21 +12,24 @@ Phase 1 (one-way with human-move detection) focuses on safe persistence and repo
 
 ```go
 type BoardBinding struct {
-    Provider    string    `json:"provider"`     // "github-projects", etc.
-    ProjectID   string    `json:"project_id"`
-    ItemID      string    `json:"item_id"`
-    Base        MergeBase `json:"base"`
-    SyncedAt    time.Time `json:"synced_at"`
-}
-
-type MergeBase struct {
-    LocalStage         Stage  `json:"local_stage"`
-    RemoteOptionID     string `json:"remote_status_option_id"`
+    Provider           string    `json:"provider"`             // "github-projects", etc.
+    ProjectID          string    `json:"project_id"`
+    ItemID             string    `json:"item_id"`
+    LocalStageBase     Stage     `json:"local_stage_base"`     // local stage at last sync
+    RemoteOptionIDBase string    `json:"remote_option_id_base"` // remote option ID at last sync
+    SyncedAt           time.Time `json:"synced_at"`
 }
 
 type BoardState struct {
-    Version  int                      `json:"version"`
-    Bindings map[string]BoardBinding `json:"bindings"`  // key: "github-projects:owner/5"
+    Version  int                       `json:"version"`
+    Bindings map[string]BoardBinding   `json:"bindings"`  // key: "owner:number:provider"
+}
+
+type ThreeWayDecision struct {
+    Action      string // "none", "push-local", "report-remote-move", "report-conflict"
+    Reason      string // human-readable explanation
+    LocalChanged  bool
+    RemoteChanged bool
 }
 ```
 
