@@ -447,7 +447,7 @@ func parseStatusMapping(s string) (map[specsync.Stage]string, error) {
 		}
 		stage, known := stages[strings.ToLower(k)]
 		if !known {
-			return nil, fmt.Errorf("-status-map stage %q is unknown; valid stages: active, complete, archived", k)
+			return nil, fmt.Errorf("-status-map stage %q is unknown; valid stages: active, complete, archived, shipped", k)
 		}
 		if _, dup := mapping[stage]; dup {
 			return nil, fmt.Errorf("-status-map maps stage %q twice", k)

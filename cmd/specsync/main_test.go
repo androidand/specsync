@@ -77,6 +77,8 @@ func TestResolveSubcommand(t *testing.T) {
 		{"version flag", []string{"-version"}, "version", []string{}, false},
 		{"unknown word", []string{"frobnicate", "-dry-run"}, "", nil, true},
 		{"typo of push", []string{"psh", "-change", "foo"}, "", nil, true},
+		{"audit", []string{"audit", "-json"}, "audit", []string{"-json"}, false},
+		{"audit fail-on-unmerged", []string{"audit", "-fail-on-unmerged"}, "audit", []string{"-fail-on-unmerged"}, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -153,6 +155,10 @@ func TestParseStatusMapping(t *testing.T) {
 
 	if got, err := parseStatusMapping(" complete = Shipped "); err != nil || got[specsync.StageComplete] != "Shipped" {
 		t.Fatalf("whitespace should be trimmed, got %v (err %v)", got, err)
+	}
+
+	if got, err := parseStatusMapping("shipped=Landed"); err != nil || got[specsync.StageShipped] != "Landed" {
+		t.Fatalf("shipped stage: got %v (err %v)", got, err)
 	}
 
 	if got, err := parseStatusMapping(""); err != nil || got != nil {
