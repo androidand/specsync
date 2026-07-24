@@ -122,7 +122,6 @@ func main() {
 		runSync(rest)
 	}
 }
-}
 
 // isVersionArg reports whether the first CLI arg requests the binary version.
 func isVersionArg(arg string) bool {
@@ -437,6 +436,7 @@ func parseStatusMapping(s string) (map[specsync.Stage]string, error) {
 		"active":   specsync.StageActive,
 		"complete": specsync.StageComplete,
 		"archived": specsync.StageArchived,
+		"shipped":  specsync.StageShipped,
 	}
 	mapping := map[specsync.Stage]string{}
 	for _, pair := range strings.Split(s, ",") {
@@ -798,6 +798,10 @@ func runAudit(args []string) {
 
 	result := specsync.Audit(context.Background(), provider, changes)
 
+	for _, e := range result.Errors {
+		fmt.Fprintf(os.Stderr, "specsync: audit warning: %v\n", e)
+	}
+
 	if *markShipped {
 		for _, f := range result.Findings {
 			if f.Status == "shipped" && f.PR != nil {
@@ -828,9 +832,9 @@ func runAudit(args []string) {
 			HeadRefName string `json:"headRefName"`
 		}
 		type findingJSON struct {
-			Slug   string    `json:"slug"`
-			Status string    `json:"status"`
-			PR     *prJSON   `json:"pr,omitempty"`
+			Slug   string  `json:"slug"`
+			Status string  `json:"status"`
+			PR     *prJSON `json:"pr,omitempty"`
 		}
 		type resultJSON struct {
 			Findings []findingJSON `json:"findings"`

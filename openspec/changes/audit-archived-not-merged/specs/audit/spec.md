@@ -83,4 +83,4 @@ confirmed. This is opt-in because writing metadata is a mutation.
 #### Scenario: Mark shipped for merged PR
 - **WHEN** `specsync audit -mark-shipped` is run and an archived change has a merged PR
 - **THEN** the change's `.specsync/metadata.json` is written with `stage: shipped`
-- **AND** a subsequent `specsync audit` run reports the change as shipped (not re-queried)
+- **AND** a subsequent `specsync audit` run still reports the change as shipped (the merged PR remains in GitHub history)

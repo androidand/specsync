@@ -56,6 +56,30 @@ func TestMatchPRToChange(t *testing.T) {
 			slug: "my-feature",
 			want: false,
 		},
+		{
+			name: "branch with issue number prefix (feat/<issue>-<slug>)",
+			pr:   PRState{HeadRefName: "feat/52-advisory-title-suggestions"},
+			slug: "advisory-title-suggestions",
+			want: true,
+		},
+		{
+			name: "branch with multiple prefix segments",
+			pr:   PRState{HeadRefName: "skein/feat/52-some-change"},
+			slug: "some-change",
+			want: true,
+		},
+		{
+			name: "branch with short slug prefix (no false positive)",
+			pr:   PRState{HeadRefName: "fix-bug"},
+			slug: "fix",
+			want: false,
+		},
+		{
+			name: "slug not in branch at all",
+			pr:   PRState{HeadRefName: "other-work"},
+			slug: "my-feature",
+			want: false,
+		},
 	}
 
 	for _, tc := range tests {
@@ -196,5 +220,53 @@ func TestMarkShippedMetadata(t *testing.T) {
 	}
 	if meta.Stage == nil || *meta.Stage != StageShipped {
 		t.Errorf("stage = %v, want shipped", meta.Stage)
+	}
+}
+
+func TestLoadArchivedChangeReadsShippedMetadata(t *testing.T) {
+	root := t.TempDir()
+	openspecDir := filepath.Join(root, "openspec")
+	changesDir := filepath.Join(openspecDir, "changes", "archive", "my-feature")
+	if err := os.MkdirAll(changesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(changesDir, "proposal.md"), []byte("# My Feature\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Without metadata, archived change should be StageArchived
+	c, err := LoadChange(changesDir, true, openspecDir)
+	if err != nil {
+		t.Fatalf("LoadChange: %v", err)
+	}
+	if c == nil {
+		t.Fatal("change is nil")
+	}
+	if c.Stage != StageArchived {
+		t.Errorf("stage = %q, want archived", c.Stage)
+	}
+
+	// Write shipped metadata
+	stg := StageShipped
+	if err := SaveChangeMetadata(changesDir, ChangeMetadata{
+		Version: 1,
+		Stage:   &stg,
+	}); err != nil {
+		t.Fatalf("SaveChangeMetadata: %v", err)
+	}
+
+	// Reload — should now be StageShipped
+	c, err = LoadChange(changesDir, true, openspecDir)
+	if err != nil {
+		t.Fatalf("LoadChange: %v", err)
+	}
+	if c == nil {
+		t.Fatal("change is nil")
+	}
+	if c.Stage != StageShipped {
+		t.Errorf("stage = %q, want shipped (from metadata)", c.Stage)
+	}
+	if c.StageSource != StageSourceMetadata {
+		t.Errorf("stageSource = %q, want metadata", c.StageSource)
 	}
 }

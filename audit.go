@@ -2,25 +2,27 @@ package specsync
 
 import (
 	"context"
+	"fmt"
 	"strings"
 )
 
 // AuditFinding represents the result of auditing a single archived change.
 type AuditFinding struct {
-	Slug   string      // change slug
-	Status string      // "unmerged", "shipped", or "orphaned"
-	PR     *PRState    // the matching PR, nil for orphaned
+	Slug   string   // change slug
+	Status string   // "unmerged", "shipped", or "orphaned"
+	PR     *PRState // the matching PR, nil for orphaned
 }
 
 // AuditResult holds the findings from an audit run.
 type AuditResult struct {
 	Findings []AuditFinding
+	Errors   []error // non-fatal errors during PR listing
 }
 
 // matchPRToChange returns true when the PR likely belongs to the given change slug.
 // Matching strategies (priority order):
 //  1. specsync marker comment in PR body
-//  2. Branch name starts with the slug (exact or with prefix/suffix)
+//  2. Branch name matches slug (exact, after prefix, or with issue number)
 //  3. PR title contains the slug
 func matchPRToChange(pr PRState, slug string) bool {
 	// Strategy 1: specsync marker in body (highest priority, most reliable)
@@ -28,16 +30,35 @@ func matchPRToChange(pr PRState, slug string) bool {
 		return true
 	}
 
-	// Strategy 2: branch name prefix
-	// Match exact branch name or branch with prefix like "skein/" or "feature/"
+	// Strategy 2: branch name matches slug
 	branch := pr.HeadRefName
 	if branch == slug {
 		return true
 	}
-	if idx := strings.IndexByte(branch, '/'); idx > 0 {
-		if branch[idx+1:] == slug {
+
+	// Check after every '/' in the branch name (handles "feat/slug",
+	// "skein/feat/slug", and "skein/feat/52-slug" patterns)
+	rest := branch
+	for {
+		idx := strings.IndexByte(rest, '/')
+		if idx < 0 {
+			break
+		}
+		after := rest[idx+1:]
+		if after == slug {
 			return true
 		}
+		// Convention pattern: "<issue>-<slug>" where issue is digits
+		if strings.HasSuffix(after, slug) {
+			prefix := after[:len(after)-len(slug)]
+			if len(prefix) > 0 && prefix[len(prefix)-1] == '-' {
+				beforeDash := prefix[:len(prefix)-1]
+				if isDigits(beforeDash) && beforeDash != "0" {
+					return true
+				}
+			}
+		}
+		rest = after
 	}
 
 	// Strategy 3: PR title contains the slug
@@ -46,6 +67,16 @@ func matchPRToChange(pr PRState, slug string) bool {
 	}
 
 	return false
+}
+
+// isDigits reports whether s is a non-empty string of decimal digits.
+func isDigits(s string) bool {
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return len(s) > 0
 }
 
 // Audit loads archived changes, queries GitHub for open and merged PRs, and
@@ -61,8 +92,15 @@ func Audit(ctx context.Context, provider *GitHubProvider, changes []Change) Audi
 	}
 
 	// Query PRs
-	openPRs, _ := provider.ListOpenPRs(ctx)
-	mergedPRs, _ := provider.ListRecentMergedPRs(ctx)
+	var result AuditResult
+	openPRs, err := provider.ListOpenPRs(ctx)
+	if err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("list open PRs: %w", err))
+	}
+	mergedPRs, err := provider.ListRecentMergedPRs(ctx)
+	if err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("list merged PRs: %w", err))
+	}
 
 	var findings []AuditFinding
 	for _, c := range archived {
@@ -98,7 +136,8 @@ func Audit(ctx context.Context, provider *GitHubProvider, changes []Change) Audi
 		findings = append(findings, finding)
 	}
 
-	return AuditResult{Findings: findings}
+	result.Findings = findings
+	return result
 }
 
 // HasUnmerged reports whether the result contains any unmerged findings.

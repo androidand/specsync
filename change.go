@@ -26,13 +26,13 @@ const (
 type Stage string
 
 const (
-	StageBacklog   Stage = "backlog"      // not yet started; pre-discovery or deferred
-	StageBlocked   Stage = "blocked"      // waiting on external blocker or decision
-	StageActive    Stage = "active"       // in flight; has unchecked work
-	StageInReview  Stage = "in-review"    // awaiting approval before proceeding
-	StageComplete  Stage = "complete"     // all work done, not yet archived
-	StageArchived  Stage = "archived"     // moved to changes/archive/ (immutable)
-	StageShipped   Stage = "shipped"      // archived + PR merged to master
+	StageBacklog  Stage = "backlog"   // not yet started; pre-discovery or deferred
+	StageBlocked  Stage = "blocked"   // waiting on external blocker or decision
+	StageActive   Stage = "active"    // in flight; has unchecked work
+	StageInReview Stage = "in-review" // awaiting approval before proceeding
+	StageComplete Stage = "complete"  // all work done, not yet archived
+	StageArchived Stage = "archived"  // moved to changes/archive/ (immutable)
+	StageShipped  Stage = "shipped"   // archived + PR merged to master
 )
 
 // ValidateStage checks if a stage value is canonical or matches the custom stage pattern.
@@ -50,7 +50,7 @@ func ValidateStage(stage Stage) error {
 	return nil
 }
 
-// IsCanonicalStage reports whether stage is one of the six canonical values.
+// IsCanonicalStage reports whether stage is one of the seven canonical values.
 func IsCanonicalStage(stage Stage) bool {
 	switch stage {
 	case StageBacklog, StageBlocked, StageActive, StageInReview, StageComplete, StageArchived, StageShipped:
@@ -349,8 +349,20 @@ func refreshState(c *Change) error {
 	// Step 1: Always derive progress from tasks
 	c.Progress = deriveTaskProgress(c.TasksMarkdown)
 
-	// Step 2: Archived folder is immutable and final
+	// Step 2: Archived folder is immutable — only shipped metadata may override.
 	if c.Archived {
+		metadata, err := LoadChangeMetadata(c.Dir)
+		if err != nil {
+			return err
+		}
+		if metadata != nil && metadata.Stage != nil && *metadata.Stage == StageShipped {
+			c.Stage = StageShipped
+			c.StageSource = StageSourceMetadata
+			if metadata.Priority != nil {
+				c.Priority = metadata.Priority
+			}
+			return nil
+		}
 		c.Stage = StageArchived
 		c.StageSource = StageSourceFolder
 		return nil
