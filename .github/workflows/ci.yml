@@ -19,4 +19,6 @@ jobs:
       - name: Enforce OpenSpec archive hygiene
         run: go run ./cmd/specsync release-plan -fail-on-archive-candidates
       - name: Enforce changelog commit linking
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: go run ./cmd/specsync changelog -resolve-refs -fail-on-unlinked-commits
