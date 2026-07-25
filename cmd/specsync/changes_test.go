@@ -354,6 +354,90 @@ func TestSetStage_ArchivedReject(t *testing.T) {
 	}
 }
 
+func TestSetPriority_ArchivedAllowed(t *testing.T) {
+	tmpDir := t.TempDir()
+	changesDir := filepath.Join(tmpDir, "openspec", "changes")
+	archiveDir := filepath.Join(changesDir, "archive", "test-change")
+	if err := os.MkdirAll(filepath.Join(archiveDir, ".specsync"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(archiveDir, "proposal.md"), []byte("# Test"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	p := 75
+	if err := specsync.SaveChangeMetadata(archiveDir, specsync.ChangeMetadata{Version: 1, Priority: &p}); err != nil {
+		t.Fatalf("set priority on archived change: %v", err)
+	}
+
+	meta, err := specsync.LoadChangeMetadata(archiveDir)
+	if err != nil {
+		t.Fatalf("load metadata: %v", err)
+	}
+	if meta.Priority == nil || *meta.Priority != 75 {
+		t.Errorf("priority = %v, want 75", meta.Priority)
+	}
+}
+
+func TestValidateSlug_Valid(t *testing.T) {
+	validSlugs := []string{"my-change", "change_1", "a", "change123", "c-h-a-n-g-e", "c_h_a_n_g_e"}
+	for _, slug := range validSlugs {
+		if err := validateSlug(slug); err != nil {
+			t.Errorf("validateSlug(%q) = %v, want nil", slug, err)
+		}
+	}
+}
+
+func TestValidateSlug_Invalid(t *testing.T) {
+	invalidSlugs := []string{
+		"",           // empty
+		"My-Change",  // uppercase
+		"my change",  // space
+		"my/change",  // slash
+		"my\\change", // backslash
+		"../change",  // path traversal
+		"my.change",  // dot
+		"_change",    // starts with underscore
+		"-change",    // starts with hyphen
+	}
+	for _, slug := range invalidSlugs {
+		if err := validateSlug(slug); err == nil {
+			t.Errorf("validateSlug(%q) = nil, want error", slug)
+		}
+	}
+}
+
+func TestSetPriority_ArchivedUnset(t *testing.T) {
+	tmpDir := t.TempDir()
+	changesDir := filepath.Join(tmpDir, "openspec", "changes")
+	archiveDir := filepath.Join(changesDir, "archive", "test-change")
+	if err := os.MkdirAll(filepath.Join(archiveDir, ".specsync"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(archiveDir, "proposal.md"), []byte("# Test"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	p := 75
+	if err := specsync.SaveChangeMetadata(archiveDir, specsync.ChangeMetadata{Version: 1, Priority: &p}); err != nil {
+		t.Fatalf("set priority: %v", err)
+	}
+
+	// Unset priority — empty metadata file is deleted
+	if err := specsync.SaveChangeMetadata(archiveDir, specsync.ChangeMetadata{Version: 1}); err != nil {
+		t.Fatalf("unset priority: %v", err)
+	}
+
+	meta, err := specsync.LoadChangeMetadata(archiveDir)
+	if err != nil {
+		t.Fatalf("load metadata: %v", err)
+	}
+	// File is deleted when metadata is empty, so meta is nil (priority unset)
+	if meta != nil {
+		t.Errorf("expected nil metadata (file deleted), got %+v", *meta)
+	}
+}
+
 func TestEmptyMetadataCleanup(t *testing.T) {
 	tmpDir := t.TempDir()
 	changesDir := filepath.Join(tmpDir, "openspec", "changes")

@@ -935,18 +935,48 @@ func collectDiagnostics(c specsync.Change) []string {
 // mutableChange validates the slug, loads the change, and rejects archived
 // changes — the shared guard path for every metadata-mutating subcommand, so
 // the two commands can never drift on validation again.
-func mutableChange(openspecDir, slug string) *specsync.Change {
-	if strings.ContainsAny(slug, `/\`) || strings.Contains(slug, "..") {
-		fail(fmt.Errorf("invalid slug %q: must be a plain change directory name", slug))
+func mutableChange(openspecDir, slug string, allowArchived bool) *specsync.Change {
+	if err := validateSlug(slug); err != nil {
+		fail(err)
 	}
 	change, err := specsync.LoadChangeBySlug(openspecDir, slug)
 	if err != nil {
 		fail(fmt.Errorf("change not found: %s", slug))
 	}
-	if change.Archived {
+	if change.Archived && !allowArchived {
 		fail(fmt.Errorf("cannot mutate archived change %s", slug))
 	}
 	return change
+}
+
+// validateSlug ensures the slug is a safe directory name: lowercase letters,
+// digits, hyphens, and underscores only; must start with a letter or digit.
+func validateSlug(slug string) error {
+	if strings.ContainsAny(slug, `/\`) || strings.Contains(slug, "..") {
+		return fmt.Errorf("invalid slug %q: must be a plain change directory name (no slashes or path traversal)", slug)
+	}
+	if len(slug) == 0 {
+		return fmt.Errorf("invalid slug: cannot be empty")
+	}
+	// Match ^[a-z0-9][a-z0-9_-]*$
+	valid := func(s string) bool {
+		for i, r := range s {
+			if i == 0 {
+				if !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')) {
+					return false
+				}
+			} else {
+				if !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' || r == '-') {
+					return false
+				}
+			}
+		}
+		return true
+	}
+	if !valid(slug) {
+		return fmt.Errorf("invalid slug %q: must match ^[a-z0-9][a-z0-9_-]*$ (lowercase letters, digits, hyphens, underscores only)", slug)
+	}
+	return nil
 }
 
 // changeMetadata reads the change's current metadata, returning an empty
@@ -975,7 +1005,7 @@ func runSetStage(args []string) {
 	}
 	changeName, stage := fs.Arg(0), fs.Arg(1)
 
-	change := mutableChange(*openspec, changeName)
+	change := mutableChange(*openspec, changeName, false)
 	meta := changeMetadata(change)
 
 	if stage == "auto" {
@@ -1006,7 +1036,7 @@ func runSetPriority(args []string) {
 	}
 	changeName, priorityArg := fs.Arg(0), fs.Arg(1)
 
-	change := mutableChange(*openspec, changeName)
+	change := mutableChange(*openspec, changeName, true)
 	meta := changeMetadata(change)
 
 	if priorityArg == "unset" {

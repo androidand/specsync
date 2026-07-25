@@ -47,9 +47,9 @@
 ## 6. specsync set-stage — Validation
 
 - [x] 6.1 Add validateSlug(): reject empty, path traversal (.., /), uppercase/spaces — *done: rejects /\ and ..*
-- [ ] 6.2 Validate against pattern ^[a-z0-9][a-z0-9_-]+$ (or similar convention) — *not implemented*
-- [ ] 6.3 Error messages suggest valid slug format — *not implemented*
-- [ ] 6.4 Test: various invalid slugs
+- [x] 6.2 Validate against pattern ^[a-z0-9][a-z0-9_-]+$ (or similar convention) — *validateSlug() implemented*
+- [x] 6.3 Error messages suggest valid slug format — *error message includes pattern*
+- [x] 6.4 Test: various invalid slugs — *TestValidateSlug_Invalid*
 
 ## 7. specsync set-stage — Stage Argument
 
@@ -100,8 +100,8 @@
 
 ## 12. specsync set-priority — Archived Behavior
 
-- [ ] 12.1 Allow set-priority on archived changes (priority can be set even if not active) — *not implemented: mutableChange rejects archived*
-- [ ] 12.2 Useful for prioritizing work if archived change is re-activated later
+- [x] 12.1 Allow set-priority on archived changes (priority can be set even if not active) — *mutableChange accepts allowArchived param*
+- [x] 12.2 Useful for prioritizing work if archived change is re-activated later
 
 ## 13. Atomic Write Implementation
 
@@ -150,7 +150,7 @@
 - [x] 17.4 set-priority unset deletes empty .specsync.yaml — *done: TestEmptyMetadataCleanup*
 - [x] 17.5 Out-of-range (0, 101) rejected — *done: TestSetPriority_OutOfRange*
 - [x] 17.6 Boundary values (1, 100) accepted — *done: TestSetPriority_OutOfRange*
-- [ ] 17.7 Archived changes accept priority — *not implemented: mutableChange rejects archived*
+- [x] 17.7 Archived changes accept priority — *TestSetPriority_ArchivedAllowed, TestSetPriority_ArchivedUnset*
 - [x] 17.8 Malformed .specsync.yaml blocks mutation — *done: covered by validate tests*
 - [x] 17.9 Slug not found — *done: covered by mutableChange*
 - [x] 17.10 Atomic write: no partial files on error — *done: TestSaveChangeMetadata_AtomicWrite*
