@@ -308,8 +308,8 @@ func refFromURL(url string) *Ref {
 // the "- [ ]"/"- [x]" lines reconcile does — other checkbox markers (living
 // plan's [~]/[>]) and prose are ignored. An empty or task-less list is not
 // "complete": there is nothing to have finished.
-// countCheckboxes returns (total, completed) checkbox counts from markdown.
-func countCheckboxes(md string) (total, completed int) {
+// CountCheckboxes returns (total, completed) checkbox counts from markdown.
+func CountCheckboxes(md string) (total, completed int) {
 	if strings.TrimSpace(md) == "" {
 		return 0, 0
 	}
@@ -416,7 +416,7 @@ func deriveTaskProgress(tasksMarkdown string) TaskProgress {
 		return TaskProgressNoTasks
 	}
 
-	total, completed := countCheckboxes(tasksMarkdown)
+	total, completed := CountCheckboxes(tasksMarkdown)
 	if total == 0 {
 		return TaskProgressNoTasks
 	}

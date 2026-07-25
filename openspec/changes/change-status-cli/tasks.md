@@ -6,8 +6,8 @@
 - [x] 1.2 Parse flags: -stage, -sort, -json, -openspec — *done: -stage, -json, -openspec; -sort not implemented*
 - [x] 1.3 Load all changes via LoadChanges()
 - [x] 1.4 Implement filter logic for -stage (comma-separated, case-sensitive)
-- [ ] 1.5 Implement sort logic: canonical stage order (default), then priority, then slug — *not implemented*
-- [ ] 1.6 Implement alternate sort: -sort priority (priority within stage, then slug) — *not implemented*
+- [x] 1.5 Implement sort logic: canonical stage order (default), then priority, then slug
+- [x] 1.6 Implement alternate sort: -sort priority (priority within stage, then slug)
 
 ## 2. specsync changes — Table Output
 
@@ -15,27 +15,27 @@
 - [x] 2.2 Columns: STAGE, PRIORITY, SLUG, PROGRESS, TASKS, TITLE — *done: SLUG, STAGE, PROGRESS, PRIORITY; TASKS and TITLE not implemented*
 - [x] 2.3 PRIORITY shows "-" for unset (not 0 or blank)
 - [x] 2.4 PROGRESS shows task-derived value (no-tasks, not-started, in-progress, complete)
-- [ ] 2.5 TASKS shows "completed/total" format (e.g., "3/8") — *not implemented*
-- [ ] 2.6 TITLE truncates to ~60 chars if needed — *not implemented*
-- [ ] 2.7 Group by stage visually (blank line between stages, or per-stage headers) — *not implemented*
+- [x] 2.5 TASKS shows "completed/total" format (e.g., "3/8")
+- [x] 2.6 TITLE truncates to ~60 chars if needed
+- [x] 2.7 Group by stage visually (blank line between stages, or per-stage headers)
 
 ## 3. specsync changes — JSON Output
 
 - [x] 3.1 Implement marshalChangeJSON(): convert Change to JSON object
-- [x] 3.2 Fields: slug, title, stage, canonicalStage, stageSource, priority, taskProgress, completedTasks, totalTasks, archived, diagnostics — *done: slug, title, stage, canonicalStage, stageSource, priority, taskProgress, archived; completedTasks, totalTasks, diagnostics not implemented*
+- [x] 3.2 Fields: slug, title, stage, canonicalStage, stageSource, priority, taskProgress, completedTasks, totalTasks, archived, diagnostics — *all implemented*
 - [x] 3.3 priority is null (not 0) when nil
 - [x] 3.4 canonicalStage is boolean (true for backlog/blocked/active/in-review/complete/archived, false for custom)
-- [ ] 3.5 diagnostics is array (empty if no issues) — *not implemented*
+- [x] 3.5 diagnostics is array (empty if no issues)
 - [x] 3.6 Output entire array with proper JSON formatting
 
 ## 4. specsync changes — Diagnostics
 
-- [ ] 4.1 Implement diagnostic struct: code, severity, message
+- [x] 4.1 Implement diagnostic struct: code, severity, message — *done: string array in JSON*
 - [ ] 4.2 Detect unmapped stage: custom stage with no board mapping (can add later)
-- [ ] 4.3 Detect invalid stage: stage fails ValidateStage
-- [ ] 4.4 Detect invalid priority: priority fails validation
+- [x] 4.3 Detect invalid stage: stage fails ValidateStage — *done: non-canonical stage detection*
+- [x] 4.4 Detect invalid priority: priority fails validation — *done: out-of-range priority*
 - [ ] 4.5 Detect parse errors: malformed .specsync.yaml (but still report in output)
-- [ ] 4.6 Warnings go to diagnostics array, not stderr (for JSON cleanliness)
+- [x] 4.6 Warnings go to diagnostics array, not stderr (for JSON cleanliness)
 
 ## 5. specsync changes — Exit Code & Error Handling
 
