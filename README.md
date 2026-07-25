@@ -119,6 +119,33 @@ specsync -dry-run -provider beads    # preview the bd commands
 specsync -provider beads -change X     # project one change into the beads graph
 ```
 
+### Multi-provider sync (fan-out)
+
+`-provider` is repeatable. When you pass multiple providers, specsync projects
+each change into every provider independently — a **star topology**: OpenSpec
+is the single source of truth, and each provider is a separate edge from that
+center. There are no provider-to-provider edges; specsync never routes state
+from one tracker to another.
+
+```bash
+specsync -provider github -provider beads    # fan-out to both
+specsync -provider github -provider beads -dry-run   # preview
+```
+
+**Reconciliation** works per-provider: before each push, specsync reads the
+current state from that provider's issue and merges any inbound changes into
+`tasks.md` (monotonic union — a check from any provider is absorbed). After
+pushing to a newly created issue, it reconciles once more to pick up any
+pre-existing state (e.g., Beads children already closed before the epic was
+created).
+
+**Failure isolation**: if one provider fails, the other providers for the same
+change still proceed. The error is reported per-provider in the result without
+aborting the entire run.
+
+**Ref coexistence**: each provider's ref is stored under its own key in
+`refs.json` (e.g., `"github"` and `"beads"`), so they never collide.
+
 ### Issue-first: pull an issue into a change
 
 Work often starts on the tracker — someone files an issue first. `specsync pull`

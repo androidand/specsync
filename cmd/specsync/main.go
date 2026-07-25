@@ -138,13 +138,24 @@ func isVersionArg(arg string) bool {
 	return arg == "version" || arg == "-version" || arg == "--version"
 }
 
+// stringSlice implements flag.Value for repeatable -provider flags.
+type stringSlice []string
+
+func (s *stringSlice) String() string { return strings.Join(*s, ",") }
+
+func (s *stringSlice) Set(v string) error {
+	*s = append(*s, v)
+	return nil
+}
+
 // runSync projects every OpenSpec change into the tracker (spec -> issue).
 func runSync(args []string) {
 	fs := flag.NewFlagSet("sync", flag.ExitOnError)
 	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
 	change := fs.String("change", "", "sync only this change (default: all changes)")
 	repo := fs.String("repo", "", "target repo as owner/name (default: auto-detect from git remote)")
-	providerName := fs.String("provider", "", "work provider: github, beads (auto-detect when empty)")
+	var providerNames stringSlice
+	fs.Var(&providerNames, "provider", "work provider: github, beads (repeatable; auto-detect when absent)")
 	dryRun := fs.Bool("dry-run", false, "print the provider commands and rendered body without executing")
 	reconcile := fs.Bool("reconcile", true, "merge external task state back into tasks.md before pushing")
 	closeCompleted := fs.Bool("close-completed", false, "close the tracker item once every task in a change is checked")
@@ -166,21 +177,41 @@ func runSync(args []string) {
 		fail(err)
 	}
 
-	provider, providerReason := detectProvider(*providerName)
-	prov := makeProvider(*repo, *dryRun, provider)
-	if *dryRun {
-		fmt.Printf("DRY RUN — no %s calls are made\n", provider)
-		if providerReason != "" {
-			fmt.Printf("provider: %s (auto-detected: %s)\n", provider, providerReason)
+	// Build provider set. When -provider is absent, auto-detect a single one.
+	var providers []specsync.WorkProvider
+	if len(providerNames) == 0 {
+		provider, providerReason := detectProvider("")
+		prov := makeProvider(*repo, *dryRun, provider)
+		providers = []specsync.WorkProvider{prov}
+		if *dryRun {
+			fmt.Printf("DRY RUN — no %s calls are made\n", provider)
+			if providerReason != "" {
+				fmt.Printf("provider: %s (auto-detected: %s)\n", provider, providerReason)
+			}
+			if provider == "github" {
+				if *repo != "" {
+					fmt.Printf("target: %s\n", *repo)
+				} else {
+					fmt.Println("target: auto-detected from the current repo's git remote")
+				}
+			}
+			fmt.Println()
 		}
-		if provider == "github" {
+	} else {
+		for _, pn := range providerNames {
+			prov := makeProvider(*repo, *dryRun, pn)
+			providers = append(providers, prov)
+		}
+		if *dryRun {
+			names := strings.Join(providerNames, ", ")
+			fmt.Printf("DRY RUN — no %s calls are made\n", names)
 			if *repo != "" {
 				fmt.Printf("target: %s\n", *repo)
 			} else {
 				fmt.Println("target: auto-detected from the current repo's git remote")
 			}
+			fmt.Println()
 		}
-		fmt.Println()
 	}
 
 	if *dryRun && target.Configured() {
@@ -189,7 +220,7 @@ func runSync(args []string) {
 
 	res, err := specsync.Sync(context.Background(), specsync.Options{
 		OpenSpecDir:    abs,
-		Provider:       prov,
+		Providers:      providers,
 		Slug:           *change,
 		DryRun:         *dryRun,
 		Reconcile:      *reconcile,
@@ -204,17 +235,39 @@ func runSync(args []string) {
 	}
 	fmt.Println()
 	for _, it := range res.Items {
-		verb := "updated"
-		if it.Created {
-			verb = "created"
-		}
-		fmt.Printf("  %-8s %s  (%s)\n", verb, it.URL, it.Slug)
-		for _, f := range it.Flips {
-			state := "unchecked"
-			if f.Checked {
-				state = "checked"
+		if len(it.Providers) > 0 {
+			for _, pr := range it.Providers {
+				if pr.Error != nil {
+					fmt.Printf("  %-8s %s  (%s) — ERROR: %v\n", "skip", pr.ProviderName, pr.Slug, pr.Error)
+					continue
+				}
+				verb := "updated"
+				if pr.Created {
+					verb = "created"
+				}
+				fmt.Printf("  %-8s %s  [%s] (%s)\n", verb, pr.URL, pr.ProviderName, pr.Slug)
 			}
-			fmt.Printf("           ↳ reconciled from issue: %s → %s\n", f.Text, state)
+			// Flips are from the combined reconcile pass.
+			for _, f := range it.Flips {
+				state := "unchecked"
+				if f.Checked {
+					state = "checked"
+				}
+				fmt.Printf("           ↳ reconciled: %s → %s\n", f.Text, state)
+			}
+		} else {
+			verb := "updated"
+			if it.Created {
+				verb = "created"
+			}
+			fmt.Printf("  %-8s %s  (%s)\n", verb, it.URL, it.Slug)
+			for _, f := range it.Flips {
+				state := "unchecked"
+				if f.Checked {
+					state = "checked"
+				}
+				fmt.Printf("           ↳ reconciled from issue: %s → %s\n", f.Text, state)
+			}
 		}
 		if it.TitleSuggestion != "" {
 			fmt.Printf("           ↳ title could be tighter: %q — edit the proposal.md H1 if you agree\n", it.TitleSuggestion)

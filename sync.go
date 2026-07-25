@@ -8,13 +8,14 @@ import (
 
 // Options configures a sync run.
 type Options struct {
-	OpenSpecDir    string       // path to the spec root (openspec/, beads/, etc.)
-	Provider       WorkProvider // target tracker
-	Slug           string       // if set, only this change is synced
-	DryRun         bool         // when true, never persist refs to the cache
-	Reconcile      bool         // when true, merge issue checkbox state into tasks.md before pushing
-	CloseCompleted bool         // when true, a change whose every task is checked projects as closed
-	Project        BoardTarget  // optional GitHub Projects board; unset = no board operations
+	OpenSpecDir    string        // path to the spec root (openspec/, beads/, etc.)
+	Provider       WorkProvider  // target tracker (deprecated: use Providers)
+	Providers      []WorkProvider // set of providers to fan-out to; Provider is used when Providers is nil
+	Slug           string        // if set, only this change is synced
+	DryRun         bool          // when true, never persist refs to the cache
+	Reconcile      bool          // when true, merge issue checkbox state into tasks.md before pushing
+	CloseCompleted bool          // when true, a change whose every task is checked projects as closed
+	Project        BoardTarget   // optional GitHub Projects board; unset = no board operations
 }
 
 // Result reports what a sync run did.
@@ -22,6 +23,16 @@ type Result struct {
 	Created int
 	Updated int
 	Items   []ItemResult
+}
+
+// ProviderResult records the outcome for one provider on one change.
+type ProviderResult struct {
+	ProviderName string
+	Slug         string
+	URL          string
+	Created      bool
+	Flips        []TaskFlip
+	Error        error
 }
 
 // ItemResult records the outcome for one change.
@@ -39,193 +50,172 @@ type ItemResult struct {
 	// project was configured (in which case Board is zero and no board calls ran).
 	BoardConfigured bool
 	Board           BoardPlan
+	// Providers holds per-provider results when fan-out is used.
+	Providers []ProviderResult
 }
 
-// Sync projects every change into the provider, idempotently. It is
-// safe to run after any change moves through the funnel: existing projections
-// are updated, new ones created.
+// Sync projects every change into the provider(s), idempotently. When
+// Providers is set, it fans out to each provider independently (star model:
+// OpenSpec ↔ each provider, never provider ↔ provider). When Providers is
+// nil, Provider is used for backward compatibility.
 func Sync(ctx context.Context, opts Options) (Result, error) {
 	var res Result
-	if opts.Provider == nil {
+
+	// Resolve provider set.
+	var providers []WorkProvider
+	if len(opts.Providers) > 0 {
+		providers = opts.Providers
+	} else if opts.Provider != nil {
+		providers = []WorkProvider{opts.Provider}
+	} else {
 		return res, fmt.Errorf("provider is required")
 	}
+
 	changes, err := LoadChanges(opts.OpenSpecDir)
 	if err != nil {
 		return res, err
 	}
+
 	for _, c := range changes {
 		if opts.Slug != "" && c.Slug != opts.Slug {
 			continue
 		}
-		ref, created, flips, plan, err := syncOne(ctx, opts.Provider, c, opts.DryRun, opts.Reconcile, opts.CloseCompleted, opts.Project)
-		if err != nil {
-			return res, fmt.Errorf("sync %s: %w", c.Slug, err)
+
+		var allFlips []TaskFlip
+		var firstRef Ref
+		var firstCreated bool
+		providerResults := make([]ProviderResult, 0, len(providers))
+
+		for _, prov := range providers {
+			refs, err := loadRefs(c.Dir)
+			if err != nil {
+				providerResults = append(providerResults, ProviderResult{
+					ProviderName: prov.Name(),
+					Slug:         c.Slug,
+					Error:        err,
+				})
+				continue
+			}
+
+			key := prov.Name()
+			existing, hadRef := refs[key]
+			if !hadRef && strings.HasPrefix(key, "github:") {
+				if legacy, lok := refs["github"]; lok {
+					repo := strings.TrimPrefix(key, "github:")
+					if legacyRefMatchesRepo(legacy, repo) {
+						existing, hadRef = legacy, true
+					}
+				}
+			}
+			var existingPtr *Ref
+			if hadRef {
+				existingPtr = &existing
+			}
+
+			// For providers with an existing issue: reconcile inbound before
+			// rendering, so the push carries the merged state.
+			if opts.Reconcile && !opts.DryRun && existingPtr != nil {
+				resolved, flips, rerr := reconcileTaskState(ctx, prov, &c, existingPtr)
+				if rerr != nil {
+					providerResults = append(providerResults, ProviderResult{
+						ProviderName: prov.Name(),
+						Slug:         c.Slug,
+						Error:        rerr,
+					})
+					continue
+				}
+				existingPtr = resolved
+				allFlips = append(allFlips, flips...)
+			}
+
+			if err := refreshState(&c); err != nil {
+				return res, fmt.Errorf("refresh state: %w", err)
+			}
+
+			item := WorkItemFor(c, opts.CloseCompleted)
+			ref, perr := prov.Push(ctx, item, existingPtr)
+			if perr != nil {
+				providerResults = append(providerResults, ProviderResult{
+					ProviderName: prov.Name(),
+					Slug:         c.Slug,
+					Error:        perr,
+				})
+				continue
+			}
+
+			created := !hadRef
+			if firstRef.URL == "" {
+				firstRef = ref
+				firstCreated = created
+			}
+
+			if opts.DryRun {
+				// A dry run must never mutate local state.
+			} else {
+				// Preserve base state from the reconciled ref so saveRef
+				// doesn't overwrite it with a fresh provider ref.
+				if existingPtr != nil && existingPtr.Base != "" && ref.Base == "" {
+					ref.BaseSHA = existingPtr.BaseSHA
+					ref.Base = existingPtr.Base
+				}
+				if err := saveRef(c.Dir, key, ref); err != nil {
+					providerResults = append(providerResults, ProviderResult{
+						ProviderName: prov.Name(),
+						Slug:         c.Slug,
+						Error:        err,
+					})
+					continue
+				}
+			}
+
+			providerResults = append(providerResults, ProviderResult{
+				ProviderName: prov.Name(),
+				Slug:         c.Slug,
+				URL:          ref.URL,
+				Created:      created,
+			})
+
+			if created {
+				res.Created++
+			} else {
+				res.Updated++
+			}
+
+			// For providers that just got created: reconcile inbound after the
+			// push, because the issue now exists and may have state to merge
+			// (e.g., Beads children already closed before the epic was created).
+			// For providers with an existing ref: the pre-push reconcile above
+			// already handled this (no double-reconcile).
+			if created && opts.Reconcile && !opts.DryRun {
+				_, flips, rerr := reconcileTaskState(ctx, prov, &c, &ref)
+				if rerr != nil {
+					continue
+				}
+				allFlips = append(allFlips, flips...)
+				if err := refreshState(&c); err != nil {
+					return res, fmt.Errorf("refresh state after post-push reconcile: %w", err)
+				}
+			}
 		}
-		if created {
-			res.Created++
-		} else {
-			res.Updated++
-		}
-		// No suggestion for archived changes: changes/archive/ is immutable
-		// by convention, so "edit the proposal H1" is not actionable there.
+
+		// No suggestion for archived changes.
 		var suggestion string
 		if !c.Archived {
 			suggestion = titleSuggestion(c.Title)
 		}
+
 		res.Items = append(res.Items, ItemResult{
 			Slug:            c.Slug,
-			URL:             ref.URL,
-			Created:         created,
-			Flips:           flips,
+			URL:             firstRef.URL,
+			Created:         firstCreated,
+			Flips:           allFlips,
 			TitleSuggestion: suggestion,
 			BoardConfigured: opts.Project.Configured(),
-			Board:           plan,
+			Providers:       providerResults,
 		})
 	}
+
 	return res, nil
-}
-
-func syncOne(ctx context.Context, prov WorkProvider, c Change, dryRun, reconcile, closeCompleted bool, target BoardTarget) (ref Ref, created bool, flips []TaskFlip, plan BoardPlan, err error) {
-	refs, err := loadRefs(c.Dir)
-	if err != nil {
-		return Ref{}, false, nil, BoardPlan{}, err
-	}
-	// Resolve by the canonical key, then fall back to the legacy bare "github"
-	// key so an existing refs.json — written before the key was repo-qualified —
-	// keeps updating its issue instead of creating a duplicate. The fallback only
-	// applies when the cached URL points into the target repo: an unguarded hit
-	// would make `-repo ownerB/repoB` edit whatever issue number the legacy entry
-	// holds in the wrong repo. A rejected fallback degrades to no ref, and the
-	// marker lookup in Push still rescues genuine matches. saveRef below persists
-	// under the canonical key, migrating the hit going forward.
-	key := prov.Name()
-	existing, hadRef := refs[key]
-	if !hadRef && strings.HasPrefix(key, "github:") {
-		if legacy, ok := refs["github"]; ok && legacyRefMatchesRepo(legacy, strings.TrimPrefix(key, "github:")) {
-			existing, hadRef = legacy, true
-		}
-	}
-	var existingPtr *Ref
-	if hadRef {
-		existingPtr = &existing
-	}
-
-	// Inbound half of two-way sync: merge issue checkbox state into tasks.md
-	// before rendering. Skipped on dry-run to honor the zero-API-call contract
-	// (the dry-runner has no real issue to read). Reusing the resolved ref for
-	// the push avoids a second marker lookup.
-	if reconcile && !dryRun {
-		resolved, f, rerr := reconcileTaskState(ctx, prov, &c, existingPtr)
-		if rerr != nil {
-			return Ref{}, false, nil, BoardPlan{}, rerr
-		}
-		existingPtr = resolved
-		flips = f
-	}
-	if err := refreshState(&c); err != nil {
-		return Ref{}, false, nil, BoardPlan{}, fmt.Errorf("refresh state after reconcile: %w", err)
-	}
-
-	item := WorkItemFor(c, closeCompleted)
-	ref, err = prov.Push(ctx, item, existingPtr)
-	if err != nil {
-		return Ref{}, false, nil, BoardPlan{}, err
-	}
-
-	// Project onto the board only when a target is configured and the provider
-	// supports it; otherwise no board call is made (backward-compatible). The
-	// projector honors dryRun internally (zero board calls, plan only).
-	// Before pushing, use three-way merge to detect human board edits and prevent clobbering.
-	if target.Configured() {
-		if bp, ok := prov.(BoardProjector); ok {
-			// Load board state for three-way merge (human-move detection).
-			boardState, err := LoadBoardState(c.Dir)
-			if err != nil {
-				return Ref{}, false, nil, BoardPlan{}, fmt.Errorf("load board state: %w", err)
-			}
-
-			// If we have a prior binding, use three-way merge to detect changes.
-			bindingKey := fmt.Sprintf("%s:%d:%s", target.Owner, target.Number, prov.Name())
-			if binding, ok := boardState.Bindings[bindingKey]; ok && !dryRun {
-				// Query the board for current remote state.
-				if bquerier, ok := prov.(interface {
-					GetBoardItem(context.Context, BoardTarget, Ref) (string, string, string, error)
-				}); ok {
-					_, _, currentRemoteOptionID, err := bquerier.GetBoardItem(ctx, target, ref)
-					if err != nil {
-						return Ref{}, false, nil, BoardPlan{}, fmt.Errorf("query board item: %w", err)
-					}
-
-					// Resolve the expected option ID for the local stage.
-					expectedRemoteOptionID := ""
-					if bproj, ok := prov.(BoardProjector); ok {
-						expectedRemoteOptionID, _, _ = resolveExpectedStatus(ctx, bproj, target, item.Stage, ref)
-					}
-
-					decision := threeWayMerge(item.Stage, currentRemoteOptionID, expectedRemoteOptionID, binding)
-					if decision.Action == "report-remote-move" {
-						// Human moved the card; respect it, don't clobber.
-						plan = BoardPlan{
-							ProjectID:     binding.ProjectID,
-							StatusField:   "Status",
-							StatusSkipped: decision.Reason,
-						}
-					} else if decision.Action == "report-conflict" {
-						// Both sides changed; report for manual review.
-						plan = BoardPlan{
-							ProjectID:     binding.ProjectID,
-							StatusField:   "Status",
-							StatusSkipped: decision.Reason,
-						}
-					} else {
-						// "push-local", "none", or "converged": proceed with normal push.
-						plan, err = bp.ProjectOntoBoard(ctx, target, ref, item, dryRun)
-						if err != nil {
-							return Ref{}, false, nil, BoardPlan{}, err
-						}
-					}
-				} else {
-					// Fallback: no board querier, proceed normally.
-					plan, err = bp.ProjectOntoBoard(ctx, target, ref, item, dryRun)
-					if err != nil {
-						return Ref{}, false, nil, BoardPlan{}, err
-					}
-				}
-			} else {
-				// First sync or dry-run: proceed normally.
-				plan, err = bp.ProjectOntoBoard(ctx, target, ref, item, dryRun)
-				if err != nil {
-					return Ref{}, false, nil, BoardPlan{}, err
-				}
-			}
-		}
-	}
-
-	if dryRun {
-		// A dry run must never mutate local state, or it poisons the cache with
-		// a placeholder ref (e.g. issue #0) that breaks the next real run.
-		return ref, !hadRef, nil, plan, nil
-	}
-
-	// Preserve base state (3-way reconcile) from the reconciled ref so saveRef
-	// doesn't overwrite it with a fresh provider ref.
-	if existingPtr != nil && existingPtr.Base != "" && ref.Base == "" {
-		ref.BaseSHA = existingPtr.BaseSHA
-		ref.Base = existingPtr.Base
-	}
-
-	if err := saveRef(c.Dir, prov.Name(), ref); err != nil {
-		return Ref{}, false, nil, BoardPlan{}, err
-	}
-
-	// After successful board projection, save the binding for future three-way merge.
-	if target.Configured() && plan.ProjectID != "" {
-		if err := saveBoardBinding(c.Dir, target, prov.Name(), item.Stage, plan); err != nil {
-			return Ref{}, false, nil, BoardPlan{}, fmt.Errorf("save board binding: %w", err)
-		}
-	}
-
-	return ref, !hadRef, flips, plan, nil
 }
 
 // WorkItemFor renders a Change into the provider-agnostic WorkItem. tasks.md
