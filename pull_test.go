@@ -143,7 +143,7 @@ func TestPullLinksIssueForRoundTrip(t *testing.T) {
 		Body:   "# Round trip\n\nbody\n",
 	}
 	var calls [][]string
-	prov := NewGitHubProviderFunc(ghRunner(issue, &calls))
+	prov := NewGitHubProviderFuncWithRepo("test/repo", ghRunner(issue, &calls))
 
 	res, err := Pull(context.Background(), PullOptions{OpenSpecDir: dir, Provider: prov, IssueID: "7"})
 	if err != nil {
@@ -155,8 +155,8 @@ func TestPullLinksIssueForRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadRefs: %v", err)
 	}
-	if refs["github"].ID != "7" {
-		t.Fatalf("cached ref id = %q, want 7", refs["github"].ID)
+	if refs["github:test/repo"].ID != "7" {
+		t.Fatalf("cached ref id = %q, want 7", refs["github:test/repo"].ID)
 	}
 
 	// A follow-up sync of that change must edit issue 7, never create.

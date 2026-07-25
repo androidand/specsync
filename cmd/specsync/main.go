@@ -159,7 +159,7 @@ func runSync(args []string) {
 	dryRun := fs.Bool("dry-run", false, "print the provider commands and rendered body without executing")
 	reconcile := fs.Bool("reconcile", true, "merge external task state back into tasks.md before pushing")
 	closeCompleted := fs.Bool("close-completed", false, "close the tracker item once every task in a change is checked")
-	project := fs.String("project", "", "target GitHub Projects board as owner/number (default: $SPECSYNC_PROJECT; unset = no board)")
+	project := fs.String("project", "", "target GitHub Projects board as owner/number (default: openspec/specsync.yml board; unset = no board)")
 	assignee := fs.String("assignee", "", "board assignee login (default: the acting viewer, \"me\")")
 	statusMap := fs.String("status-map", "", "stage→Status overrides as stage=Name pairs, e.g. \"active=In Progress,archived=Done\" (default: $SPECSYNC_STATUS_MAP)")
 	if err := deprecatedSlugFlag(args); err != nil {
@@ -171,10 +171,25 @@ func runSync(args []string) {
 	if err != nil {
 		fail(err)
 	}
+	repoRoot := filepath.Dir(abs)
 
-	target, err := boardTarget(*project, *assignee, *statusMap)
+	// Resolve board: -project flag → openspec/specsync.yml → no board.
+	resolvedBoard, err := specsync.ResolveBoard(*project, repoRoot)
 	if err != nil {
 		fail(err)
+	}
+
+	// Parse status mapping separately (still needed for BoardTarget).
+	statusMapping, err := parseStatusMapping(*statusMap)
+	if err != nil {
+		fail(err)
+	}
+
+	target := specsync.BoardTarget{
+		Owner:         resolvedBoard.Owner,
+		Number:        resolvedBoard.Number,
+		Assignee:      *assignee,
+		StatusMapping: statusMapping,
 	}
 
 	// Build provider set. When -provider is absent, auto-detect a single one.
@@ -189,11 +204,7 @@ func runSync(args []string) {
 				fmt.Printf("provider: %s (auto-detected: %s)\n", provider, providerReason)
 			}
 			if provider == "github" {
-				if *repo != "" {
-					fmt.Printf("target: %s\n", *repo)
-				} else {
-					fmt.Println("target: auto-detected from the current repo's git remote")
-				}
+				printTarget(prov, *repo)
 			}
 			fmt.Println()
 		}
@@ -205,17 +216,36 @@ func runSync(args []string) {
 		if *dryRun {
 			names := strings.Join(providerNames, ", ")
 			fmt.Printf("DRY RUN — no %s calls are made\n", names)
-			if *repo != "" {
-				fmt.Printf("target: %s\n", *repo)
-			} else {
-				fmt.Println("target: auto-detected from the current repo's git remote")
+			if len(providers) > 0 {
+				printTarget(providers[0], *repo)
 			}
 			fmt.Println()
 		}
 	}
 
-	if *dryRun && target.Configured() {
-		fmt.Printf("board: %s/%d (no GraphQL mutations on a dry run)\n\n", target.Owner, target.Number)
+	// Board refusal: config-declared board on a different repo owner is refused.
+	if target.Configured() && *repo == "" {
+		// Need the resolved repo to check. Only the first GitHub provider matters.
+		for _, prov := range providers {
+			if gp, ok := prov.(*specsync.GitHubProvider); ok {
+				resolvedRepo, _ := gp.Resolve(context.Background())
+				if err := specsync.BoardRefusal(resolvedBoard, resolvedRepo); err != nil {
+					fail(err)
+				}
+				break
+			}
+		}
+	}
+
+	// Board reporting.
+	if target.Configured() {
+		if *dryRun {
+			ruleStr := resolvedBoard.Rule.String()
+			fmt.Printf("board: %s/%d via %s (no GraphQL mutations on a dry run)\n\n", target.Owner, target.Number, ruleStr)
+		} else {
+			ruleStr := resolvedBoard.Rule.String()
+			fmt.Printf("board: %s/%d via %s\n", target.Owner, target.Number, ruleStr)
+		}
 	}
 
 	res, err := specsync.Sync(context.Background(), specsync.Options{
@@ -288,7 +318,7 @@ func runPull(args []string) {
 	change := fs.String("change", "", "change name (default: derived from the issue title)")
 	repo := fs.String("repo", "", "source repo as owner/name (default: auto-detect from git remote)")
 	dryRun := fs.Bool("dry-run", false, "show what would be written without touching disk")
-	project := fs.String("project", "", "target GitHub Projects board as owner/number (default: $SPECSYNC_PROJECT; unset = no board)")
+	project := fs.String("project", "", "target GitHub Projects board as owner/number (default: openspec/specsync.yml board; unset = no board)")
 	assignee := fs.String("assignee", "", "board assignee login (default: the acting viewer, \"me\")")
 	statusMap := fs.String("status-map", "", "stage→Status overrides as stage=Name pairs, e.g. \"active=In Progress,archived=Done\" (default: $SPECSYNC_STATUS_MAP)")
 	worktree := fs.Bool("worktree", false, "create or reuse a worktree and run pull inside it")
@@ -305,9 +335,23 @@ func runPull(args []string) {
 	if err != nil {
 		fail(err)
 	}
-	target, err := boardTarget(*project, *assignee, *statusMap)
+	repoRoot := filepath.Dir(abs)
+
+	resolvedBoard, err := specsync.ResolveBoard(*project, repoRoot)
 	if err != nil {
 		fail(err)
+	}
+
+	statusMapping, err := parseStatusMapping(*statusMap)
+	if err != nil {
+		fail(err)
+	}
+
+	target := specsync.BoardTarget{
+		Owner:         resolvedBoard.Owner,
+		Number:        resolvedBoard.Number,
+		Assignee:      *assignee,
+		StatusMapping: statusMapping,
 	}
 
 	if *worktree {
@@ -490,17 +534,20 @@ func ensureWorktree(ctx context.Context, worktreePath, branchName string) error 
 
 // runLink writes links.md for each change (recording the other's issue URL) and
 // then syncs each spec so the "## Related" section appears in both GitHub issues.
+// Issue references (#N, owner/repo#N, URL) are also accepted — they are linked
+// directly without requiring a local spec.
 //
 // Usage: specsync link [flags] <change1> <change2> [<change3>...]
 func runLink(args []string) {
 	fs := flag.NewFlagSet("link", flag.ExitOnError)
 	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
 	dryRun := fs.Bool("dry-run", false, "show what would change without writing files or calling GitHub")
+	repo := fs.String("repo", "", "repo (owner/name) for bare issue refs")
 	_ = fs.Parse(args)
 
-	changes := fs.Args()
-	if len(changes) < 2 {
-		fail(fmt.Errorf("link: at least 2 changes required\nusage: specsync link <change1> <change2> [<change3>...]"))
+	args = fs.Args()
+	if len(args) < 2 {
+		fail(fmt.Errorf("link: at least 2 arguments required\nusage: specsync link <change1> <change2> [<change3>...]"))
 	}
 
 	abs, err := filepath.Abs(*openspec)
@@ -508,9 +555,10 @@ func runLink(args []string) {
 		fail(err)
 	}
 
-	pairs, err := specsync.Link(specsync.LinkOptions{
+	result, err := specsync.Link(context.Background(), specsync.LinkOptions{
 		OpenSpecDir: abs,
-		Slugs:       changes,
+		Args:        args,
+		Repo:        *repo,
 		DryRun:      *dryRun,
 	})
 	if err != nil {
@@ -520,22 +568,28 @@ func runLink(args []string) {
 	if *dryRun {
 		fmt.Println("DRY RUN — no files or GitHub calls will be modified")
 		fmt.Println()
-		for i, p := range pairs {
+		for i, p := range result.Pairs {
 			fmt.Printf("  %s/links.md would contain:\n", p.Slug)
-			for j, other := range pairs {
+			for j, other := range result.Pairs {
 				if j != i {
 					fmt.Printf("    - %s\n", other.Ref.URL)
 				}
+			}
+			for _, lr := range result.Refs {
+				fmt.Printf("    - %s\n", lr.Ref.URL)
 			}
 			// Render the Related section preview by loading the change and
 			// injecting the would-be links directly, bypassing disk.
 			c, err := specsync.LoadChange(p.Dir, false, abs)
 			if err == nil && c != nil {
 				c.Links = nil
-				for j, other := range pairs {
+				for j, other := range result.Pairs {
 					if j != i {
 						c.Links = append(c.Links, other.Ref)
 					}
+				}
+				for _, lr := range result.Refs {
+					c.Links = append(c.Links, lr.Ref)
 				}
 				item := specsync.WorkItemFor(*c, false)
 				if idx := strings.Index(item.Body, "\n\n## Related\n\n"); idx >= 0 {
@@ -547,12 +601,12 @@ func runLink(args []string) {
 			}
 			fmt.Println()
 		}
-		fmt.Printf("specsync link: would cross-link %d specs\n", len(pairs))
+		fmt.Printf("specsync link: would cross-link %d specs and %d issue refs\n", len(result.Pairs), len(result.Refs))
 		return
 	}
 
 	// Real run: sync each spec with the provider matching its repo.
-	for _, p := range pairs {
+	for _, p := range result.Pairs {
 		provider := makeProvider(p.Repo, false, "github")
 		_, err := specsync.Sync(context.Background(), specsync.Options{
 			OpenSpecDir: abs,
@@ -564,7 +618,50 @@ func runLink(args []string) {
 		}
 		fmt.Printf("  linked  %s  <->  %s\n", p.Slug, p.Ref.URL)
 	}
-	fmt.Printf("specsync link: %d specs cross-linked\n", len(pairs))
+
+	// Reference path: fetch each issue, upsert "## Related", push edited body.
+	for _, lr := range result.Refs {
+		// Collect "other" refs (all refs except this one).
+		var others []specsync.Ref
+		for _, p := range result.Pairs {
+			others = append(others, p.Ref)
+		}
+		for _, other := range result.Refs {
+			if other.ID != lr.ID || other.Repo != lr.Repo {
+				others = append(others, other.Ref)
+			}
+		}
+
+		provider := makeProvider(lr.Repo, false, "github")
+		// Fetch the issue to get existing title, body, and labels.
+		reader, ok := provider.(specsync.IssueReader)
+		if !ok {
+			fail(fmt.Errorf("provider %T does not support reading issues", provider))
+		}
+		item, err := reader.Get(context.Background(), lr.ID)
+		if err != nil {
+			fail(fmt.Errorf("fetch issue %s: %w", lr.Ref.URL, err))
+		}
+
+		// Upsert the Related section in the body.
+		edited := specsync.UpsertRelatedSection(item.Body, others)
+
+		// Push the edited body back, preserving title and labels.
+		workItem := specsync.WorkItem{
+			Slug:         "",
+			Title:        item.Title,
+			Body:         edited,
+			Labels:       item.Labels,
+			ManageClosed: false,
+		}
+		_, err = provider.Push(context.Background(), workItem, &lr.Ref)
+		if err != nil {
+			fail(fmt.Errorf("push edited body for %s: %w", lr.Ref.URL, err))
+		}
+		fmt.Printf("  linked  %s\n", lr.Ref.URL)
+	}
+
+	fmt.Printf("specsync link: %d specs and %d refs cross-linked\n", len(result.Pairs), len(result.Refs))
 }
 
 // detectProvider returns ("beads", reason) when Beads should be auto-selected,
@@ -603,39 +700,6 @@ func makeProvider(repo string, dryRun bool, provider string) specsync.WorkProvid
 		}
 		return specsync.NewGitHubProvider()
 	}
-}
-
-// boardTarget parses the -project flag (falling back to $SPECSYNC_PROJECT so the
-// board need not be retyped) into a BoardTarget. An empty value yields the zero
-// target, which disables all board behavior. statusMap (falling back to
-// $SPECSYNC_STATUS_MAP) overrides the default stage→Status-name mapping; its
-// syntax is validated even without a project so a typo never fails silently.
-func boardTarget(project, assignee, statusMap string) (specsync.BoardTarget, error) {
-	mapping, err := parseStatusMapping(statusMap)
-	if err != nil {
-		return specsync.BoardTarget{}, err
-	}
-	if strings.TrimSpace(project) == "" {
-		project = os.Getenv("SPECSYNC_PROJECT")
-	}
-	project = strings.TrimSpace(project)
-	if project == "" {
-		return specsync.BoardTarget{}, nil
-	}
-	parts := strings.Split(project, "/")
-	if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" {
-		return specsync.BoardTarget{}, fmt.Errorf("-project must be owner/number, got %q", project)
-	}
-	number, err := strconv.Atoi(strings.TrimSpace(parts[1]))
-	if err != nil {
-		return specsync.BoardTarget{}, fmt.Errorf("-project number is invalid in %q: %w", project, err)
-	}
-	return specsync.BoardTarget{
-		Owner:         strings.TrimSpace(parts[0]),
-		Number:        number,
-		Assignee:      strings.TrimSpace(assignee),
-		StatusMapping: mapping,
-	}, nil
 }
 
 // parseStatusMapping parses "-status-map" (falling back to $SPECSYNC_STATUS_MAP)
@@ -703,6 +767,38 @@ func printBoardPlan(plan specsync.BoardPlan, dryRun bool) {
 		fmt.Printf("               • assigned → %s\n", plan.AssigneeLogin)
 	} else if plan.AssignSkipped != "" {
 		fmt.Printf("               • assignee left unchanged (%s)\n", plan.AssignSkipped)
+	}
+}
+
+// printTarget prints the resolved repo name and the rule that selected it,
+// replacing the old "auto-detected" message with the concrete value.
+func printTarget(prov specsync.WorkProvider, explicitRepo string) {
+	gp, ok := prov.(*specsync.GitHubProvider)
+	if !ok {
+		return
+	}
+	resolved, _ := gp.Resolve(context.Background())
+	if resolved.Repo == "" {
+		fmt.Println("target: could not resolve repo (no -repo, no gh default, no origin)")
+		return
+	}
+	rule := resolved.Rule
+	if rule == "" {
+		rule = "default"
+	}
+	fmt.Printf("target: %s (resolved via %s)\n", resolved.Repo, rule)
+	if explicitRepo != "" {
+		fmt.Printf("       (override with -repo flag)\n")
+	}
+	// Fork divergence warning
+	divergent, upstreamRepo, _ := gp.CheckForkDivergence(context.Background())
+	if divergent {
+		fmt.Printf("       fork divergence: origin=%s vs upstream=%s — targeting origin (override with -repo %s)\n",
+			resolved.Repo, upstreamRepo, upstreamRepo)
+	}
+	// Fork refusal warning (targeting upstream parent without explicit consent)
+	if refuse, reason, _ := specsync.ForkRefusal(context.Background(), resolved); refuse {
+		fmt.Printf("       FORK REFUSAL: %s\n", reason)
 	}
 }
 

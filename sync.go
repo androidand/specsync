@@ -132,6 +132,18 @@ func Sync(ctx context.Context, opts Options) (Result, error) {
 				return res, fmt.Errorf("refresh state: %w", err)
 			}
 
+			// Refuse to write to a fork's upstream parent without explicit -repo consent.
+			if gp, ok := prov.(*GitHubProvider); ok {
+				if refuse, reason, _ := ForkRefusal(ctx, gp.resolved); refuse {
+					providerResults = append(providerResults, ProviderResult{
+						ProviderName: prov.Name(),
+						Slug:         c.Slug,
+						Error:        fmt.Errorf("fork refusal: %s", reason),
+					})
+					continue
+				}
+			}
+
 			item := WorkItemFor(c, opts.CloseCompleted)
 			ref, perr := prov.Push(ctx, item, existingPtr)
 			if perr != nil {
@@ -256,13 +268,7 @@ func WorkItemFor(c Change, closeCompleted bool) WorkItem {
 		}
 	}
 	if len(c.Links) > 0 {
-		var lines []string
-		for _, ref := range c.Links {
-			lines = append(lines, "- "+refLabel(ref))
-		}
-		if len(lines) > 0 {
-			body = body + "\n\n## Related\n\n" + strings.Join(lines, "\n")
-		}
+		body = UpsertRelatedSection(body, c.Links)
 	}
 	priority := 0
 	if c.Priority != nil {

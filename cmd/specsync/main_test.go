@@ -257,20 +257,35 @@ func TestParseStatusMappingEnvFallback(t *testing.T) {
 // BoardTarget the sync/pull paths hand to the library (this wiring was the
 // gap that left BoardTarget.StatusMapping unreachable from the CLI).
 func TestBoardTargetCarriesStatusMapping(t *testing.T) {
-	t.Setenv("SPECSYNC_PROJECT", "")
 	t.Setenv("SPECSYNC_STATUS_MAP", "")
 
-	target, err := boardTarget("acme/6", "me", "active=In Progress")
+	// Board resolution: -project flag → openspec/specsync.yml → no board.
+	resolvedBoard, err := specsync.ResolveBoard("acme/6", t.TempDir())
 	if err != nil {
-		t.Fatalf("boardTarget: %v", err)
+		t.Fatalf("ResolveBoard: %v", err)
+	}
+	if resolvedBoard.Owner != "acme" || resolvedBoard.Number != 6 {
+		t.Fatalf("ResolveBoard: got %+v", resolvedBoard)
+	}
+
+	statusMapping, err := parseStatusMapping("active=In Progress")
+	if err != nil {
+		t.Fatalf("parseStatusMapping: %v", err)
+	}
+
+	target := specsync.BoardTarget{
+		Owner:         resolvedBoard.Owner,
+		Number:        resolvedBoard.Number,
+		Assignee:      "me",
+		StatusMapping: statusMapping,
 	}
 	if target.StatusMapping[specsync.StageActive] != "In Progress" {
 		t.Fatalf("StatusMapping not carried into BoardTarget: %+v", target)
 	}
 
 	// A syntax error in the mapping fails loud even without a project.
-	if _, err := boardTarget("", "", "bogus"); err == nil {
-		t.Fatal("expected an error for a malformed -status-map without a project")
+	if _, err := parseStatusMapping("bogus"); err == nil {
+		t.Fatal("expected an error for a malformed -status-map")
 	}
 }
 

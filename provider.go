@@ -12,6 +12,7 @@ type WorkItem struct {
 	Priority     int
 	Closed       bool // desired state when ManageClosed is true
 	ManageClosed bool // provider must enforce the desired open/closed state
+	Labels       []string // explicit labels (when non-nil, overrides Stage/Priority)
 }
 
 // Ref is the disposable binding between a Change and its projection in one
