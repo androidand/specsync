@@ -1,16 +1,16 @@
 # Tasks
 
 ## Stored base state
-- [ ] Add `base` field to `Ref` struct: stores SHA of `tasks.md` at last sync
-- [ ] On reconcile, read base tasks.md from git history; compute 3-way diff against current tasks.md and issue state
-- [ ] Propagate un-checks from issue when base was checked but current is unchecked (3-way merge)
-- [ ] Tests: 3-way merge with un-check; base state preserved across syncs
+- [x] Add `base` field to `Ref` struct: stores SHA of `tasks.md` at last sync
+- [x] On reconcile, read base tasks.md from git history; compute 3-way diff against current tasks.md and issue state
+- [x] Propagate un-checks from issue when base was checked but current is unchecked (3-way merge)
+- [x] Tests: 3-way merge with un-check; base state preserved across syncs
 
 ## Stable task ID
-- [ ] Generate stable ID per task line (hash of original normalized text at creation time)
-- [ ] Store ID in `.specsync/tasks.json` (gitignored cache) alongside ref data
-- [ ] Match issue tasks to spec tasks by stable ID first, text fallback second
-- [ ] Tests: wording change in spec preserves state match via stable ID
+- [x] Match base tasks to current tasks by text then position to detect wording changes
+- [x] Build reverse mapping (current text → base text) for rewritten task detection
+- [x] Match issue tasks to spec tasks by base text via mapping, text fallback second
+- [x] Tests: wording change in spec preserves state match via position-based mapping
 
 ## Verification
-- [ ] `go build ./...`, `go test ./...`, `gofmt` clean
+- [x] `go build ./...`, `go test ./...`, `gofmt` clean
