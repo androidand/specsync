@@ -189,6 +189,14 @@ func syncOne(ctx context.Context, prov WorkProvider, c Change, dryRun, reconcile
 		// a placeholder ref (e.g. issue #0) that breaks the next real run.
 		return ref, !hadRef, nil, plan, nil
 	}
+
+	// Preserve base state (3-way reconcile) from the reconciled ref so saveRef
+	// doesn't overwrite it with a fresh provider ref.
+	if existingPtr != nil && existingPtr.Base != "" && ref.Base == "" {
+		ref.BaseSHA = existingPtr.BaseSHA
+		ref.Base = existingPtr.Base
+	}
+
 	if err := saveRef(c.Dir, prov.Name(), ref); err != nil {
 		return Ref{}, false, nil, BoardPlan{}, err
 	}

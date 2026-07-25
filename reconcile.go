@@ -2,6 +2,10 @@ package specsync
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -55,15 +59,130 @@ func reconcileTaskState(ctx context.Context, prov WorkProvider, c *Change, exist
 		return ref, nil, nil
 	}
 
-	merged, flips := mergeTaskState(c.TasksMarkdown, states)
-	if len(flips) == 0 {
-		return ref, nil, nil
+	// Try 3-way merge if base state is available; fall back to 2-way union.
+	merged, flips, used3way, err := reconcileThreeWay(ctx, c, states, ref)
+	if err != nil {
+		merged, flips = mergeTaskState(c.TasksMarkdown, states)
+		used3way = false
+	} else if !used3way {
+		merged, flips = mergeTaskState(c.TasksMarkdown, states)
 	}
-	c.TasksMarkdown = merged
-	if err := os.WriteFile(filepath.Join(c.Dir, "tasks.md"), []byte(merged), 0o644); err != nil {
-		return ref, nil, err
+
+	// Save base state regardless of whether flips occurred, so next sync can
+	// do a proper 3-way merge.
+	ref.BaseSHA = currentTaskSHA(c)
+	ref.Base = c.TasksMarkdown
+
+	if len(flips) > 0 {
+		c.TasksMarkdown = merged
+		if err := os.WriteFile(filepath.Join(c.Dir, "tasks.md"), []byte(c.TasksMarkdown), 0o644); err != nil {
+			return ref, nil, err
+		}
+	}
+
+	if err := saveBaseState(c.Dir, ref); err != nil {
+		return ref, nil, fmt.Errorf("save base state: %w", err)
 	}
 	return ref, flips, nil
+}
+
+// reconcileThreeWay attempts a 3-way merge using the base state from the ref.
+// If base state is available, it performs a 3-way merge. Returns the merged
+// markdown, flips, whether 3-way was used, and any error.
+func reconcileThreeWay(ctx context.Context, c *Change, issue map[string]bool, ref *Ref) (string, []TaskFlip, bool, error) {
+	if ref.Base == "" {
+		return "", nil, false, nil
+	}
+
+	baseStates := parseTaskStates(ref.Base)
+
+	lines := strings.Split(c.TasksMarkdown, "\n")
+	var flips []TaskFlip
+	for i, line := range lines {
+		text, checked, ok := parseTaskLine(line)
+		if !ok {
+			continue
+		}
+
+		issueChecked, issuePresent := issue[text]
+		baseChecked, basePresent := baseStates[text]
+
+		if !issuePresent {
+			continue
+		}
+
+		// 3-way merge: only apply issue changes relative to base.
+		if !basePresent {
+			continue // task was not in base — skip
+		}
+
+		// If issue checked what was unchecked in base, propagate.
+		if issueChecked && !baseChecked {
+			if !checked {
+				lines[i] = setTaskChecked(line, true)
+				flips = append(flips, TaskFlip{Text: text, Checked: true})
+			}
+		}
+		// If issue unchecked what was checked in base, propagate.
+		if !issueChecked && baseChecked {
+			if checked {
+				lines[i] = setTaskChecked(line, false)
+				flips = append(flips, TaskFlip{Text: text, Checked: false})
+			}
+		}
+	}
+
+	return strings.Join(lines, "\n"), flips, true, nil
+}
+
+// currentTaskSHA returns the SHA-256 of the current tasks.md content.
+func currentTaskSHA(c *Change) string {
+	h := sha256.Sum256([]byte(c.TasksMarkdown))
+	return hex.EncodeToString(h[:])
+}
+
+// saveBaseState persists the base tasks.md content to the ref cache.
+func saveBaseState(changeDir string, ref *Ref) error {
+	refs, err := loadRefs(changeDir)
+	if err != nil {
+		return err
+	}
+	r, ok := refs[ref.Provider]
+	if ok {
+		r.BaseSHA = ref.BaseSHA
+		r.Base = ref.Base
+		refs[ref.Provider] = r
+	} else {
+		refs[ref.Provider] = Ref{
+			Provider: ref.Provider,
+			ID:       ref.ID,
+			URL:      ref.URL,
+			BaseSHA:  ref.BaseSHA,
+			Base:     ref.Base,
+		}
+	}
+	if err := os.MkdirAll(filepath.Join(changeDir, ".specsync"), 0o755); err != nil {
+		return fmt.Errorf("create .specsync: %w", err)
+	}
+	b, err := json.MarshalIndent(refs, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal ref cache: %w", err)
+	}
+	if err := os.WriteFile(refCachePath(changeDir), append(b, '\n'), 0o644); err != nil {
+		return fmt.Errorf("write ref cache: %w", err)
+	}
+	return nil
+}
+
+// parseTaskStates extracts task checkbox state from tasks markdown.
+func parseTaskStates(md string) map[string]bool {
+	states := map[string]bool{}
+	for _, line := range strings.Split(md, "\n") {
+		if text, checked, ok := parseTaskLine(line); ok {
+			states[text] = checked
+		}
+	}
+	return states
 }
 
 // externalTaskStates obtains task done-state from whichever capability the

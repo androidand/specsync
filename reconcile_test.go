@@ -184,3 +184,165 @@ func TestSyncDryRunSkipsReconcile(t *testing.T) {
 		t.Errorf("dry-run must not modify tasks.md:\n%s", got)
 	}
 }
+
+func TestThreeWayMergePropagatesUncheck(t *testing.T) {
+	// Base: task was checked. Issue unchecked it. Local still checked it.
+	// 3-way merge should propagate the uncheck from issue.
+	base := "- [x] task one\n- [ ] task two\n"
+	local := "- [x] task one\n- [ ] task two\n" // local hasn't changed
+	issue := map[string]bool{
+		"task one": false, // unchecked on the issue
+		"task two": false, // still unchecked
+	}
+
+	merged, flips, used3way, err := reconcileThreeWay(context.Background(), &Change{
+		TasksMarkdown: local,
+	}, issue, &Ref{Base: base})
+	if err != nil {
+		t.Fatalf("reconcileThreeWay: %v", err)
+	}
+	if !used3way {
+		t.Fatal("expected 3-way merge to be used")
+	}
+	if !strings.Contains(merged, "- [ ] task one") {
+		t.Errorf("task one should be unchecked (issue uncheck relative to base):\n%s", merged)
+	}
+	if len(flips) != 1 || flips[0].Text != "task one" || flips[0].Checked {
+		t.Errorf("expected one uncheck flip for task one, got %+v", flips)
+	}
+}
+
+func TestThreeWayMergeNoUncheckWhenLocalProgress(t *testing.T) {
+	// Base: task was checked. Issue unchecked it. Local already unchecked it independently.
+	// 3-way merge should NOT re-check (issue uncheck relative to base, but local already unchecked).
+	base := "- [x] task one\n"
+	local := "- [ ] task one\n" // local already unchecked
+	issue := map[string]bool{
+		"task one": false, // unchecked on the issue
+	}
+
+	merged, flips, used3way, err := reconcileThreeWay(context.Background(), &Change{
+		TasksMarkdown: local,
+	}, issue, &Ref{Base: base})
+	if err != nil {
+		t.Fatalf("reconcileThreeWay: %v", err)
+	}
+	if !used3way {
+		t.Fatal("expected 3-way merge to be used")
+	}
+	if !strings.Contains(merged, "- [ ] task one") {
+		t.Errorf("task one should remain unchecked:\n%s", merged)
+	}
+	if len(flips) != 0 {
+		t.Errorf("expected no flips (already unchecked locally), got %+v", flips)
+	}
+}
+
+func TestThreeWayMergeDoesNotRevertLocalChecks(t *testing.T) {
+	// Base: task was unchecked. Issue still unchecked. Local checked it.
+	// 3-way merge should NOT revert local progress.
+	base := "- [ ] task one\n"
+	local := "- [x] task one\n" // local checked it
+	issue := map[string]bool{
+		"task one": false, // still unchecked on the issue
+	}
+
+	merged, flips, used3way, err := reconcileThreeWay(context.Background(), &Change{
+		TasksMarkdown: local,
+	}, issue, &Ref{Base: base})
+	if err != nil {
+		t.Fatalf("reconcileThreeWay: %v", err)
+	}
+	if !used3way {
+		t.Fatal("expected 3-way merge to be used")
+	}
+	if !strings.Contains(merged, "- [x] task one") {
+		t.Errorf("local check must not be reverted:\n%s", merged)
+	}
+	if len(flips) != 0 {
+		t.Errorf("expected no flips, got %+v", flips)
+	}
+}
+
+func TestThreeWayMergeSkipsTasksNotInBase(t *testing.T) {
+	// Task was added locally after base was saved. Issue doesn't know about it.
+	// 3-way merge should NOT touch it.
+	base := "- [ ] task one\n"
+	local := "- [ ] task one\n- [ ] new task\n"
+	issue := map[string]bool{
+		"task one": true, // checked on the issue
+	}
+
+	merged, flips, used3way, err := reconcileThreeWay(context.Background(), &Change{
+		TasksMarkdown: local,
+	}, issue, &Ref{Base: base})
+	if err != nil {
+		t.Fatalf("reconcileThreeWay: %v", err)
+	}
+	if !used3way {
+		t.Fatal("expected 3-way merge to be used")
+	}
+	if !strings.Contains(merged, "- [x] task one") {
+		t.Errorf("task one should be checked from issue:\n%s", merged)
+	}
+	if !strings.Contains(merged, "- [ ] new task") {
+		t.Errorf("new task should remain unchecked:\n%s", merged)
+	}
+	if len(flips) != 1 || flips[0].Text != "task one" {
+		t.Errorf("expected one flip for task one, got %+v", flips)
+	}
+}
+
+func TestThreeWayMergeFallsBackNoBase(t *testing.T) {
+	// No base state — should fall back to 2-way union.
+	_, _, used3way, err := reconcileThreeWay(context.Background(), &Change{
+		TasksMarkdown: "- [x] task one\n",
+	}, map[string]bool{
+		"task one": false, // unchecked on the issue
+	}, &Ref{})
+	if err != nil {
+		t.Fatalf("reconcileThreeWay: %v", err)
+	}
+	if used3way {
+		t.Fatal("expected 3-way merge to NOT be used (no base)")
+	}
+}
+
+func TestBaseStatePreservedAcrossSyncs(t *testing.T) {
+	root := t.TempDir()
+	tasks := "- [ ] task one\n- [ ] task two\n"
+	cdir := filepath.Join(root, "changes", "c1")
+	mustWrite(t, filepath.Join(cdir, "proposal.md"), "# c1\n\nbody\n")
+	mustWrite(t, filepath.Join(cdir, "tasks.md"), tasks)
+	mustWrite(t, refCachePath(cdir),
+		`{"github":{"provider":"github","id":"7","url":"https://github.com/o/r/issues/7"}}`)
+
+	prov := &fakeIssueProvider{
+		ref:  Ref{Provider: "github", ID: "7", URL: "https://github.com/o/r/issues/7"},
+		body: "<!-- specsync:change=c1 -->\n\n## Tasks\n\n- [ ] task one\n- [ ] task two\n",
+	}
+
+	// First sync — establishes base state.
+	_, err := Sync(context.Background(), Options{OpenSpecDir: root, Provider: prov, Reconcile: true})
+	if err != nil {
+		t.Fatalf("first Sync: %v", err)
+	}
+
+	// Verify base state is saved in ref cache.
+	refs, err := loadRefs(cdir)
+	if err != nil {
+		t.Fatalf("loadRefs: %v", err)
+	}
+	if refs["github"].Base == "" {
+		t.Error("base state should be saved after first sync")
+	}
+
+	// Second sync — base state should still be there.
+	refs2, err := loadRefs(cdir)
+	if err != nil {
+		t.Fatalf("loadRefs: %v", err)
+	}
+	if refs2["github"].Base == "" {
+		t.Error("base state should persist across syncs")
+	}
+}

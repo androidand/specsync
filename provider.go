@@ -21,6 +21,8 @@ type Ref struct {
 	Provider string `json:"provider"`
 	ID       string `json:"id"`  // provider-internal id / number
 	URL      string `json:"url"` // human-facing link
+	BaseSHA  string `json:"base_sha,omitempty"`  // SHA-256 of tasks.md at last sync (for 3-way reconcile)
+	Base     string `json:"base,omitempty"`      // base tasks.md content at last sync (for 3-way reconcile)
 }
 
 // WorkProvider projects WorkItems outward. Implementations must be idempotent:
