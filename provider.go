@@ -19,10 +19,10 @@ type WorkItem struct {
 // from the identity marker the provider writes into the item body.
 type Ref struct {
 	Provider string `json:"provider"`
-	ID       string `json:"id"`  // provider-internal id / number
-	URL      string `json:"url"` // human-facing link
-	BaseSHA  string `json:"base_sha,omitempty"`  // SHA-256 of tasks.md at last sync (for 3-way reconcile)
-	Base     string `json:"base,omitempty"`      // base tasks.md content at last sync (for 3-way reconcile)
+	ID       string `json:"id"`                 // provider-internal id / number
+	URL      string `json:"url"`                // human-facing link
+	BaseSHA  string `json:"base_sha,omitempty"` // SHA-256 of tasks.md at last sync (for 3-way reconcile)
+	Base     string `json:"base,omitempty"`     // base tasks.md content at last sync (for 3-way reconcile)
 }
 
 // WorkProvider projects WorkItems outward. Implementations must be idempotent:
@@ -145,11 +145,11 @@ type BoardPlan struct {
 	AlreadyOnBoard bool
 	AddedToBoard   bool // an item was (or would be) added via addProjectV2ItemById
 
-	StatusField     string // the resolved Status field name ("Status")
-	StatusName      string // the status name specsync set (or would set); "" = left alone
-	StatusOptionID  string // the option ID for the status (for three-way merge)
-	CurrentStatus   string // the board Status before specsync acted
-	StatusSkipped   string // reason the Status was left unchanged (human curation), if any
+	StatusField    string // the resolved Status field name ("Status")
+	StatusName     string // the status name specsync set (or would set); "" = left alone
+	StatusOptionID string // the option ID for the status (for three-way merge)
+	CurrentStatus  string // the board Status before specsync acted
+	StatusSkipped  string // reason the Status was left unchanged (human curation), if any
 
 	AssigneeLogin string // the login specsync assigned (or would assign); "" = none
 	AssignSkipped string // reason the assignee was left unchanged, if any

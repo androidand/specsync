@@ -291,7 +291,7 @@ func externalTaskStates(ctx context.Context, prov WorkProvider, slug string, ref
 // keyed by normalized task text. It reuses splitBody so it sees exactly the
 // managed Tasks section specsync renders; only [ ]/[x] lines are recorded.
 func parseIssueTaskStates(body string) map[string]bool {
-	_, tasks, _ := splitBody(body, "")
+	_, tasks, _, _, _ := splitBody(body, "")
 	states := map[string]bool{}
 	for _, line := range strings.Split(tasks, "\n") {
 		if text, checked, ok := parseTaskLine(line); ok {
@@ -340,6 +340,49 @@ func parseTaskLine(line string) (text string, checked, ok bool) {
 		return "", false, false
 	}
 	return normalizeTaskText(t[5:]), checked, true
+}
+
+// parseTaskState parses a task line and returns the TaskState. Returns (text,
+// ok=false) for non-task lines. Supports [ ], [x], [~] (dropped), [>] (moved).
+func parseTaskState(line string) (text string, state TaskState, ok bool) {
+	t := strings.TrimSpace(line)
+	if !strings.HasPrefix(t, "- [") || len(t) < 6 || t[4] != ']' {
+		return "", TaskStateTodo, false
+	}
+	switch t[3] {
+	case ' ':
+		return normalizeTaskText(t[5:]), TaskStateTodo, true
+	case 'x', 'X':
+		return normalizeTaskText(t[5:]), TaskStateDone, true
+	case '~':
+		return normalizeTaskText(t[5:]), TaskStateDropped, true
+	case '>':
+		return normalizeTaskText(t[5:]), TaskStateMoved, true
+	default:
+		return "", TaskStateTodo, false
+	}
+}
+
+// countTaskStates counts tasks by state from a tasks.md file.
+func countTaskStates(md string) TaskCounts {
+	var c TaskCounts
+	for _, line := range strings.Split(md, "\n") {
+		_, state, ok := parseTaskState(line)
+		if !ok {
+			continue
+		}
+		switch state {
+		case TaskStateTodo:
+			c.Todo++
+		case TaskStateDone:
+			c.Done++
+		case TaskStateDropped:
+			c.Dropped++
+		case TaskStateMoved:
+			c.Moved++
+		}
+	}
+	return c
 }
 
 // setTaskChecked rewrites the checkbox mark of a task line in place, preserving

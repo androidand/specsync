@@ -12,6 +12,12 @@
     "body": "<code>specsync scan</code> shows what already exists for an area — in-flight changes, loose issues, recent commits — before you plan."
   },
   {
+    "group": "plan",
+    "icon": "followup",
+    "title": "Spin off emergent work",
+    "body": "<code>specsync spinoff</code> spawns a new linked change from a discovery, keeping the parent scoped and marking the source task as moved."
+  },
+  {
     "group": "collaborate",
     "icon": "idempotent",
     "title": "Idempotent",

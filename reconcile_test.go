@@ -417,3 +417,100 @@ func TestBuildBaseToCurrentMapping(t *testing.T) {
 		t.Error("task three unchanged, should not be in mapping")
 	}
 }
+
+func TestParseTaskState_Todo(t *testing.T) {
+	_, state, ok := parseTaskState("- [ ] todo task")
+	if !ok || state != TaskStateTodo {
+		t.Errorf("state = %v, ok = %v, want TaskStateTodo, true", state, ok)
+	}
+}
+
+func TestParseTaskState_Done(t *testing.T) {
+	_, state, ok := parseTaskState("- [x] done task")
+	if !ok || state != TaskStateDone {
+		t.Errorf("state = %v, ok = %v, want TaskStateDone, true", state, ok)
+	}
+}
+
+func TestParseTaskState_Dropped(t *testing.T) {
+	_, state, ok := parseTaskState("- [~] dropped task")
+	if !ok || state != TaskStateDropped {
+		t.Errorf("state = %v, ok = %v, want TaskStateDropped, true", state, ok)
+	}
+}
+
+func TestParseTaskState_Moved(t *testing.T) {
+	_, state, ok := parseTaskState("- [>] moved task")
+	if !ok || state != TaskStateMoved {
+		t.Errorf("state = %v, ok = %v, want TaskStateMoved, true", state, ok)
+	}
+}
+
+func TestParseTaskState_NotTask(t *testing.T) {
+	_, _, ok := parseTaskState("not a task")
+	if ok {
+		t.Error("expected ok=false for non-task line")
+	}
+}
+
+func TestCountTaskStates_Mixed(t *testing.T) {
+	md := "- [ ] todo\n- [x] done\n- [~] dropped\n- [>] moved\n- [ ] another todo\n"
+	c := countTaskStates(md)
+	if c.Todo != 2 {
+		t.Errorf("todo = %d, want 2", c.Todo)
+	}
+	if c.Done != 1 {
+		t.Errorf("done = %d, want 1", c.Done)
+	}
+	if c.Dropped != 1 {
+		t.Errorf("dropped = %d, want 1", c.Dropped)
+	}
+	if c.Moved != 1 {
+		t.Errorf("moved = %d, want 1", c.Moved)
+	}
+	if c.LiveTotal() != 3 {
+		t.Errorf("liveTotal = %d, want 3", c.LiveTotal())
+	}
+	if c.Total() != 5 {
+		t.Errorf("total = %d, want 5", c.Total())
+	}
+}
+
+func TestCountTaskStates_IsComplete(t *testing.T) {
+	md := "- [x] done\n- [x] done\n"
+	if !countTaskStates(md).IsComplete() {
+		t.Error("expected complete")
+	}
+}
+
+func TestCountTaskStates_IsCompleteWithDropped(t *testing.T) {
+	md := "- [x] done\n- [~] dropped\n"
+	if !countTaskStates(md).IsComplete() {
+		t.Error("expected complete (dropped tasks don't count)")
+	}
+}
+
+func TestCountTaskStates_NotCompleteWithTodo(t *testing.T) {
+	md := "- [x] done\n- [ ] todo\n- [~] dropped\n"
+	if countTaskStates(md).IsComplete() {
+		t.Error("expected not complete")
+	}
+}
+
+func TestCountCheckboxes_ExcludesDroppedMoved(t *testing.T) {
+	md := "- [ ] todo\n- [x] done\n- [~] dropped\n- [>] moved\n"
+	total, completed := CountCheckboxes(md)
+	if total != 2 {
+		t.Errorf("total = %d, want 2", total)
+	}
+	if completed != 1 {
+		t.Errorf("completed = %d, want 1", completed)
+	}
+}
+
+func TestTasksComplete_ExcludesDroppedMoved(t *testing.T) {
+	md := "- [x] done\n- [~] dropped\n- [>] moved\n"
+	if !tasksComplete(md) {
+		t.Error("expected complete (only live tasks matter)")
+	}
+}

@@ -27,8 +27,9 @@ var version = "dev"
 var knownSubcommands = map[string]bool{
 	"pull": true, "link": true, "scan": true, "trace": true,
 	"release-plan": true, "changelog": true, "install-skill": true,
-	"changes": true, "set-stage": true, "set-priority": true,
+	"changes": true, "set-stage": true, "set-priority": true, "note": true,
 	"sync": true, "audit": true, "audit-tasks": true, "validate": true,
+	"spinoff": true,
 }
 
 // knownConfusions maps a word someone might reach for by habit (e.g. git's
@@ -89,7 +90,7 @@ func deprecatedSlugFlag(args []string) error {
 func main() {
 	cmd, rest, err := resolveSubcommand(os.Args[1:])
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "specsync: %v\n\nRun with no subcommand (optionally with flags) to sync, or use one of: pull, link, scan, trace, release-plan, changelog, install-skill, changes, set-stage, set-priority, audit, audit-tasks\n", err)
+		fmt.Fprintf(os.Stderr, "specsync: %v\n\nRun with no subcommand (optionally with flags) to sync, or use one of: pull, link, scan, trace, release-plan, changelog, install-skill, changes, set-stage, set-priority, note, audit, audit-tasks, validate, spinoff\n", err)
 		os.Exit(2)
 	}
 	switch cmd {
@@ -115,6 +116,8 @@ func main() {
 		runSetStage(rest)
 	case "set-priority":
 		runSetPriority(rest)
+	case "note":
+		runNote(rest)
 	case "sync":
 		runSync(rest)
 	case "audit":
@@ -123,6 +126,8 @@ func main() {
 		runAuditTasks(rest)
 	case "validate":
 		runValidate(rest)
+	case "spinoff":
+		runSpinoff(rest)
 	default:
 		runSync(rest)
 	}
@@ -1055,6 +1060,138 @@ func runSetPriority(args []string) {
 		fail(err)
 	}
 	fmt.Printf("set-priority: %s → %s\n", changeName, priorityArg)
+}
+
+// runNote appends a discovery line to the ## Discoveries section of a change.
+func runNote(args []string) {
+	fs := flag.NewFlagSet("note", flag.ExitOnError)
+	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	dryRun := fs.Bool("dry-run", false, "show what would be written without modifying files")
+	if err := fs.Parse(args); err != nil {
+		fail(err)
+	}
+	if fs.NArg() < 2 {
+		fail(fmt.Errorf("usage: specsync note <change> <text>"))
+	}
+	changeName, text := fs.Arg(0), fs.Arg(1)
+
+	c, err := specsync.LoadChangeBySlug(*openspec, changeName)
+	if err != nil {
+		fail(err)
+	}
+
+	discPath := filepath.Join(c.Dir, "discoveries.md")
+	existingBytes, _ := os.ReadFile(discPath)
+	existing := strings.TrimSpace(string(existingBytes))
+	if existing != "" {
+		existing += "\n"
+	}
+	newContent := existing + "- " + text + "\n"
+
+	if *dryRun {
+		fmt.Printf("[dry-run] would append to %s:\n%s\n", discPath, newContent)
+		return
+	}
+
+	if err := os.WriteFile(discPath, []byte(newContent), 0o644); err != nil {
+		fail(err)
+	}
+	fmt.Printf("note: appended to %s/discoveries.md\n", changeName)
+}
+
+// runSpinoff spawns a new linked change from a discovery or task in an
+// existing change.
+func runSpinoff(args []string) {
+	fs := flag.NewFlagSet("spinoff", flag.ExitOnError)
+	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	from := fs.String("from", "", "parent change slug (required)")
+	task := fs.String("task", "", "task index to spin off (1-based); omit for free text mode")
+	repo := fs.String("repo", "", "target repo as owner/name (default: same as parent)")
+	kind := fs.String("kind", "", "issue kind: bug, followup, or task (sets label)")
+	change := fs.String("change", "", "child change slug (default: derived from text)")
+	text := fs.String("text", "", "discovery text (required when -task is not set)")
+	dryRun := fs.Bool("dry-run", false, "show what would be written without modifying files")
+	if err := fs.Parse(args); err != nil {
+		fail(err)
+	}
+
+	if strings.TrimSpace(*from) == "" {
+		fail(fmt.Errorf("spinoff: -from <slug> is required"))
+	}
+
+	taskIndex := 0
+	if *task != "" {
+		n, err := strconv.Atoi(*task)
+		if err != nil {
+			fail(fmt.Errorf("spinoff: invalid task index %q", *task))
+		}
+		if n < 1 {
+			fail(fmt.Errorf("spinoff: task index must be >= 1"))
+		}
+		taskIndex = n
+	}
+
+	// Either -task or -text is required, but not both.
+	if taskIndex > 0 && *text != "" {
+		fail(fmt.Errorf("spinoff: cannot use both -task and -text"))
+	}
+	if taskIndex == 0 && *text == "" {
+		fail(fmt.Errorf("spinoff: either -task <n> or -text <text> is required"))
+	}
+
+	abs, err := filepath.Abs(*openspec)
+	if err != nil {
+		fail(err)
+	}
+
+	res, err := specsync.Spinoff(context.Background(), specsync.SpinoffOptions{
+		OpenSpecDir: abs,
+		Parent:      *from,
+		TaskIndex:   taskIndex,
+		Text:        *text,
+		Slug:        *change,
+		Repo:        *repo,
+		Kind:        *kind,
+		DryRun:      *dryRun,
+	})
+	if err != nil {
+		fail(err)
+	}
+
+	if *dryRun {
+		fmt.Println("DRY RUN — no files or GitHub calls will be modified")
+		fmt.Println()
+		fmt.Printf("  new change: %s\n", res.ChildDir)
+		fmt.Println()
+		fmt.Println("  ┌─ proposal.md ──────────────")
+		for _, line := range strings.Split(res.Proposal, "\n") {
+			fmt.Println("  │ " + line)
+		}
+		fmt.Println("  └───────────────────────────")
+		if res.ParentTaskN > 0 {
+			fmt.Printf("\n  would mark parent task %d as: - [>] moved: %s\n", res.ParentTaskN, res.ChildSlug)
+		}
+		if res.Label != "" {
+			fmt.Printf("\n  child issue label: %s\n", res.Label)
+		}
+		if res.Linked {
+			fmt.Printf("\n  would link %s ↔ %s\n", res.ParentSlug, res.ChildSlug)
+		}
+		return
+	}
+
+	fmt.Printf("specsync spinoff: %s -> %s\n", *from, res.ChildSlug)
+	fmt.Println("  + proposal.md")
+	fmt.Println("  + tasks.md")
+	if res.ParentTaskN > 0 {
+		fmt.Printf("  parent task %d marked as moved\n", res.ParentTaskN)
+	}
+	if res.Linked {
+		fmt.Printf("  linked %s ↔ %s\n", res.ParentSlug, res.ChildSlug)
+	}
+	if res.Label != "" {
+		fmt.Printf("  label: %s\n", res.Label)
+	}
 }
 
 // runAudit cross-references archived changes against PR state and classifies

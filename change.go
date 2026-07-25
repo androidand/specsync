@@ -20,6 +20,57 @@ const (
 	TaskProgressComplete   TaskProgress = "complete"    // N/N tasks complete
 )
 
+// TaskState represents the state of a single task in tasks.md.
+// [ ] and [x] are live tasks that count toward progress.
+// [~] dropped tasks are superseded or removed — not counted.
+// [>] moved tasks have been migrated to another change — not counted.
+type TaskState int
+
+const (
+	TaskStateTodo    TaskState = iota // [ ]
+	TaskStateDone                     // [x]
+	TaskStateDropped                  // [~]
+	TaskStateMoved                    // [>]
+)
+
+func (s TaskState) String() string {
+	switch s {
+	case TaskStateTodo:
+		return "todo"
+	case TaskStateDone:
+		return "done"
+	case TaskStateDropped:
+		return "dropped"
+	case TaskStateMoved:
+		return "moved"
+	default:
+		return "unknown"
+	}
+}
+
+// TaskCounts summarizes the task states in a tasks.md file.
+type TaskCounts struct {
+	Todo    int
+	Done    int
+	Dropped int
+	Moved   int
+}
+
+// Total returns the total number of tasks including dropped and moved.
+func (c TaskCounts) Total() int {
+	return c.Todo + c.Done + c.Dropped + c.Moved
+}
+
+// LiveTotal returns the total number of live tasks (todo + done, excludes dropped/moved).
+func (c TaskCounts) LiveTotal() int {
+	return c.Todo + c.Done
+}
+
+// IsComplete returns true when all live tasks are done.
+func (c TaskCounts) IsComplete() bool {
+	return c.LiveTotal() > 0 && c.Todo == 0
+}
+
 // Stage is the workflow placement of a change. It is distinct from task progress.
 // Workflow stage can be explicitly set via .specsync/metadata.json or derived
 // from tasks/location.
@@ -69,9 +120,10 @@ func CanonicalStageOrder() []Stage {
 
 // ChangeMetadata holds shared workflow metadata from .specsync/metadata.json.
 type ChangeMetadata struct {
-	Version  int    `json:"version"`
-	Stage    *Stage `json:"stage,omitempty"`
-	Priority *int   `json:"priority,omitempty"`
+	Version           int    `json:"version"`
+	Stage             *Stage `json:"stage,omitempty"`
+	Priority          *int   `json:"priority,omitempty"`
+	BaselineTaskCount *int   `json:"baselineTaskCount,omitempty"`
 }
 
 // StageSource indicates how the current stage was derived.
@@ -94,11 +146,14 @@ type Change struct {
 	Body          string // proposal.md contents
 	TasksMarkdown string // tasks.md contents, may be ""
 	Links         []Ref  // resolved related issue refs from links.md
+	OriginalAsk   string // original-ask.md contents, may be ""
+	Discoveries   string // discoveries.md contents, may be ""
 	Archived      bool
 	Progress      TaskProgress // what the task checklist says
 	Stage         Stage        // current workflow placement
 	StageSource   StageSource  // how we arrived at Stage (default/tasks/metadata/legacy-status/folder)
 	Priority      *int         // optional 1-100; nil if unset
+	BaselineTasks *int         // task count at time of pull; nil if unknown
 }
 
 // LoadChanges reads every change under <openspecDir>/changes, including those
@@ -168,6 +223,16 @@ func LoadChange(dir string, archived bool, openspecDir string) (*Change, error) 
 
 	if tasks, err := os.ReadFile(filepath.Join(dir, "tasks.md")); err == nil {
 		c.TasksMarkdown = string(tasks)
+	}
+	if ask, err := os.ReadFile(filepath.Join(dir, "original-ask.md")); err == nil {
+		c.OriginalAsk = string(ask)
+	}
+	if disc, err := os.ReadFile(filepath.Join(dir, "discoveries.md")); err == nil {
+		c.Discoveries = string(disc)
+	}
+	// Load baseline task count from metadata.json (set on pull).
+	if meta, err := LoadChangeMetadata(dir); err == nil && meta != nil && meta.BaselineTaskCount != nil {
+		c.BaselineTasks = meta.BaselineTaskCount
 	}
 
 	if err := refreshState(c); err != nil {
@@ -308,36 +373,15 @@ func refFromURL(url string) *Ref {
 // the "- [ ]"/"- [x]" lines reconcile does — other checkbox markers (living
 // plan's [~]/[>]) and prose are ignored. An empty or task-less list is not
 // "complete": there is nothing to have finished.
-// CountCheckboxes returns (total, completed) checkbox counts from markdown.
+// CountCheckboxes returns (liveTotal, completed) checkbox counts from markdown.
+// Only [ ] and [x] tasks are counted; [~] (dropped) and [>] (moved) are excluded.
 func CountCheckboxes(md string) (total, completed int) {
-	if strings.TrimSpace(md) == "" {
-		return 0, 0
-	}
-	for _, line := range strings.Split(md, "\n") {
-		if _, checked, ok := parseTaskLine(line); ok {
-			total++
-			if checked {
-				completed++
-			}
-		}
-	}
-	return total, completed
+	c := countTaskStates(md)
+	return c.LiveTotal(), c.Done
 }
 
 func tasksComplete(md string) bool {
-	if strings.TrimSpace(md) == "" {
-		return false
-	}
-	any := false
-	for _, line := range strings.Split(md, "\n") {
-		if _, checked, ok := parseTaskLine(line); ok {
-			if !checked {
-				return false
-			}
-			any = true
-		}
-	}
-	return any
+	return countTaskStates(md).IsComplete()
 }
 
 // refreshStage derives lifecycle from the change's current task state, then

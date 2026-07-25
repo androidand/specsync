@@ -21,13 +21,15 @@ type PullOptions struct {
 
 // PullResult reports what a pull produced (or would produce on a dry run).
 type PullResult struct {
-	Slug     string
-	Dir      string
-	IssueURL string
-	Proposal string
-	Tasks    string
-	Links    []string // URLs from the ## Related section, for dry-run display
-	Marker   string   // identity marker upserted into the source issue
+	Slug        string
+	Dir         string
+	IssueURL    string
+	Proposal    string
+	Tasks       string
+	Links       []string // URLs from the ## Related section, for dry-run display
+	OriginalAsk string   // from ## Original ask section of the issue
+	Discoveries string   // from ## Discoveries section of the issue
+	Marker      string   // identity marker upserted into the source issue
 	// MarkerPresent reports whether the source issue already carried the marker,
 	// i.e. no write was (or would be) needed. Drives the dry-run preview.
 	MarkerPresent bool
@@ -74,7 +76,7 @@ func Pull(ctx context.Context, opts PullOptions) (PullResult, error) {
 		return PullResult{}, fmt.Errorf("could not derive a change name from issue %s; pass -change", opts.IssueID)
 	}
 
-	proposal, tasks, relatedURLs := splitBody(item.Body, item.Title)
+	proposal, tasks, relatedURLs, origAsk, disc := splitBody(item.Body, item.Title)
 	res := PullResult{
 		Slug:            slug,
 		Dir:             filepath.Join(opts.OpenSpecDir, "changes", slug),
@@ -82,6 +84,8 @@ func Pull(ctx context.Context, opts PullOptions) (PullResult, error) {
 		Proposal:        proposal,
 		Tasks:           tasks,
 		Links:           relatedURLs,
+		OriginalAsk:     origAsk,
+		Discoveries:     disc,
 		Marker:          marker(slug),
 		MarkerPresent:   strings.Contains(item.Body, marker(slug)),
 		TitleSuggestion: titleSuggestion(item.Title),
@@ -117,6 +121,17 @@ func Pull(ctx context.Context, opts PullOptions) (PullResult, error) {
 		if err := os.WriteFile(filepath.Join(res.Dir, "tasks.md"), []byte(tasks), 0o644); err != nil {
 			return PullResult{}, fmt.Errorf("write tasks: %w", err)
 		}
+		// Save baseline task count for tracking added tasks later.
+		tc := countTaskStates(tasks)
+		baseline := tc.Total()
+		meta, _ := LoadChangeMetadata(res.Dir)
+		if meta == nil {
+			meta = &ChangeMetadata{}
+		}
+		meta.BaselineTaskCount = &baseline
+		if err := SaveChangeMetadata(res.Dir, *meta); err != nil {
+			return PullResult{}, fmt.Errorf("save baseline task count: %w", err)
+		}
 	}
 	// Preserve Related links as links.md so the next push renders them.
 	if len(relatedURLs) > 0 {
@@ -128,6 +143,30 @@ func Pull(ctx context.Context, opts PullOptions) (PullResult, error) {
 		}
 		if err := saveLinksToMD(res.Dir, refs); err != nil {
 			return PullResult{}, fmt.Errorf("write links.md: %w", err)
+		}
+	}
+	// Save original ask from the first pull (never overwritten on re-pull).
+	// On first pull the issue won't have ## Original ask yet, so we seed it
+	// from the proposal. On re-pull we strip it but never overwrite the file.
+	askPath := filepath.Join(res.Dir, "original-ask.md")
+	if _, err := os.Stat(askPath); os.IsNotExist(err) {
+		// Use the rendered original ask if available, otherwise the proposal.
+		askContent := res.OriginalAsk
+		if askContent == "" {
+			askContent = res.Proposal
+		}
+		if err := os.WriteFile(askPath, []byte(askContent), 0o644); err != nil {
+			return PullResult{}, fmt.Errorf("write original-ask: %w", err)
+		}
+	}
+	// Save discoveries from the issue (appended, not overwritten, to preserve local notes).
+	if res.Discoveries != "" {
+		discPath := filepath.Join(res.Dir, "discoveries.md")
+		existing, _ := os.ReadFile(discPath)
+		if len(existing) == 0 {
+			if err := os.WriteFile(discPath, []byte(res.Discoveries), 0o644); err != nil {
+				return PullResult{}, fmt.Errorf("write discoveries: %w", err)
+			}
 		}
 	}
 	// Link the change to the source issue so the next push updates it.
@@ -145,31 +184,70 @@ func Pull(ctx context.Context, opts PullOptions) (PullResult, error) {
 	return res, nil
 }
 
-// splitBody separates an issue body into proposal, tasks, and related-issue
-// URLs. It drops the specsync identity marker and the managed sections
-// (## Tasks, ## Related), and guarantees the proposal opens with an H1
-// derived from the issue title. This is the inverse of WorkItemFor rendering.
-func splitBody(body, title string) (proposal, tasks string, relatedURLs []string) {
-	var prop, tsk []string
+// splitBody separates an issue body into proposal, tasks, related-issue URLs,
+// original ask, and discoveries. It drops the specsync identity marker and the
+// managed sections (## Tasks, ## Related, ## Original ask, ## Discoveries,
+// ## Plan changes), and guarantees the proposal opens with an H1 derived from
+// the issue title. This is the inverse of WorkItemFor rendering.
+func splitBody(body, title string) (proposal, tasks string, relatedURLs []string, originalAsk, discoveries string) {
+	var prop, tsk, ask, disc []string
 	inTasks := false
 	inRelated := false
+	inOriginalAsk := false
+	inDiscoveries := false
+	inPlanChanges := false
 	for _, line := range strings.Split(body, "\n") {
 		if strings.HasPrefix(strings.TrimSpace(line), "<!-- specsync:change=") {
 			continue
 		}
 		trimmed := strings.TrimSpace(line)
-		if !inTasks && !inRelated && trimmed == "## Tasks" {
+		// Check managed section headers first — they can appear even while
+		// inside another managed section (e.g. ## Tasks after ## Original ask).
+		switch trimmed {
+		case "## Tasks":
 			inTasks = true
+			inRelated = false
+			inOriginalAsk = false
+			inDiscoveries = false
+			inPlanChanges = false
 			continue
-		}
-		if !inTasks && !inRelated && trimmed == "## Related" {
+		case "## Related":
+			inTasks = false
 			inRelated = true
+			inOriginalAsk = false
+			inDiscoveries = false
+			inPlanChanges = false
 			continue
-		}
-		// A new H2 ends the managed sections and returns to proposal content.
-		if (inTasks || inRelated) && strings.HasPrefix(trimmed, "## ") {
+		case "## Original ask":
 			inTasks = false
 			inRelated = false
+			inOriginalAsk = true
+			inDiscoveries = false
+			inPlanChanges = false
+			continue
+		case "## Discoveries":
+			inTasks = false
+			inRelated = false
+			inOriginalAsk = false
+			inDiscoveries = true
+			inPlanChanges = false
+			continue
+		case "## Plan changes":
+			inTasks = false
+			inRelated = false
+			inOriginalAsk = false
+			inDiscoveries = false
+			inPlanChanges = true
+			continue
+		}
+		// A new (non-managed) H2 ends the current managed section and returns
+		// to proposal content.
+		if strings.HasPrefix(trimmed, "## ") {
+			inTasks = false
+			inRelated = false
+			inOriginalAsk = false
+			inDiscoveries = false
+			inPlanChanges = false
 			prop = append(prop, line)
 			continue
 		}
@@ -184,6 +262,12 @@ func splitBody(body, title string) (proposal, tasks string, relatedURLs []string
 					relatedURLs = append(relatedURLs, u)
 				}
 			}
+		case inOriginalAsk:
+			ask = append(ask, line)
+		case inDiscoveries:
+			disc = append(disc, line)
+		case inPlanChanges:
+			// discard plan changes footer content
 		default:
 			prop = append(prop, line)
 		}
@@ -204,7 +288,15 @@ func splitBody(body, title string) (proposal, tasks string, relatedURLs []string
 	if tasks != "" {
 		tasks += "\n"
 	}
-	return proposal, tasks, relatedURLs
+	originalAsk = strings.TrimSpace(strings.Join(ask, "\n"))
+	if originalAsk != "" {
+		originalAsk += "\n"
+	}
+	discoveries = strings.TrimSpace(strings.Join(disc, "\n"))
+	if discoveries != "" {
+		discoveries += "\n"
+	}
+	return proposal, tasks, relatedURLs, originalAsk, discoveries
 }
 
 // extractURL pulls the href out of "[label](url)" or returns the string as-is

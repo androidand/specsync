@@ -207,3 +207,175 @@ func readFile(t *testing.T, path string) string {
 	}
 	return string(b)
 }
+
+func TestWorkItemForAddedCount(t *testing.T) {
+	baseline := 2
+	c := Change{
+		Slug:          "test",
+		Body:          "# Test\n\nBody.\n",
+		TasksMarkdown: "- [x] one\n- [ ] two\n- [ ] three\n",
+		BaselineTasks: &baseline,
+	}
+	wi := WorkItemFor(c, false)
+	if !strings.Contains(wi.Body, "+1 added") {
+		t.Errorf("expected '+1 added' in body, got:\n%s", wi.Body)
+	}
+}
+
+func TestWorkItemForNoAddedAtBaseline(t *testing.T) {
+	added := 3
+	c := Change{
+		Slug:          "test",
+		Body:          "# Test\n\nBody.\n",
+		TasksMarkdown: "- [x] one\n- [ ] two\n- [ ] three\n",
+		BaselineTasks: &added,
+	}
+	wi := WorkItemFor(c, false)
+	if strings.Contains(wi.Body, "added") {
+		t.Errorf("expected no 'added' in body, got:\n%s", wi.Body)
+	}
+}
+
+func TestWorkItemForNoAddedNoBaseline(t *testing.T) {
+	c := Change{
+		Slug:          "test",
+		Body:          "# Test\n\nBody.\n",
+		TasksMarkdown: "- [x] one\n- [ ] two\n- [ ] three\n",
+	}
+	wi := WorkItemFor(c, false)
+	if strings.Contains(wi.Body, "added") {
+		t.Errorf("expected no 'added' in body, got:\n%s", wi.Body)
+	}
+}
+
+func TestOriginalAskRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	issue := fakeIssue{
+		Number: 42,
+		URL:    "https://github.com/o/r/issues/42",
+		Title:  "Round trip",
+		State:  "open",
+		Body:   "# Round trip\n\nOriginal body text.\n\n## Tasks\n\n- [ ] one\n",
+	}
+	var calls [][]string
+	prov := NewGitHubProviderFunc(ghRunner(issue, &calls))
+
+	// First pull seeds original-ask.md.
+	res, err := Pull(context.Background(), PullOptions{
+		OpenSpecDir: dir,
+		Provider:    prov,
+		IssueID:     "42",
+	})
+	if err != nil {
+		t.Fatalf("Pull: %v", err)
+	}
+
+	// Sync renders it back into the issue.
+	calls = nil
+	if _, err := Sync(context.Background(), Options{OpenSpecDir: dir, Provider: prov, Slug: res.Slug}); err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+
+	// Re-pull should strip the managed sections and leave original-ask.md unchanged.
+	calls = nil
+	_, err = Pull(context.Background(), PullOptions{
+		OpenSpecDir: dir,
+		Provider:    prov,
+		IssueID:     "42",
+	})
+	if err != nil {
+		t.Fatalf("re-Pull: %v", err)
+	}
+
+	// Verify original-ask.md still exists and is unchanged.
+	askPath := filepath.Join(dir, "changes", res.Slug, "original-ask.md")
+	ask, err := os.ReadFile(askPath)
+	if err != nil {
+		t.Fatalf("read original-ask.md: %v", err)
+	}
+	if !strings.Contains(string(ask), "Original body text") {
+		t.Fatalf("original-ask.md lost content: %s", ask)
+	}
+}
+
+func TestWorkItemForRendersOriginalAsk(t *testing.T) {
+	c := Change{
+		Slug:        "test",
+		Body:        "# Test\n\nBody.\n",
+		OriginalAsk: "This was the original request.",
+	}
+	wi := WorkItemFor(c, false)
+	if !strings.Contains(wi.Body, "## Original ask") {
+		t.Errorf("expected '## Original ask' in body, got:\n%s", wi.Body)
+	}
+	if !strings.Contains(wi.Body, "This was the original request") {
+		t.Errorf("expected original ask content in body, got:\n%s", wi.Body)
+	}
+}
+
+func TestWorkItemForRendersDiscoveries(t *testing.T) {
+	c := Change{
+		Slug:        "test",
+		Body:        "# Test\n\nBody.\n",
+		Discoveries: "Found a bug in the auth flow.",
+	}
+	wi := WorkItemFor(c, false)
+	if !strings.Contains(wi.Body, "## Discoveries") {
+		t.Errorf("expected '## Discoveries' in body, got:\n%s", wi.Body)
+	}
+	if !strings.Contains(wi.Body, "Found a bug in the auth flow") {
+		t.Errorf("expected discoveries content in body, got:\n%s", wi.Body)
+	}
+}
+
+func TestWorkItemForSectionOrder(t *testing.T) {
+	c := Change{
+		Slug:          "test",
+		Body:          "# Test\n\nBody.\n",
+		OriginalAsk:   "Original ask.",
+		Discoveries:   "Discovery.",
+		TasksMarkdown: "- [ ] one\n",
+		Links:         []Ref{{ID: "1", URL: "https://example.com/o/r/1"}},
+	}
+	wi := WorkItemFor(c, false)
+
+	oa := strings.Index(wi.Body, "## Original ask")
+	di := strings.Index(wi.Body, "## Discoveries")
+	ti := strings.Index(wi.Body, "## Tasks")
+	ri := strings.Index(wi.Body, "## Related")
+
+	if oa >= di || di >= ti || ti >= ri {
+		t.Errorf("sections not in order (Original ask < Discoveries < Tasks < Related):\n%s", wi.Body)
+	}
+}
+
+func TestPullSavesOriginalAsk(t *testing.T) {
+	dir := t.TempDir()
+	issue := fakeIssue{
+		Number: 99,
+		URL:    "https://github.com/o/r/issues/99",
+		Title:  "Feature",
+		State:  "open",
+		Body:   "# Feature\n\nThe original request.\n\n## Tasks\n\n- [ ] one\n",
+	}
+	var calls [][]string
+	prov := NewGitHubProviderFunc(ghRunner(issue, &calls))
+
+	res, err := Pull(context.Background(), PullOptions{
+		OpenSpecDir: dir,
+		Provider:    prov,
+		IssueID:     "99",
+	})
+	if err != nil {
+		t.Fatalf("Pull: %v", err)
+	}
+
+	askPath := filepath.Join(dir, "changes", res.Slug, "original-ask.md")
+	ask, err := os.ReadFile(askPath)
+	if err != nil {
+		t.Fatalf("read original-ask.md: %v", err)
+	}
+	if !strings.Contains(string(ask), "The original request") {
+		t.Fatalf("original-ask.md missing content: %s", ask)
+	}
+}

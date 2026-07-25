@@ -28,6 +28,10 @@ specsync [-dry-run] [-change <change>] [-repo owner/name] [-reconcile=false] [-c
 - `-close-completed` (default false): keep tracker open/closed state aligned with completion. Completing every task closes the item; adding new unchecked work reopens it. Without the flag, completion updates `stage:complete` but leaves tracker state alone. An explicit `.status` overrides task-derived stage, so only `.status` value `complete` closes with this flag.
 - `-repo owner/name`: override auto-detected repo from `git remote`.
 
+**Task states.** Beyond `[ ]` (todo) and `[x]` (done), tasks.md supports `[~]` (dropped — superseded or removed) and `[>]` (moved — relocated to another change). Dropped and moved tasks are excluded from progress; only todo and done are "live". The issue body shows a "Plan changes" footer with the breakdown: `+3 added · 2 done · 1 dropped · 1 moved`.
+
+**Discoveries.** Capture findings during implementation without scope decisions. `specsync note -change <slug> "<text>"` appends a line to `discoveries.md`, rendered as `## Discoveries` in the issue. On pull, the section is stripped (like `## Tasks`). The original issue body is saved as `original-ask.md` on first pull (write-once, never overwritten) and rendered as `## Original ask`.
+
 **Lifecycle stages.** specsync labels each issue `stage:<stage>`. The stage is derived automatically: `active` while any task is unchecked, `complete` once every task is checked (before archiving), and `archived` once the change moves under `changes/archive/`. A `.status` file in the change folder overrides the derived stage. This means finishing the last task flips the issue out of `stage:active` on the next sync — no manual bookkeeping.
 
 ### Pull an issue into a local change
@@ -69,6 +73,15 @@ specsync link [-dry-run] [-openspec <dir>] <change1> <change2> [<change3>...]
 ```
 
 At least 2 changes required. Writes `links.md` into each change directory and syncs them so a "## Related" section appears in each GitHub issue.
+
+### Spin off emergent work
+
+```
+specsync spinoff -from <slug> -task <n> [-kind bug|followup|task] [-repo owner/name] [-change <slug>] [-dry-run]
+specsync spinoff -from <slug> -text "<discovery>" [-kind bug|followup|task] [-repo owner/name] [-change <slug>] [-dry-run]
+```
+
+Spawns a new linked change from a discovery, keeping the parent scoped. `-task <n>` extracts text from the nth task line in the parent's `tasks.md` and marks it as moved (`[>] moved: <child-slug>`). `-text` provides free-form discovery text. `-kind` sets an issue label on the child. `-repo` for cross-repo spawn. `-change` overrides the auto-derived slug. The child `proposal.md` is seeded with the discovery text and a provenance line linking to the parent.
 
 ### Inspect release impact
 

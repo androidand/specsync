@@ -235,8 +235,35 @@ func syncOne(ctx context.Context, prov WorkProvider, c Change, dryRun, reconcile
 // projects as closed, so finishing the last task can retire the issue.
 func WorkItemFor(c Change, closeCompleted bool) WorkItem {
 	body := c.Body
+	if strings.TrimSpace(c.OriginalAsk) != "" {
+		body = body + "\n\n## Original ask\n\n" + c.OriginalAsk
+	}
+	if strings.TrimSpace(c.Discoveries) != "" {
+		body = body + "\n\n## Discoveries\n\n" + c.Discoveries
+	}
 	if strings.TrimSpace(c.TasksMarkdown) != "" {
 		body = body + "\n\n## Tasks\n\n" + c.TasksMarkdown
+		// Plan changes footer
+		tc := countTaskStates(c.TasksMarkdown)
+		if tc.Total() > 0 {
+			parts := []string{}
+			if c.BaselineTasks != nil && tc.Total() > *c.BaselineTasks {
+				added := tc.Total() - *c.BaselineTasks
+				parts = append(parts, fmt.Sprintf("+%d added", added))
+			}
+			if tc.Done > 0 {
+				parts = append(parts, fmt.Sprintf("%d done", tc.Done))
+			}
+			if tc.Dropped > 0 {
+				parts = append(parts, fmt.Sprintf("%d dropped", tc.Dropped))
+			}
+			if tc.Moved > 0 {
+				parts = append(parts, fmt.Sprintf("%d moved", tc.Moved))
+			}
+			if len(parts) > 0 {
+				body = body + "\n\n## Plan changes\n\n" + strings.Join(parts, " · ")
+			}
+		}
 	}
 	if len(c.Links) > 0 {
 		var lines []string

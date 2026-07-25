@@ -91,6 +91,7 @@ specsync pull            # pull an issue into a local change
 specsync scan            # what already exists in an area?
 specsync trace           # print the raw spec<->commit<->issue link graph
 specsync link            # cross-link two or more changes
+specsync spinoff         # spawn emergent work as a linked sibling
 specsync release-plan    # shipped changes + advisory semver bump
 specsync changelog       # Keep a Changelog section from shipped changes
 specsync audit           # archived changes vs. merged PRs
@@ -98,7 +99,7 @@ specsync install-skill   # install the bundled agent skill
 specsync version         # print the binary version
 ```
 
-**Dry-run flags** — `sync`, `pull`, and `link` support `-dry-run`. Beads can be
+**Dry-run flags** — `sync`, `pull`, `link`, and `spinoff` support `-dry-run`. Beads can be
 previewed through `specsync -dry-run -provider beads`. `scan`, `trace`,
 `release-plan`, and `changelog` (unless `-apply`) are read-only and do not take
 a dry-run flag.
@@ -155,6 +156,20 @@ a `## Related` section appears in every linked issue:
 specsync link -dry-run slug-a slug-b   # preview links.md + Related sections
 specsync link slug-a slug-b            # write links and update both issues
 ```
+
+### `spinoff` — spawn emergent work as a linked sibling
+
+When a discovery doesn't belong in the current change, spin it off into its own
+scoped change instead of scope-creep:
+
+```bash
+specsync spinoff -from my-change -task 3 -kind bug       # from task 3
+specsync spinoff -from my-change -text "fix X" -dry-run  # free text
+```
+
+Extracts text from the parent's task (or uses `-text`), scaffolds a new change
+with a seeded `proposal.md`, marks the parent task as moved (`[>] moved: <child>`),
+and links the two.
 
 ### `trace` — the raw link graph
 
@@ -338,6 +353,20 @@ WorkItem                          ->  issue       (via a pluggable provider)
   reverting un-pushed local progress. Spec still wins task *wording* and order;
   only the checkbox flips. Disable with `-reconcile=false`. Dry runs never read
   or write, so reconcile applies only on real syncs.
+- **Task states** — beyond `[ ]` (todo) and `[x]` (done), tasks.md supports
+  `[~]` (dropped — superseded or removed) and `[>]` (moved — relocated to
+  another change). Dropped and moved tasks are excluded from progress
+  calculations; only todo and done are "live". A compact "Plan changes" footer
+  in the issue body shows the breakdown: `+3 added · 2 done · 1 dropped · 1
+  moved`.
+- **Discoveries** — a `## Discoveries` section captures findings during
+  implementation without requiring scope decisions. Use `specsync note -change
+  <slug> "<text>"` to append a discovery. The section is rendered into the
+  issue and stripped on pull, keeping local and tracker state in sync.
+- **Original ask** — when you `specsync pull` an issue, the original body is
+  saved as `original-ask.md` (write-once, never overwritten). It renders as
+  `## Original ask` in the issue body, providing a stable reference to what was
+  requested before scope evolved.
 - **Stage** — each issue gets a `stage:<stage>` label, derived automatically:
   `active` while any task is unchecked, `complete` once every task is checked
   (before archiving), and `archived` once the change moves under

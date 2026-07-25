@@ -1,7 +1,6 @@
 package specsync
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"os"
@@ -155,19 +154,19 @@ func (r AuditResult) HasUnmerged() bool {
 
 // TaskAuditFinding represents the result of auditing a single change's tasks.
 type TaskAuditFinding struct {
-	Slug          string  // change slug
-	Unchecked     int     // number of unchecked tasks
-	Total         int     // total number of tasks
-	HasCode       bool    // whether code files reference this change
-	CodeRefs      int     // number of code references found
-	Progress      string  // task progress string
-	Stage         string  // current stage
-	Note          string  // additional note (e.g., "spun off", "external repo")
+	Slug      string // change slug
+	Unchecked int    // number of unchecked tasks
+	Total     int    // total number of tasks
+	HasCode   bool   // whether code files reference this change
+	CodeRefs  int    // number of code references found
+	Progress  string // task progress string
+	Stage     string // current stage
+	Note      string // additional note (e.g., "spun off", "external repo")
 }
 
 // TaskAuditResult holds the findings from a task audit run.
 type TaskAuditResult struct {
-	Findings []TaskAuditFinding
+	Findings   []TaskAuditFinding
 	Mismatches []TaskAuditFinding // subset: unchecked tasks but code exists
 }
 
@@ -177,21 +176,21 @@ func AuditTasks(changes []Change) TaskAuditResult {
 	var result TaskAuditResult
 
 	for _, c := range changes {
-		unchecked, total := countTasks(c.TasksMarkdown)
-		if total == 0 {
+		tc := countTaskStates(c.TasksMarkdown)
+		if tc.LiveTotal() == 0 {
 			continue
 		}
 
 		finding := TaskAuditFinding{
 			Slug:      c.Slug,
-			Unchecked: unchecked,
-			Total:     total,
+			Unchecked: tc.Todo,
+			Total:     tc.LiveTotal(),
 			Progress:  string(c.Progress),
 			Stage:     string(c.Stage),
 		}
 
 		// Check for implementation evidence
-		if unchecked > 0 {
+		if tc.Todo > 0 {
 			if hasImplementationEvidence(c.Dir) {
 				finding.HasCode = true
 				finding.CodeRefs = 1
@@ -201,7 +200,7 @@ func AuditTasks(changes []Change) TaskAuditResult {
 		result.Findings = append(result.Findings, finding)
 
 		// Flag as mismatch: unchecked tasks but code exists
-		if unchecked > 0 && finding.HasCode {
+		if tc.Todo > 0 && finding.HasCode {
 			result.Mismatches = append(result.Mismatches, finding)
 		}
 	}
@@ -215,20 +214,6 @@ func (r TaskAuditResult) HasMismatches() bool {
 }
 
 // countTasks returns (unchecked, total) from tasks.md markdown.
-func countTasks(markdown string) (unchecked, total int) {
-	scan := bufio.NewScanner(strings.NewReader(markdown))
-	for scan.Scan() {
-		line := scan.Text()
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "- [ ]") {
-			unchecked++
-			total++
-		} else if strings.HasPrefix(trimmed, "- [x]") {
-			total++
-		}
-	}
-	return unchecked, total
-}
 
 // hasImplementationEvidence checks for strong evidence that code was written
 // for this change. Relies on .specsync/metadata.json with stage "complete"

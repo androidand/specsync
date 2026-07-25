@@ -13,8 +13,8 @@ type findStub struct {
 	err   error
 }
 
-func (f findStub) Name() string                                       { return "github" }
-func (f findStub) Push(context.Context, WorkItem, *Ref) (Ref, error)  { return Ref{}, nil }
+func (f findStub) Name() string                                      { return "github" }
+func (f findStub) Push(context.Context, WorkItem, *Ref) (Ref, error) { return Ref{}, nil }
 func (f findStub) Find(_ context.Context, slug string) (*Ref, error) {
 	if f.err != nil {
 		return nil, f.err
