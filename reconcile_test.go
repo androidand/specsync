@@ -346,3 +346,74 @@ func TestBaseStatePreservedAcrossSyncs(t *testing.T) {
 		t.Error("base state should persist across syncs")
 	}
 }
+
+func TestStableTaskIDWordingChange(t *testing.T) {
+	// Base has "task one". Local rewrote it to "task one revised".
+	// Issue checked "task one". 3-way merge should match by base text.
+	base := "- [ ] task one\n- [ ] task two\n"
+	local := "- [ ] task one revised\n- [ ] task two\n"
+	issue := map[string]bool{
+		"task one": true, // checked on the issue (original text)
+		"task two": false,
+	}
+
+	merged, flips, used3way, err := reconcileThreeWay(context.Background(), &Change{
+		TasksMarkdown: local,
+	}, issue, &Ref{Base: base})
+	if err != nil {
+		t.Fatalf("reconcileThreeWay: %v", err)
+	}
+	if !used3way {
+		t.Fatal("expected 3-way merge to be used")
+	}
+	if !strings.Contains(merged, "- [x] task one revised") {
+		t.Errorf("rewritten task should be checked (matched by base text):\n%s", merged)
+	}
+	if len(flips) != 1 || flips[0].Text != "task one revised" {
+		t.Errorf("expected one flip for rewritten task, got %+v", flips)
+	}
+}
+
+func TestStableTaskIDWordingChangeUncheck(t *testing.T) {
+	// Base has "task one" (checked). Local rewrote to "task one revised" (checked).
+	// Issue unchecked "task one". 3-way merge should propagate uncheck.
+	base := "- [x] task one\n- [ ] task two\n"
+	local := "- [x] task one revised\n- [ ] task two\n"
+	issue := map[string]bool{
+		"task one": false, // unchecked on the issue
+		"task two": false,
+	}
+
+	merged, flips, used3way, err := reconcileThreeWay(context.Background(), &Change{
+		TasksMarkdown: local,
+	}, issue, &Ref{Base: base})
+	if err != nil {
+		t.Fatalf("reconcileThreeWay: %v", err)
+	}
+	if !used3way {
+		t.Fatal("expected 3-way merge to be used")
+	}
+	if !strings.Contains(merged, "- [ ] task one revised") {
+		t.Errorf("rewritten task should be unchecked (matched by base text):\n%s", merged)
+	}
+	if len(flips) != 1 || flips[0].Text != "task one revised" || flips[0].Checked {
+		t.Errorf("expected one uncheck flip for rewritten task, got %+v", flips)
+	}
+}
+
+func TestBuildBaseToCurrentMapping(t *testing.T) {
+	base := "- [ ] task one\n- [ ] task two\n- [ ] task three\n"
+	current := "- [ ] task one revised\n- [ ] task two\n- [ ] task three\n"
+
+	mapping := buildBaseToCurrentMapping(base, current)
+
+	if baseText, ok := mapping["task one revised"]; !ok || baseText != "task one" {
+		t.Errorf("expected task one revised -> task one, got %q", mapping["task one revised"])
+	}
+	if _, ok := mapping["task two"]; ok {
+		t.Error("task two unchanged, should not be in mapping")
+	}
+	if _, ok := mapping["task three"]; ok {
+		t.Error("task three unchanged, should not be in mapping")
+	}
+}

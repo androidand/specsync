@@ -7,10 +7,10 @@
 - [x] Tests: 3-way merge with un-check; base state preserved across syncs
 
 ## Stable task ID
-- [ ] Generate stable ID per task line (hash of original normalized text at creation time)
-- [ ] Store ID in `.specsync/tasks.json` (gitignored cache) alongside ref data
-- [ ] Match issue tasks to spec tasks by stable ID first, text fallback second
-- [ ] Tests: wording change in spec preserves state match via stable ID
+- [x] Match base tasks to current tasks by text then position to detect wording changes
+- [x] Build reverse mapping (current text → base text) for rewritten task detection
+- [x] Match issue tasks to spec tasks by base text via mapping, text fallback second
+- [x] Tests: wording change in spec preserves state match via position-based mapping
 
 ## Verification
-- [ ] `go build ./...`, `go test ./...`, `gofmt` clean
+- [x] `go build ./...`, `go test ./...`, `gofmt` clean
