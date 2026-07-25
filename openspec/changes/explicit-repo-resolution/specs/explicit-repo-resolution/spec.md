@@ -39,6 +39,25 @@ When the resolved target would be a fork's upstream parent rather than `origin`,
 - **WHEN** the user holds write access to the fork parent
 - **THEN** the resolution is unchanged and no issue or label is created on the parent, because permission is not intent
 
+### Requirement: The board is never inferred, and never global
+specsync SHALL NOT apply a board target that was not declared for the repository being synced. A board SHALL be resolved from an explicit flag or from **repository-local** configuration only. A machine-wide or shell-wide default (an exported environment variable applying to every invocation regardless of directory) SHALL NOT select a board.
+
+#### Scenario: Repository declares no board
+- **WHEN** a sync runs in a repository with no declared board and no explicit flag
+- **THEN** the issue is created or updated and **no board is touched**, rather than falling back to any default
+
+#### Scenario: A global default is present
+- **WHEN** a machine-wide default board is set in the environment and the current repository declares a different board, or declares none
+- **THEN** the repository-local declaration wins, or no board is used; the global value never selects the board on its own
+
+#### Scenario: Personal and work boards on one machine
+- **WHEN** the user works across a personally-owned repository and an employer-owned repository in the same shell session
+- **THEN** each repository syncs only to its own declared board, and neither can reach the other's, because no ambient setting spans them
+
+#### Scenario: Board and repo owner disagree
+- **WHEN** the declared board's owner differs from the resolved repository's owner
+- **THEN** specsync reports the mismatch and refuses unless the board was named explicitly on the command line
+
 ### Requirement: The resolved target is reported
 specsync SHALL state the concrete resolved repository and which rule produced it, in both dry-run and normal output, before any write occurs.
 
