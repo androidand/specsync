@@ -24,3 +24,5 @@ jobs:
         run: go run ./cmd/specsync changelog -resolve-refs -fail-on-unlinked-commits
       - name: Enforce task-dogfooding hygiene
         run: go run ./cmd/specsync audit-tasks -fail-on-mismatch
+      - name: Validate OpenSpec change structure
+        run: go run ./cmd/specsync validate

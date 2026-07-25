@@ -27,7 +27,7 @@ var knownSubcommands = map[string]bool{
 	"pull": true, "link": true, "scan": true, "trace": true,
 	"release-plan": true, "changelog": true, "install-skill": true,
 	"changes": true, "set-stage": true, "set-priority": true,
-	"sync": true, "audit": true, "audit-tasks": true,
+	"sync": true, "audit": true, "audit-tasks": true, "validate": true,
 }
 
 // knownConfusions maps a word someone might reach for by habit (e.g. git's
@@ -120,6 +120,8 @@ func main() {
 		runAudit(rest)
 	case "audit-tasks":
 		runAuditTasks(rest)
+	case "validate":
+		runValidate(rest)
 	default:
 		runSync(rest)
 	}
@@ -980,6 +982,49 @@ func runAuditTasks(args []string) {
 
 	if *failOnMismatch && result.HasMismatches() {
 		fmt.Fprintln(os.Stderr, "specsync: unchecked tasks with code references detected")
+		os.Exit(1)
+	}
+}
+
+// runValidate checks all change folders for structural issues: required files,
+// valid metadata, well-formed stages. Reports all issues in one pass.
+func runValidate(args []string) {
+	fs := flag.NewFlagSet("validate", flag.ExitOnError)
+	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	asJSON := fs.Bool("json", false, "output as JSON")
+	if err := fs.Parse(args); err != nil {
+		fail(err)
+	}
+
+	abs, err := filepath.Abs(*openspec)
+	if err != nil {
+		fail(err)
+	}
+
+	result := specsync.ValidateChanges(abs)
+
+	if *asJSON {
+		data, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			fail(fmt.Errorf("marshal JSON: %w", err))
+		}
+		fmt.Println(string(data))
+	} else {
+		if len(result.Issues) == 0 {
+			fmt.Println("specsync validate: all changes are structurally valid")
+			return
+		}
+		fmt.Printf("specsync validate: %d issue(s) found\n\n", len(result.Issues))
+		for _, issue := range result.Issues {
+			prefix := issue.Field
+			if issue.Slug != "" {
+				prefix = fmt.Sprintf("%s/%s", issue.Slug, issue.Field)
+			}
+			fmt.Printf("  ❌ %s: %s\n", prefix, issue.Error)
+		}
+	}
+
+	if len(result.Issues) > 0 {
 		os.Exit(1)
 	}
 }
