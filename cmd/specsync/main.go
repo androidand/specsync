@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -604,9 +605,14 @@ func runChanges(args []string) {
 	fs := flag.NewFlagSet("changes", flag.ExitOnError)
 	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
 	stages := fs.String("stage", "", "filter by stages (comma-separated, e.g. backlog,blocked)")
+	sortBy := fs.String("sort", "stage", "sort order: stage (canonical), priority, or slug")
 	asJSON := fs.Bool("json", false, "output as JSON")
 	if err := fs.Parse(args); err != nil {
 		fail(err)
+	}
+
+	if *sortBy != "stage" && *sortBy != "priority" && *sortBy != "slug" {
+		fail(fmt.Errorf("invalid sort value %q: must be stage, priority, or slug", *sortBy))
 	}
 
 	changes, err := specsync.LoadChanges(*openspec)
@@ -630,22 +636,29 @@ func runChanges(args []string) {
 		filtered = changes
 	}
 
+	// Sort
+	sortChanges(filtered, *sortBy)
+
 	// Output
 	if *asJSON {
-		// Marshal as proper JSON
 		type changeJSON struct {
-			Slug           string `json:"slug"`
-			Title          string `json:"title"`
-			Stage          string `json:"stage"`
-			CanonicalStage bool   `json:"canonicalStage"`
-			StageSource    string `json:"stageSource"`
-			Progress       string `json:"taskProgress"`
-			Priority       *int   `json:"priority"`
-			Archived       bool   `json:"archived"`
+			Slug           string   `json:"slug"`
+			Title          string   `json:"title"`
+			Stage          string   `json:"stage"`
+			CanonicalStage bool     `json:"canonicalStage"`
+			StageSource    string   `json:"stageSource"`
+			Progress       string   `json:"taskProgress"`
+			Priority       *int     `json:"priority"`
+			Archived       bool     `json:"archived"`
+			CompletedTasks int      `json:"completedTasks"`
+			TotalTasks     int      `json:"totalTasks"`
+			Diagnostics    []string `json:"diagnostics"`
 		}
 
 		var results []changeJSON
 		for _, c := range filtered {
+			total, completed := specsync.CountCheckboxes(c.TasksMarkdown)
+			diagnostics := collectDiagnostics(c)
 			results = append(results, changeJSON{
 				Slug:           c.Slug,
 				Title:          c.Title,
@@ -655,6 +668,9 @@ func runChanges(args []string) {
 				Progress:       string(c.Progress),
 				Priority:       c.Priority,
 				Archived:       c.Archived,
+				CompletedTasks: completed,
+				TotalTasks:     total,
+				Diagnostics:    diagnostics,
 			})
 		}
 
@@ -664,17 +680,101 @@ func runChanges(args []string) {
 		}
 		fmt.Println(string(data))
 	} else {
-		// Table output
-		fmt.Println("SLUG                          STAGE          PROGRESS        PRIORITY")
-		fmt.Println("────────────────────────────  ─────────────  ──────────────  ────────")
-		for _, c := range filtered {
-			priority := "-"
-			if c.Priority != nil {
-				priority = fmt.Sprintf("%d", *c.Priority)
-			}
-			fmt.Printf("%-30s %-14s %-15s %s\n", c.Slug, c.Stage, c.Progress, priority)
-		}
+		// Table output with stage grouping
+		printChangeTable(filtered)
 	}
+}
+
+func sortChanges(changes []specsync.Change, sortBy string) {
+	stageOrder := make(map[string]int)
+	for i, s := range specsync.CanonicalStageOrder() {
+		stageOrder[string(s)] = i
+	}
+
+	switch sortBy {
+	case "stage":
+		sort.SliceStable(changes, func(i, j int) bool {
+			si, oki := stageOrder[string(changes[i].Stage)]
+			sj, okj := stageOrder[string(changes[j].Stage)]
+			if !oki {
+				si = len(stageOrder)
+			}
+			if !okj {
+				sj = len(stageOrder)
+			}
+			if si != sj {
+				return si < sj
+			}
+			return changes[i].Slug < changes[j].Slug
+		})
+	case "priority":
+		sort.SliceStable(changes, func(i, j int) bool {
+			pi := priorityVal(changes[i].Priority)
+			pj := priorityVal(changes[j].Priority)
+			if pi != pj {
+				return pi > pj // higher priority first
+			}
+			return changes[i].Slug < changes[j].Slug
+		})
+	case "slug":
+		sort.SliceStable(changes, func(i, j int) bool {
+			return changes[i].Slug < changes[j].Slug
+		})
+	}
+}
+
+func priorityVal(p *int) int {
+	if p == nil {
+		return -1
+	}
+	return *p
+}
+
+func truncate(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen-1] + "…"
+}
+
+func printChangeTable(changes []specsync.Change) {
+	fmt.Println("STAGE          PRIORITY  TASKS       SLUG                          PROGRESS        TITLE")
+	fmt.Println("─────────────  ────────  ─────────  ────────────────────────────  ──────────────  ────────────────────────────────────────────────────────────")
+
+	prevStage := ""
+	for _, c := range changes {
+		if string(c.Stage) != prevStage {
+			if prevStage != "" {
+				fmt.Println()
+			}
+			prevStage = string(c.Stage)
+		}
+
+		priority := "-"
+		if c.Priority != nil {
+			priority = fmt.Sprintf("%d", *c.Priority)
+		}
+
+		total, completed := specsync.CountCheckboxes(c.TasksMarkdown)
+		tasks := "-"
+		if total > 0 {
+			tasks = fmt.Sprintf("%d/%d", completed, total)
+		}
+
+		title := truncate(c.Title, 60)
+		fmt.Printf("%-13s %-9s %-11s %-30s %-15s %s\n", c.Stage, priority, tasks, c.Slug, c.Progress, title)
+	}
+}
+
+func collectDiagnostics(c specsync.Change) []string {
+	var diagnostics []string
+	if !specsync.IsCanonicalStage(c.Stage) && c.StageSource != specsync.StageSourceMetadata {
+		diagnostics = append(diagnostics, fmt.Sprintf("non-canonical stage %q with source %q", c.Stage, c.StageSource))
+	}
+	if c.Priority != nil && (*c.Priority < 1 || *c.Priority > 100) {
+		diagnostics = append(diagnostics, fmt.Sprintf("priority out of range: %d", *c.Priority))
+	}
+	return diagnostics
 }
 
 // mutableChange validates the slug, loads the change, and rejects archived
@@ -933,8 +1033,8 @@ func runAuditTasks(args []string) {
 			Stage     string `json:"stage"`
 		}
 		type resultJSON struct {
-			Findings    []findingJSON `json:"findings"`
-			Mismatches  []findingJSON `json:"mismatches"`
+			Findings   []findingJSON `json:"findings"`
+			Mismatches []findingJSON `json:"mismatches"`
 		}
 		var out resultJSON
 		for _, f := range result.Findings {
