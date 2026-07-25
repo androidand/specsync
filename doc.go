@@ -14,6 +14,11 @@
 //	Change                  ->  WorkItem (sync.go)
 //	WorkItem                ->  provider projection (provider.go, github.go)
 //
+// Traceability: the trace model (trace.go) resolves a graph of changes, commits,
+// issues, and PRs over a scope (single change, revision range, or area).
+// CommitSource (provider.go) and OpenSpecSource (openspec.go) are optional
+// adapters type-asserted from the providers to feed the graph.
+//
 // Stage model: OpenSpec has no native lifecycle beyond active/archived, which
 // this package derives from the folder location. A richer stage may be supplied
 // by writing its name into <change>/.status; orchestrators that track a funnel
