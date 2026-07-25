@@ -67,18 +67,8 @@
 
 ## 3. Blockers needing the owner
 
-- [ ] 3.1 Confirm the GitHub repo `androidand/specsync` is public and set a
-      repo description and topics (e.g. `openspec`, `github-issues`, `cli`,
-      `go`) via the GitHub UI or `gh repo edit` (requires authenticated `gh`;
-      not available in the audit environment).
-- [ ] 3.2 Decide on the unscoped npm name: `specsync` is currently unclaimed
-      on the registry (404). Either publish the wrapper there too / as an
-      alias, or standardize all promotion copy on `@androidand/specsync`.
-      Requires npm publish rights.
-- [ ] 3.3 Accept (or not) the commit-author email situation: history contains
-      the owner's work and personal emails as ordinary git author metadata.
-      Recommendation: accept as-is — no history rewrite; optionally set a
-      noreply email in this repo's git config going forward.
-- [ ] 3.4 Optional promotion follow-ups: tag/announce a v0.4.1 with the new
-      `version` flag, and verify the Cloudflare Pages site deploy still works
-      after the README/site changes.
+- [x] 3.1 Confirm the GitHub repo `androidand/specsync` is public and set a
+      repo description and topics — *spun off to `launch-promotion`*
+- [x] 3.2 Decide on the unscoped npm name — *spun off to `launch-promotion`*
+- [x] 3.3 Accept (or not) the commit-author email situation — *spun off to `launch-promotion`*
+- [x] 3.4 Optional promotion follow-ups — *spun off to `launch-promotion`*

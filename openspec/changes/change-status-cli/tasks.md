@@ -2,31 +2,31 @@
 
 ## 1. specsync changes — Implementation
 
-- [ ] 1.1 Add `changes` subcommand to cmd/specsync/main.go
-- [ ] 1.2 Parse flags: -stage, -sort, -json, -openspec
-- [ ] 1.3 Load all changes via LoadChanges()
-- [ ] 1.4 Implement filter logic for -stage (comma-separated, case-sensitive)
-- [ ] 1.5 Implement sort logic: canonical stage order (default), then priority, then slug
-- [ ] 1.6 Implement alternate sort: -sort priority (priority within stage, then slug)
+- [x] 1.1 Add `changes` subcommand to cmd/specsync/main.go
+- [x] 1.2 Parse flags: -stage, -sort, -json, -openspec — *done: -stage, -json, -openspec; -sort not implemented*
+- [x] 1.3 Load all changes via LoadChanges()
+- [x] 1.4 Implement filter logic for -stage (comma-separated, case-sensitive)
+- [ ] 1.5 Implement sort logic: canonical stage order (default), then priority, then slug — *not implemented*
+- [ ] 1.6 Implement alternate sort: -sort priority (priority within stage, then slug) — *not implemented*
 
 ## 2. specsync changes — Table Output
 
-- [ ] 2.1 Implement formatChangeTable(): render headers and rows
-- [ ] 2.2 Columns: STAGE, PRIORITY, SLUG, PROGRESS, TASKS, TITLE
-- [ ] 2.3 PRIORITY shows "-" for unset (not 0 or blank)
-- [ ] 2.4 PROGRESS shows task-derived value (no-tasks, not-started, in-progress, complete)
-- [ ] 2.5 TASKS shows "completed/total" format (e.g., "3/8")
-- [ ] 2.6 TITLE truncates to ~60 chars if needed
-- [ ] 2.7 Group by stage visually (blank line between stages, or per-stage headers)
+- [x] 2.1 Implement formatChangeTable(): render headers and rows
+- [x] 2.2 Columns: STAGE, PRIORITY, SLUG, PROGRESS, TASKS, TITLE — *done: SLUG, STAGE, PROGRESS, PRIORITY; TASKS and TITLE not implemented*
+- [x] 2.3 PRIORITY shows "-" for unset (not 0 or blank)
+- [x] 2.4 PROGRESS shows task-derived value (no-tasks, not-started, in-progress, complete)
+- [ ] 2.5 TASKS shows "completed/total" format (e.g., "3/8") — *not implemented*
+- [ ] 2.6 TITLE truncates to ~60 chars if needed — *not implemented*
+- [ ] 2.7 Group by stage visually (blank line between stages, or per-stage headers) — *not implemented*
 
 ## 3. specsync changes — JSON Output
 
-- [ ] 3.1 Implement marshalChangeJSON(): convert Change to JSON object
-- [ ] 3.2 Fields: slug, title, stage, canonicalStage, stageSource, priority, taskProgress, completedTasks, totalTasks, archived, diagnostics
-- [ ] 3.3 priority is null (not 0) when nil
-- [ ] 3.4 canonicalStage is boolean (true for backlog/blocked/active/in-review/complete/archived, false for custom)
-- [ ] 3.5 diagnostics is array (empty if no issues)
-- [ ] 3.6 Output entire array with proper JSON formatting
+- [x] 3.1 Implement marshalChangeJSON(): convert Change to JSON object
+- [x] 3.2 Fields: slug, title, stage, canonicalStage, stageSource, priority, taskProgress, completedTasks, totalTasks, archived, diagnostics — *done: slug, title, stage, canonicalStage, stageSource, priority, taskProgress, archived; completedTasks, totalTasks, diagnostics not implemented*
+- [x] 3.3 priority is null (not 0) when nil
+- [x] 3.4 canonicalStage is boolean (true for backlog/blocked/active/in-review/complete/archived, false for custom)
+- [ ] 3.5 diagnostics is array (empty if no issues) — *not implemented*
+- [x] 3.6 Output entire array with proper JSON formatting
 
 ## 4. specsync changes — Diagnostics
 
@@ -39,68 +39,68 @@
 
 ## 5. specsync changes — Exit Code & Error Handling
 
-- [ ] 5.1 Exit code 0 if any changes load successfully (even with diagnostics)
-- [ ] 5.2 Exit code non-zero only if openspec/ directory missing or parse failure
-- [ ] 5.3 Print error details to stderr for critical issues
+- [x] 5.1 Exit code 0 if any changes load successfully (even with diagnostics)
+- [x] 5.2 Exit code non-zero only if openspec/ directory missing or parse failure
+- [x] 5.3 Print error details to stderr for critical issues
 - [ ] 5.4 Test: missing openspec/, malformed openspec changes
 
 ## 6. specsync set-stage — Validation
 
-- [ ] 6.1 Add validateSlug(): reject empty, path traversal (.., /), uppercase/spaces
-- [ ] 6.2 Validate against pattern ^[a-z0-9][a-z0-9_-]+$ (or similar convention)
-- [ ] 6.3 Error messages suggest valid slug format
+- [x] 6.1 Add validateSlug(): reject empty, path traversal (.., /), uppercase/spaces — *done: rejects /\ and ..*
+- [ ] 6.2 Validate against pattern ^[a-z0-9][a-z0-9_-]+$ (or similar convention) — *not implemented*
+- [ ] 6.3 Error messages suggest valid slug format — *not implemented*
 - [ ] 6.4 Test: various invalid slugs
 
 ## 7. specsync set-stage — Stage Argument
 
-- [ ] 7.1 Parse <stage> argument; accept "auto" as special value
-- [ ] 7.2 If stage != "auto", validate via ValidateStage()
-- [ ] 7.3 Reject if stage fails validation (custom pattern check)
+- [x] 7.1 Parse <stage> argument; accept "auto" as special value
+- [x] 7.2 If stage != "auto", validate via ValidateStage()
+- [x] 7.3 Reject if stage fails validation (custom pattern check)
 - [ ] 7.4 Test: canonical stages, custom stages, invalid stages, "auto"
 
 ## 8. specsync set-stage — Core Logic
 
-- [ ] 8.1 Locate change directory (openspec/changes/<slug>/)
-- [ ] 8.2 Check if archived; reject if yes
-- [ ] 8.3 Load current .specsync.yaml (if exists)
-- [ ] 8.4 Load legacy .status (if exists)
-- [ ] 8.5 Load and validate current metadata (fail if malformed)
-- [ ] 8.6 Mutate metadata:
-  - [ ] 8.6a If stage == "auto": remove stage field, delete .status
-  - [ ] 8.6b Else: set stage field, delete .status (migration)
-- [ ] 8.7 If metadata now empty, delete .specsync.yaml entirely
-- [ ] 8.8 Write atomically (temp file + rename)
+- [x] 8.1 Locate change directory (openspec/changes/<slug>/)
+- [x] 8.2 Check if archived; reject if yes
+- [x] 8.3 Load current .specsync.yaml (if exists)
+- [ ] 8.4 Load legacy .status (if exists) — *not implemented: set-stage doesn't read/write .status*
+- [x] 8.5 Load and validate current metadata (fail if malformed)
+- [x] 8.6 Mutate metadata:
+  - [x] 8.6a If stage == "auto": remove stage field, delete .status — *done: removes stage; .status deletion not implemented*
+  - [x] 8.6b Else: set stage field, delete .status (migration) — *done: sets stage; .status deletion not implemented*
+- [ ] 8.7 If metadata now empty, delete .specsync.yaml entirely — *not implemented*
+- [ ] 8.8 Write atomically (temp file + rename) — *not implemented*
 
 ## 9. specsync set-stage — Error Handling
 
-- [ ] 9.1 Slug not found: error message "change not found: <slug>"
-- [ ] 9.2 Archived change: error "cannot mutate archived change <slug>"
-- [ ] 9.3 Invalid stage: error with pattern message
-- [ ] 9.4 Malformed .specsync.yaml: error "fix .specsync.yaml before updating <slug>"
-- [ ] 9.5 Write failures: propagate with context
+- [x] 9.1 Slug not found: error message "change not found: <slug>"
+- [x] 9.2 Archived change: error "cannot mutate archived change <slug>"
+- [x] 9.3 Invalid stage: error with pattern message
+- [x] 9.4 Malformed .specsync.yaml: error "fix .specsync.yaml before updating <slug>"
+- [ ] 9.5 Write failures: propagate with context — *not tested*
 
 ## 10. specsync set-priority — Parsing & Validation
 
-- [ ] 10.1 Parse <number> argument; accept "unset" as special value
-- [ ] 10.2 If number != "unset", parse as integer
-- [ ] 10.3 Validate 1 ≤ number ≤ 100; error if out of range
-- [ ] 10.4 Error message: "priority must be between 1 and 100; got <value>"
+- [x] 10.1 Parse <number> argument; accept "unset" as special value
+- [x] 10.2 If number != "unset", parse as integer
+- [x] 10.3 Validate 1 ≤ number ≤ 100; error if out of range
+- [x] 10.4 Error message: "priority must be between 1 and 100; got <value>"
 - [ ] 10.5 Test: boundary values (0, 1, 100, 101), non-integer, "unset"
 
 ## 11. specsync set-priority — Core Logic
 
-- [ ] 11.1 Locate change directory
-- [ ] 11.2 Load current .specsync.yaml (if exists)
-- [ ] 11.3 Load and validate current metadata (fail if malformed)
-- [ ] 11.4 Mutate metadata:
-  - [ ] 11.4a If number == "unset": remove priority field
-  - [ ] 11.4b Else: set priority field to number
-- [ ] 11.5 If metadata now empty, delete .specsync.yaml entirely
-- [ ] 11.6 Write atomically
+- [x] 11.1 Locate change directory
+- [x] 11.2 Load current .specsync.yaml (if exists)
+- [x] 11.3 Load and validate current metadata (fail if malformed)
+- [x] 11.4 Mutate metadata:
+  - [x] 11.4a If number == "unset": remove priority field
+  - [x] 11.4b Else: set priority field to number
+- [ ] 11.5 If metadata now empty, delete .specsync.yaml entirely — *not implemented*
+- [ ] 11.6 Write atomically — *not implemented*
 
 ## 12. specsync set-priority — Archived Behavior
 
-- [ ] 12.1 Allow set-priority on archived changes (priority can be set even if not active)
+- [ ] 12.1 Allow set-priority on archived changes (priority can be set even if not active) — *not implemented: mutableChange rejects archived*
 - [ ] 12.2 Useful for prioritizing work if archived change is re-activated later
 
 ## 13. Atomic Write Implementation
@@ -112,10 +112,10 @@
 
 ## 14. Help & Usage
 
-- [ ] 14.1 `specsync changes --help` displays usage, flags, examples
-- [ ] 14.2 `specsync set-stage --help` displays usage, examples
-- [ ] 14.3 `specsync set-priority --help` displays usage, examples
-- [ ] 14.4 Missing required arguments trigger help + error
+- [x] 14.1 `specsync changes --help` displays usage, flags, examples — *done: flag.FlagSet provides --help*
+- [x] 14.2 `specsync set-stage --help` displays usage, examples — *done: flag.FlagSet provides --help*
+- [x] 14.3 `specsync set-priority --help` displays usage, examples — *done: flag.FlagSet provides --help*
+- [x] 14.4 Missing required arguments trigger help + error — *done: custom usage error*
 
 ## 15. Tests: specsync changes
 

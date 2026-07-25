@@ -27,7 +27,7 @@ var knownSubcommands = map[string]bool{
 	"pull": true, "link": true, "scan": true, "trace": true,
 	"release-plan": true, "changelog": true, "install-skill": true,
 	"changes": true, "set-stage": true, "set-priority": true,
-	"sync": true, "audit": true,
+	"sync": true, "audit": true, "audit-tasks": true,
 }
 
 // knownConfusions maps a word someone might reach for by habit (e.g. git's
@@ -88,7 +88,7 @@ func deprecatedSlugFlag(args []string) error {
 func main() {
 	cmd, rest, err := resolveSubcommand(os.Args[1:])
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "specsync: %v\n\nRun with no subcommand (optionally with flags) to sync, or use one of: pull, link, scan, trace, release-plan, changelog, install-skill, changes, set-stage, set-priority, audit\n", err)
+		fmt.Fprintf(os.Stderr, "specsync: %v\n\nRun with no subcommand (optionally with flags) to sync, or use one of: pull, link, scan, trace, release-plan, changelog, install-skill, changes, set-stage, set-priority, audit, audit-tasks\n", err)
 		os.Exit(2)
 	}
 	switch cmd {
@@ -118,6 +118,8 @@ func main() {
 		runSync(rest)
 	case "audit":
 		runAudit(rest)
+	case "audit-tasks":
+		runAuditTasks(rest)
 	default:
 		runSync(rest)
 	}
@@ -893,4 +895,91 @@ func countStatus(findings []specsync.AuditFinding, status string) int {
 func fail(err error) {
 	fmt.Fprintln(os.Stderr, "specsync:", err)
 	os.Exit(1)
+}
+
+// runAuditTasks scans all changes for unchecked tasks and flags mismatches
+// where code exists but tasks remain unchecked — the dogfooding failure mode.
+func runAuditTasks(args []string) {
+	fs := flag.NewFlagSet("audit-tasks", flag.ExitOnError)
+	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	asJSON := fs.Bool("json", false, "output as JSON")
+	failOnMismatch := fs.Bool("fail-on-mismatch", false, "exit non-zero when mismatches exist")
+	if err := fs.Parse(args); err != nil {
+		fail(err)
+	}
+
+	abs, err := filepath.Abs(*openspec)
+	if err != nil {
+		fail(err)
+	}
+
+	changes, err := specsync.LoadChanges(abs)
+	if err != nil {
+		fail(err)
+	}
+
+	result := specsync.AuditTasks(changes)
+
+	if *asJSON {
+		type findingJSON struct {
+			Slug      string `json:"slug"`
+			Unchecked int    `json:"unchecked"`
+			Total     int    `json:"total"`
+			HasCode   bool   `json:"hasCode"`
+			CodeRefs  int    `json:"codeRefs"`
+			Progress  string `json:"progress"`
+			Stage     string `json:"stage"`
+		}
+		type resultJSON struct {
+			Findings    []findingJSON `json:"findings"`
+			Mismatches  []findingJSON `json:"mismatches"`
+		}
+		var out resultJSON
+		for _, f := range result.Findings {
+			out.Findings = append(out.Findings, findingJSON{
+				Slug: f.Slug, Unchecked: f.Unchecked, Total: f.Total,
+				HasCode: f.HasCode, CodeRefs: f.CodeRefs,
+				Progress: f.Progress, Stage: f.Stage,
+			})
+		}
+		for _, f := range result.Mismatches {
+			out.Mismatches = append(out.Mismatches, findingJSON{
+				Slug: f.Slug, Unchecked: f.Unchecked, Total: f.Total,
+				HasCode: f.HasCode, CodeRefs: f.CodeRefs,
+				Progress: f.Progress, Stage: f.Stage,
+			})
+		}
+		data, err := json.MarshalIndent(out, "", "  ")
+		if err != nil {
+			fail(fmt.Errorf("marshal JSON: %w", err))
+		}
+		fmt.Println(string(data))
+	} else {
+		if len(result.Findings) == 0 {
+			fmt.Println("No changes with tasks.md found.")
+			return
+		}
+		fmt.Println("SLUG                          UNCHECKED/TOTAL  CODE  PROGRESS        STAGE")
+		fmt.Println("────────────────────────────  ───────────────  ────  ──────────────  ─────────────")
+		for _, f := range result.Findings {
+			code := "-"
+			if f.HasCode {
+				code = fmt.Sprintf("%d", f.CodeRefs)
+			}
+			fmt.Printf("%-30s %-18s %-5s %-15s %s\n", f.Slug, fmt.Sprintf("%d/%d", f.Unchecked, f.Total), code, f.Progress, f.Stage)
+		}
+		if len(result.Mismatches) > 0 {
+			fmt.Printf("\n⚠ MISMATCH: %d change(s) have unchecked tasks but code references:\n", len(result.Mismatches))
+			for _, f := range result.Mismatches {
+				fmt.Printf("  %s: %d/%d unchecked, %d code refs\n", f.Slug, f.Unchecked, f.Total, f.CodeRefs)
+			}
+		}
+		fmt.Printf("\nspecsync audit-tasks: %d changes with tasks, %d mismatches\n",
+			len(result.Findings), len(result.Mismatches))
+	}
+
+	if *failOnMismatch && result.HasMismatches() {
+		fmt.Fprintln(os.Stderr, "specsync: unchecked tasks with code references detected")
+		os.Exit(1)
+	}
 }
