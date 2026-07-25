@@ -233,6 +233,8 @@ func runPull(args []string) {
 	project := fs.String("project", "", "target GitHub Projects board as owner/number (default: $SPECSYNC_PROJECT; unset = no board)")
 	assignee := fs.String("assignee", "", "board assignee login (default: the acting viewer, \"me\")")
 	statusMap := fs.String("status-map", "", "stage→Status overrides as stage=Name pairs, e.g. \"active=In Progress,archived=Done\" (default: $SPECSYNC_STATUS_MAP)")
+	worktree := fs.Bool("worktree", false, "create or reuse a worktree and run pull inside it")
+	worktreeDir := fs.String("worktree-dir", "", "worktree base directory (default: $SPECSYNC_WORKTREE_DIR or ../worktrees)")
 	if err := deprecatedSlugFlag(args); err != nil {
 		fail(err)
 	}
@@ -248,6 +250,11 @@ func runPull(args []string) {
 	target, err := boardTarget(*project, *assignee, *statusMap)
 	if err != nil {
 		fail(err)
+	}
+
+	if *worktree {
+		runPullWithWorktree(*issue, *change, *repo, *dryRun, target, *worktreeDir)
+		return
 	}
 
 	res, err := specsync.Pull(context.Background(), specsync.PullOptions{
@@ -293,6 +300,134 @@ func runPull(args []string) {
 	if res.BoardConfigured {
 		printBoardPlan(res.Board, false)
 	}
+}
+
+// runPullWithWorktree creates or reuses a git worktree, checks out a feature
+// branch, and runs the pull operation inside it.
+func runPullWithWorktree(issue, change, repo string, dryRun bool, project specsync.BoardTarget, worktreeDir string) {
+	ctx := context.Background()
+
+	if worktreeDir == "" {
+		worktreeDir = os.Getenv("SPECSYNC_WORKTREE_DIR")
+	}
+	if worktreeDir == "" {
+		worktreeDir = "../worktrees"
+	}
+
+	repoName, err := getRepoName(ctx, repo)
+	if err != nil {
+		fail(fmt.Errorf("worktree: %w", err))
+	}
+
+	worktreeName := repoName + "-" + issue
+	branchName := "feat/" + issue + "-" + change
+	if change == "" {
+		branchName = "feat/" + issue
+	}
+	worktreePath := filepath.Join(worktreeDir, worktreeName)
+
+	if dryRun {
+		fmt.Printf("DRY RUN — worktree setup:\n")
+		fmt.Printf("  worktree dir: %s\n", worktreePath)
+		fmt.Printf("  branch: %s\n", branchName)
+		fmt.Printf("  would run: specsync pull -issue %s -change %s\n", issue, change)
+		return
+	}
+
+	if err := ensureWorktree(ctx, worktreePath, branchName); err != nil {
+		fail(fmt.Errorf("worktree: %w", err))
+	}
+
+	fmt.Printf("specsync: using worktree %s (branch %s)\n", worktreePath, branchName)
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		fail(err)
+	}
+	if err := os.Chdir(worktreePath); err != nil {
+		fail(err)
+	}
+	defer func() {
+		_ = os.Chdir(cwd)
+	}()
+
+	abs, err := filepath.Abs("openspec")
+	if err != nil {
+		fail(err)
+	}
+
+	res, err := specsync.Pull(ctx, specsync.PullOptions{
+		OpenSpecDir: abs,
+		Provider:    makeProvider(repo, false, "github"),
+		IssueID:     issue,
+		Slug:        change,
+		DryRun:      dryRun,
+		Project:     project,
+	})
+	if err != nil {
+		fail(err)
+	}
+
+	dest := filepath.Join("openspec", "changes", res.Slug)
+	fmt.Printf("specsync: pulled issue %s -> %s\n", issue, dest)
+	fmt.Println("  + proposal.md")
+	if res.Tasks != "" {
+		fmt.Println("  + tasks.md")
+	}
+	if res.TitleSuggestion != "" {
+		fmt.Printf("  title could be tighter: %q — edit the proposal.md H1 if you agree\n", res.TitleSuggestion)
+	}
+	if res.BoardConfigured {
+		printBoardPlan(res.Board, false)
+	}
+}
+
+// getRepoName returns the repo name as "owner/name". If repo is provided,
+// it's used directly. Otherwise, it's auto-detected from the git remote.
+func getRepoName(ctx context.Context, repo string) (string, error) {
+	if repo != "" {
+		return repo, nil
+	}
+	out, err := exec.CommandContext(ctx, "git", "remote", "get-url", "origin").CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("could not detect repo from git remote: %w\n%s", err, out)
+	}
+	url := strings.TrimSpace(string(out))
+	url = strings.TrimPrefix(url, "git@")
+	url = strings.TrimSuffix(url, ".git")
+	if strings.HasPrefix(url, "github.com:") {
+		url = strings.TrimPrefix(url, "github.com:")
+	} else if strings.HasPrefix(url, "https://github.com/") {
+		url = strings.TrimPrefix(url, "https://github.com/")
+	} else if strings.HasPrefix(url, "ssh://git@github.com/") {
+		url = strings.TrimPrefix(url, "ssh://git@github.com/")
+	}
+	return url, nil
+}
+
+// ensureWorktree creates a worktree if it doesn't exist, or reuses an existing one.
+func ensureWorktree(ctx context.Context, worktreePath, branchName string) error {
+	if _, err := os.Stat(worktreePath); err == nil {
+		out, err := exec.CommandContext(ctx, "git", "worktree", "list", "--porcelain").CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("list worktrees: %w\n%s", err, out)
+		}
+		if strings.Contains(string(out), worktreePath) {
+			return nil
+		}
+	}
+
+	if _, err := os.Stat(worktreePath); os.IsNotExist(err) {
+		if err := os.MkdirAll(worktreePath, 0755); err != nil {
+			return fmt.Errorf("create worktree dir: %w", err)
+		}
+	}
+
+	out, err := exec.CommandContext(ctx, "git", "worktree", "add", "-b", branchName, worktreePath).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("create worktree: %w\n%s", err, out)
+	}
+	return nil
 }
 
 // runLink writes links.md for each change (recording the other's issue URL) and
