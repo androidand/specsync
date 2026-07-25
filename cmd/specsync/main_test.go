@@ -1,6 +1,9 @@
 package main
 
 import (
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -128,6 +131,54 @@ func TestResolveSubcommandPushSuggestsSync(t *testing.T) {
 func TestVersionDefault(t *testing.T) {
 	if version == "" {
 		t.Fatal("version must default to a non-empty value (expected \"dev\")")
+	}
+}
+
+// TestDetectProvider pins auto-detection: explicit flag wins, `bd` on PATH
+// selects beads, `.beads/` directory selects beads, fallback is github.
+func TestDetectProvider(t *testing.T) {
+	// Explicit flag always wins.
+	provider, reason := detectProvider("github")
+	if provider != "github" || reason != "" {
+		t.Fatalf("explicit github: got %q/%q, want github/empty", provider, reason)
+	}
+	provider, reason = detectProvider("beads")
+	if provider != "beads" || reason != "" {
+		t.Fatalf("explicit beads: got %q/%q, want beads/empty", provider, reason)
+	}
+
+	// Empty string with `bd` on PATH → beads (PATH check fires first).
+	if _, err := exec.LookPath("bd"); err == nil {
+		provider, reason = detectProvider("")
+		if provider != "beads" || reason != "`bd` found on PATH" {
+			t.Fatalf("bd on PATH: got %q/%q, want beads/bd on PATH", provider, reason)
+		}
+	} else {
+		// No `bd` on PATH — test .beads/ detection.
+		tmpDir := t.TempDir()
+		if err := os.Mkdir(filepath.Join(tmpDir, ".beads"), 0755); err != nil {
+			t.Fatal(err)
+		}
+		t.Chdir(tmpDir)
+		provider, reason = detectProvider("")
+		if provider != "beads" || reason != ".beads/ found in working directory" {
+			t.Fatalf(".beads/ detection: got %q/%q, want beads/.beads/ reason", provider, reason)
+		}
+	}
+
+	// No hints → github (use a clean temp dir, no .beads/).
+	tmpDir := t.TempDir()
+	t.Chdir(tmpDir)
+	provider, reason = detectProvider("")
+	// If `bd` is on PATH, it'll still detect beads; otherwise github.
+	if _, err := exec.LookPath("bd"); err == nil {
+		if provider != "beads" {
+			t.Fatalf("no hints with bd on PATH: got %q, want beads", provider)
+		}
+	} else {
+		if provider != "github" || reason != "" {
+			t.Fatalf("no hints: got %q/%q, want github/empty", provider, reason)
+		}
 	}
 }
 

@@ -136,7 +136,7 @@ func runSync(args []string) {
 	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
 	change := fs.String("change", "", "sync only this change (default: all changes)")
 	repo := fs.String("repo", "", "target repo as owner/name (default: auto-detect from git remote)")
-	providerName := fs.String("provider", "github", "work provider: github (default, human-facing) or beads (agent-facing)")
+	providerName := fs.String("provider", "", "work provider: github, beads (auto-detect when empty)")
 	dryRun := fs.Bool("dry-run", false, "print the provider commands and rendered body without executing")
 	reconcile := fs.Bool("reconcile", true, "merge external task state back into tasks.md before pushing")
 	closeCompleted := fs.Bool("close-completed", false, "close the tracker item once every task in a change is checked")
@@ -158,10 +158,14 @@ func runSync(args []string) {
 		fail(err)
 	}
 
-	provider := makeProvider(*repo, *dryRun, *providerName)
+	provider, providerReason := detectProvider(*providerName)
+	prov := makeProvider(*repo, *dryRun, provider)
 	if *dryRun {
-		fmt.Printf("DRY RUN — no %s calls are made\n", *providerName)
-		if *providerName == "github" {
+		fmt.Printf("DRY RUN — no %s calls are made\n", provider)
+		if providerReason != "" {
+			fmt.Printf("provider: %s (auto-detected: %s)\n", provider, providerReason)
+		}
+		if provider == "github" {
 			if *repo != "" {
 				fmt.Printf("target: %s\n", *repo)
 			} else {
@@ -177,7 +181,7 @@ func runSync(args []string) {
 
 	res, err := specsync.Sync(context.Background(), specsync.Options{
 		OpenSpecDir:    abs,
-		Provider:       provider,
+		Provider:       prov,
 		Slug:           *change,
 		DryRun:         *dryRun,
 		Reconcile:      *reconcile,
@@ -365,6 +369,22 @@ func runLink(args []string) {
 		fmt.Printf("  linked  %s  <->  %s\n", p.Slug, p.Ref.URL)
 	}
 	fmt.Printf("specsync link: %d specs cross-linked\n", len(pairs))
+}
+
+// detectProvider returns ("beads", reason) when Beads should be auto-selected,
+// or ("github", "") otherwise. Checks (in order): explicit provider flag,
+// `bd` on PATH, `.beads/` in working directory.
+func detectProvider(provider string) (string, string) {
+	if provider != "" {
+		return provider, ""
+	}
+	if _, err := exec.LookPath("bd"); err == nil {
+		return "beads", "`bd` found on PATH"
+	}
+	if _, err := os.Stat(".beads"); err == nil {
+		return "beads", ".beads/ found in working directory"
+	}
+	return "github", ""
 }
 
 // makeProvider builds the selected work provider, substituting a dry-runner that
@@ -931,8 +951,8 @@ func runAuditTasks(args []string) {
 			Stage     string `json:"stage"`
 		}
 		type resultJSON struct {
-			Findings    []findingJSON `json:"findings"`
-			Mismatches  []findingJSON `json:"mismatches"`
+			Findings   []findingJSON `json:"findings"`
+			Mismatches []findingJSON `json:"mismatches"`
 		}
 		var out resultJSON
 		for _, f := range result.Findings {
