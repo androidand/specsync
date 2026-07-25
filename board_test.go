@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // fakeBoard is a configurable fake of `gh api graphql` for the board projection.
@@ -571,5 +572,231 @@ func TestLoadBoardStateAbsent(t *testing.T) {
 	}
 	if len(state.Bindings) != 0 {
 		t.Errorf("bindings should be empty, got %d", len(state.Bindings))
+	}
+}
+
+// TestSaveBoardState verifies board state can be saved and loaded.
+func TestSaveBoardState(t *testing.T) {
+	root := t.TempDir()
+	changeDir := filepath.Join(root, "test-change")
+
+	state := BoardState{
+		Version: 1,
+		Bindings: map[string]BoardBinding{
+			"owner:5:github": {
+				Provider:           "github",
+				ProjectID:          "PROJ_1",
+				ItemID:             "ITEM_1",
+				LocalStageBase:     StageActive,
+				RemoteOptionIDBase: "OPT_PROG",
+				SyncedAt:           time.Now().UTC(),
+			},
+		},
+	}
+
+	if err := SaveBoardState(changeDir, state); err != nil {
+		t.Fatalf("SaveBoardState: %v", err)
+	}
+
+	// Verify no temp files remain
+	tmps, _ := filepath.Glob(filepath.Join(changeDir, ".specsync", "*.tmp"))
+	if len(tmps) > 0 {
+		t.Fatalf("expected no temp files, got %v", tmps)
+	}
+
+	// Load and verify
+	loaded, err := LoadBoardState(changeDir)
+	if err != nil {
+		t.Fatalf("LoadBoardState: %v", err)
+	}
+
+	if loaded.Version != 1 {
+		t.Errorf("version = %d, want 1", loaded.Version)
+	}
+	binding, ok := loaded.Bindings["owner:5:github"]
+	if !ok {
+		t.Fatal("binding not found")
+	}
+	if binding.ProjectID != "PROJ_1" {
+		t.Errorf("project_id = %q, want %q", binding.ProjectID, "PROJ_1")
+	}
+	if binding.LocalStageBase != StageActive {
+		t.Errorf("local_stage_base = %q, want %q", binding.LocalStageBase, StageActive)
+	}
+}
+
+// TestSaveBoardStateUpdate verifies binding is updated on re-sync (syncedAt changes).
+func TestSaveBoardStateUpdate(t *testing.T) {
+	root := t.TempDir()
+	changeDir := filepath.Join(root, "test-change")
+
+	oldTime := time.Now().UTC().Add(-time.Hour)
+	state := BoardState{
+		Version: 1,
+		Bindings: map[string]BoardBinding{
+			"owner:5:github": {
+				Provider:           "github",
+				ProjectID:          "PROJ_1",
+				ItemID:             "ITEM_1",
+				LocalStageBase:     StageActive,
+				RemoteOptionIDBase: "OPT_PROG",
+				SyncedAt:           oldTime,
+			},
+		},
+	}
+
+	if err := SaveBoardState(changeDir, state); err != nil {
+		t.Fatalf("SaveBoardState: %v", err)
+	}
+
+	time.Sleep(time.Millisecond * 10)
+
+	// Update syncedAt
+	newTime := time.Now().UTC()
+	binding := state.Bindings["owner:5:github"]
+	binding.SyncedAt = newTime
+	state.Bindings["owner:5:github"] = binding
+
+	if err := SaveBoardState(changeDir, state); err != nil {
+		t.Fatalf("SaveBoardState update: %v", err)
+	}
+
+	loaded, err := LoadBoardState(changeDir)
+	if err != nil {
+		t.Fatalf("LoadBoardState: %v", err)
+	}
+
+	loadedBinding := loaded.Bindings["owner:5:github"]
+	if loadedBinding.SyncedAt.Before(newTime) {
+		t.Errorf("syncedAt not updated: got %v, want >= %v", loadedBinding.SyncedAt, newTime)
+	}
+}
+
+// TestMultipleBindingsCoexist verifies multiple bindings per change coexist.
+func TestMultipleBindingsCoexist(t *testing.T) {
+	root := t.TempDir()
+	changeDir := filepath.Join(root, "test-change")
+
+	state := BoardState{
+		Version: 1,
+		Bindings: map[string]BoardBinding{
+			"owner1:5:github": {
+				Provider:           "github",
+				ProjectID:          "PROJ_1",
+				ItemID:             "ITEM_1",
+				LocalStageBase:     StageActive,
+				RemoteOptionIDBase: "OPT_PROG",
+				SyncedAt:           time.Now().UTC(),
+			},
+			"owner2:10:github": {
+				Provider:           "github",
+				ProjectID:          "PROJ_2",
+				ItemID:             "ITEM_2",
+				LocalStageBase:     StageBacklog,
+				RemoteOptionIDBase: "OPT_TODO",
+				SyncedAt:           time.Now().UTC(),
+			},
+		},
+	}
+
+	if err := SaveBoardState(changeDir, state); err != nil {
+		t.Fatalf("SaveBoardState: %v", err)
+	}
+
+	loaded, err := LoadBoardState(changeDir)
+	if err != nil {
+		t.Fatalf("LoadBoardState: %v", err)
+	}
+
+	if len(loaded.Bindings) != 2 {
+		t.Fatalf("expected 2 bindings, got %d", len(loaded.Bindings))
+	}
+
+	b1 := loaded.Bindings["owner1:5:github"]
+	if b1.ProjectID != "PROJ_1" {
+		t.Errorf("b1 project_id = %q, want %q", b1.ProjectID, "PROJ_1")
+	}
+
+	b2 := loaded.Bindings["owner2:10:github"]
+	if b2.ProjectID != "PROJ_2" {
+		t.Errorf("b2 project_id = %q, want %q", b2.ProjectID, "PROJ_2")
+	}
+}
+
+// TestLoadBoardStateMalformed verifies malformed board.json is handled.
+func TestLoadBoardStateMalformed(t *testing.T) {
+	root := t.TempDir()
+	changeDir := filepath.Join(root, "test-change")
+
+	// Write malformed JSON
+	mustWrite(t, filepath.Join(changeDir, ".specsync", "board.json"), `not json`)
+
+	_, err := LoadBoardState(changeDir)
+	if err == nil {
+		t.Fatal("expected error for malformed board.json")
+	}
+}
+
+// TestSaveBoardStateAtomicWrite verifies no temp files remain after save.
+func TestSaveBoardStateAtomicWrite(t *testing.T) {
+	root := t.TempDir()
+	changeDir := filepath.Join(root, "test-change")
+
+	state := BoardState{
+		Version: 1,
+		Bindings: map[string]BoardBinding{
+			"owner:5:github": {
+				Provider:           "github",
+				ProjectID:          "PROJ_1",
+				ItemID:             "ITEM_1",
+				LocalStageBase:     StageActive,
+				RemoteOptionIDBase: "OPT_PROG",
+				SyncedAt:           time.Now().UTC(),
+			},
+		},
+	}
+
+	// Save multiple times to ensure no temp files accumulate
+	for i := 0; i < 3; i++ {
+		if err := SaveBoardState(changeDir, state); err != nil {
+			t.Fatalf("SaveBoardState %d: %v", i, err)
+		}
+
+		tmps, _ := filepath.Glob(filepath.Join(changeDir, ".specsync", "*.tmp"))
+		if len(tmps) > 0 {
+			t.Fatalf("iter %d: expected no temp files, got %v", i, tmps)
+		}
+	}
+}
+
+// TestArchivedStageOnBoard verifies archived changes map to terminal status.
+func TestArchivedStageOnBoard(t *testing.T) {
+	target := BoardTarget{
+		Owner: "owner",
+		Number: 5,
+	}
+
+	// Archived stage should map to "Done" (defaultArchivedStatus)
+	name, explicit := target.statusNameFor(StageArchived)
+	if name != defaultArchivedStatus {
+		t.Errorf("archived stage status = %q, want %q", name, defaultArchivedStatus)
+	}
+	if explicit {
+		t.Error("archived stage should not be explicit without status mapping")
+	}
+}
+
+// TestThreeWayMergeConvergence verifies both sides changed to the same value.
+func TestThreeWayMergeConvergence(t *testing.T) {
+	base := BoardBinding{
+		LocalStageBase:     StageBacklog,
+		RemoteOptionIDBase: "OPT_TODO",
+	}
+
+	// Both changed: local from backlog→active, remote from OPT_TODO→OPT_PROG
+	// This is a "both changed" case — currently reported as conflict.
+	decision := threeWayMerge(StageActive, "OPT_PROG", base)
+	if decision.Action != "report-conflict" {
+		t.Errorf("action = %q, want %q", decision.Action, "report-conflict")
 	}
 }
