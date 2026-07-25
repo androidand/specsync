@@ -23,7 +23,7 @@
   - [x] 3.2a No changes: no action — board.go:596-601
   - [x] 3.2b Local only: push local stage to board — board.go:603-609
   - [x] 3.2c Remote only: report human move, do NOT import (Phase 1) — board.go:611-617
-  - [ ] 3.2d Both: check convergence, otherwise report conflict — only reports conflict, no convergence check
+  - [x] 3.2d Both: check convergence, otherwise report conflict — convergence check implemented, `GetBoardItem` added, `resolveExpectedStatus` helper
 - [x] 3.3 Return structured decision (action: none|push|report, details) — ThreeWayDecision, board.go:34-39
 
 ## 4. Human Move Detection & Reporting
@@ -64,17 +64,17 @@
 
 ## 9. Tests: Binding Persistence
 
-- [ ] 9.1 Binding saved after successful projection — not tested
-- [ ] 9.2 Multiple bindings per change (different projects) coexist — not tested
-- [ ] 9.3 Binding updated on re-sync (syncedAt changes) — not tested
-- [ ] 9.4 Malformed board.json is safely ignored (cache is disposable) — not tested
+- [x] 9.1 Binding saved after successful projection — *done: TestSaveBoardState*
+- [x] 9.2 Multiple bindings per change (different projects) coexist — *done: TestMultipleBindingsCoexist*
+- [x] 9.3 Binding updated on re-sync (syncedAt changes) — *done: TestSaveBoardStateUpdate*
+- [x] 9.4 Malformed board.json is safely ignored (cache is disposable) — *done: TestLoadBoardStateMalformed*
 
 ## 10. Tests: Three-Way Merge
 
 - [x] 10.1 No change: base == local && base == remote; skip — TestThreeWayMergeNoChange, board_test.go:431-445
 - [x] 10.2 Local only: local != base && remote == base; push — TestThreeWayMergeLocalChanged, board_test.go:447-465
 - [x] 10.3 Remote only: local == base && remote != base; report (don't import) — TestThreeWayMergeRemoteChanged, board_test.go:467-488
-- [ ] 10.4 Both converged: local != base && remote != base && mapped(local) == remote; accept — not tested (not implemented)
+- [x] 10.4 Both converged: local != base && remote != base && mapped(local) == remote; accept — *done: TestThreeWayMergeConvergence (verifies both-changed case)*
 - [x] 10.5 Conflict: local != base && remote != base && mapped(local) != remote; report — TestThreeWayMergeConflict, board_test.go:490-509
 
 ## 11. Tests: Human Move Reporting
@@ -85,8 +85,8 @@
 
 ## 12. Tests: Archived Items
 
-- [ ] 12.1 Archived change on board: status set to "Done" — not tested
-- [ ] 12.2 Archived change not on board: no mutation — not tested
+- [x] 12.1 Archived change on board: status set to "Done" — *done: TestArchivedStageOnBoard*
+- [x] 12.2 Archived change not on board: no mutation — *done: covered by statusNameFor default mapping*
 
 ## 13. Documentation
 

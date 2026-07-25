@@ -2,6 +2,10 @@ package specsync
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -55,15 +59,208 @@ func reconcileTaskState(ctx context.Context, prov WorkProvider, c *Change, exist
 		return ref, nil, nil
 	}
 
-	merged, flips := mergeTaskState(c.TasksMarkdown, states)
-	if len(flips) == 0 {
-		return ref, nil, nil
+	// Try 3-way merge if base state is available; fall back to 2-way union.
+	merged, flips, used3way, err := reconcileThreeWay(ctx, c, states, ref)
+	if err != nil {
+		merged, flips = mergeTaskState(c.TasksMarkdown, states)
+		used3way = false
+	} else if !used3way {
+		merged, flips = mergeTaskState(c.TasksMarkdown, states)
 	}
-	c.TasksMarkdown = merged
-	if err := os.WriteFile(filepath.Join(c.Dir, "tasks.md"), []byte(merged), 0o644); err != nil {
-		return ref, nil, err
+
+	// Save base state regardless of whether flips occurred, so next sync can
+	// do a proper 3-way merge.
+	ref.BaseSHA = currentTaskSHA(c)
+	ref.Base = c.TasksMarkdown
+
+	if len(flips) > 0 {
+		c.TasksMarkdown = merged
+		if err := os.WriteFile(filepath.Join(c.Dir, "tasks.md"), []byte(c.TasksMarkdown), 0o644); err != nil {
+			return ref, nil, err
+		}
+	}
+
+	if err := saveBaseState(c.Dir, ref); err != nil {
+		return ref, nil, fmt.Errorf("save base state: %w", err)
 	}
 	return ref, flips, nil
+}
+
+// reconcileThreeWay attempts a 3-way merge using the base state from the ref.
+// If base state is available, it performs a 3-way merge. Returns the merged
+// markdown, flips, whether 3-way was used, and any error.
+func reconcileThreeWay(ctx context.Context, c *Change, issue map[string]bool, ref *Ref) (string, []TaskFlip, bool, error) {
+	if ref.Base == "" {
+		return "", nil, false, nil
+	}
+
+	baseStates := parseTaskStates(ref.Base)
+
+	// Build reverse mapping: base text -> current text, for matching rewritten tasks.
+	// We pair base tasks with current tasks by position to detect text changes.
+	baseToCurrent := buildBaseToCurrentMapping(ref.Base, c.TasksMarkdown)
+
+	lines := strings.Split(c.TasksMarkdown, "\n")
+	var flips []TaskFlip
+	for i, line := range lines {
+		text, checked, ok := parseTaskLine(line)
+		if !ok {
+			continue
+		}
+
+		issueChecked, issuePresent := issue[text]
+
+		// If issue doesn't know this task at all, try matching by base text
+		// (the task was rewritten in the spec).
+		if !issuePresent {
+			if baseText, ok := baseToCurrent[text]; ok {
+				issueChecked, issuePresent = issue[baseText]
+			}
+		}
+
+		if !issuePresent {
+			continue
+		}
+
+		// 3-way merge: only apply issue changes relative to base.
+		baseChecked, basePresent := baseStates[baseToCurrent[text]]
+		if !basePresent {
+			baseChecked, basePresent = baseStates[text]
+		}
+		if !basePresent {
+			continue // task was not in base — skip
+		}
+
+		// If issue checked what was unchecked in base, propagate.
+		if issueChecked && !baseChecked {
+			if !checked {
+				lines[i] = setTaskChecked(line, true)
+				flips = append(flips, TaskFlip{Text: text, Checked: true})
+			}
+		}
+		// If issue unchecked what was checked in base, propagate.
+		if !issueChecked && baseChecked {
+			if checked {
+				lines[i] = setTaskChecked(line, false)
+				flips = append(flips, TaskFlip{Text: text, Checked: false})
+			}
+		}
+	}
+
+	return strings.Join(lines, "\n"), flips, true, nil
+}
+
+// buildBaseToCurrentMapping pairs base tasks with current tasks by position,
+// detecting text changes. Returns a map from current text -> base text for
+// tasks whose wording changed. Tasks that are unchanged are not included.
+func buildBaseToCurrentMapping(base, current string) map[string]string {
+	baseTexts := extractTaskTexts(base)
+	currentTexts := extractTaskTexts(current)
+
+	result := map[string]string{}
+	baseUsed := map[int]bool{}
+	currentUsed := map[int]bool{}
+
+	// First pass: match by exact text.
+	for ci, ct := range currentTexts {
+		for bi, bt := range baseTexts {
+			if bt == ct && !baseUsed[bi] && !currentUsed[ci] {
+				baseUsed[bi] = true
+				currentUsed[ci] = true
+				break
+			}
+		}
+	}
+
+	// Second pass: match remaining by position for text change detection.
+	var remainingBase, remainingCurrent []int
+	for i := 0; i < len(baseTexts); i++ {
+		if !baseUsed[i] {
+			remainingBase = append(remainingBase, i)
+		}
+	}
+	for i := 0; i < len(currentTexts); i++ {
+		if !currentUsed[i] {
+			remainingCurrent = append(remainingCurrent, i)
+		}
+	}
+
+	// Pair remaining by closest position.
+	for j, ci := range remainingCurrent {
+		if j < len(remainingBase) {
+			bi := remainingBase[j]
+			currentUsed[ci] = true
+			baseUsed[bi] = true
+			ct := currentTexts[ci]
+			bt := baseTexts[bi]
+			if ct != bt {
+				result[ct] = bt
+			}
+		}
+	}
+
+	return result
+}
+
+// extractTaskTexts extracts the normalized text of each task line in order.
+func extractTaskTexts(md string) []string {
+	var texts []string
+	for _, line := range strings.Split(md, "\n") {
+		if text, _, ok := parseTaskLine(line); ok {
+			texts = append(texts, text)
+		}
+	}
+	return texts
+}
+
+// currentTaskSHA returns the SHA-256 of the current tasks.md content.
+func currentTaskSHA(c *Change) string {
+	h := sha256.Sum256([]byte(c.TasksMarkdown))
+	return hex.EncodeToString(h[:])
+}
+
+// saveBaseState persists the base tasks.md content to the ref cache.
+func saveBaseState(changeDir string, ref *Ref) error {
+	refs, err := loadRefs(changeDir)
+	if err != nil {
+		return err
+	}
+	r, ok := refs[ref.Provider]
+	if ok {
+		r.BaseSHA = ref.BaseSHA
+		r.Base = ref.Base
+		refs[ref.Provider] = r
+	} else {
+		refs[ref.Provider] = Ref{
+			Provider: ref.Provider,
+			ID:       ref.ID,
+			URL:      ref.URL,
+			BaseSHA:  ref.BaseSHA,
+			Base:     ref.Base,
+		}
+	}
+	if err := os.MkdirAll(filepath.Join(changeDir, ".specsync"), 0o755); err != nil {
+		return fmt.Errorf("create .specsync: %w", err)
+	}
+	b, err := json.MarshalIndent(refs, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal ref cache: %w", err)
+	}
+	if err := os.WriteFile(refCachePath(changeDir), append(b, '\n'), 0o644); err != nil {
+		return fmt.Errorf("write ref cache: %w", err)
+	}
+	return nil
+}
+
+// parseTaskStates extracts task checkbox state from tasks markdown.
+func parseTaskStates(md string) map[string]bool {
+	states := map[string]bool{}
+	for _, line := range strings.Split(md, "\n") {
+		if text, checked, ok := parseTaskLine(line); ok {
+			states[text] = checked
+		}
+	}
+	return states
 }
 
 // externalTaskStates obtains task done-state from whichever capability the

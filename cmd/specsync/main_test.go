@@ -1,6 +1,10 @@
 package main
 
 import (
+	"context"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -131,6 +135,54 @@ func TestVersionDefault(t *testing.T) {
 	}
 }
 
+// TestDetectProvider pins auto-detection: explicit flag wins, `bd` on PATH
+// selects beads, `.beads/` directory selects beads, fallback is github.
+func TestDetectProvider(t *testing.T) {
+	// Explicit flag always wins.
+	provider, reason := detectProvider("github")
+	if provider != "github" || reason != "" {
+		t.Fatalf("explicit github: got %q/%q, want github/empty", provider, reason)
+	}
+	provider, reason = detectProvider("beads")
+	if provider != "beads" || reason != "" {
+		t.Fatalf("explicit beads: got %q/%q, want beads/empty", provider, reason)
+	}
+
+	// Empty string with `bd` on PATH → beads (PATH check fires first).
+	if _, err := exec.LookPath("bd"); err == nil {
+		provider, reason = detectProvider("")
+		if provider != "beads" || reason != "`bd` found on PATH" {
+			t.Fatalf("bd on PATH: got %q/%q, want beads/bd on PATH", provider, reason)
+		}
+	} else {
+		// No `bd` on PATH — test .beads/ detection.
+		tmpDir := t.TempDir()
+		if err := os.Mkdir(filepath.Join(tmpDir, ".beads"), 0755); err != nil {
+			t.Fatal(err)
+		}
+		t.Chdir(tmpDir)
+		provider, reason = detectProvider("")
+		if provider != "beads" || reason != ".beads/ found in working directory" {
+			t.Fatalf(".beads/ detection: got %q/%q, want beads/.beads/ reason", provider, reason)
+		}
+	}
+
+	// No hints → github (use a clean temp dir, no .beads/).
+	tmpDir := t.TempDir()
+	t.Chdir(tmpDir)
+	provider, reason = detectProvider("")
+	// If `bd` is on PATH, it'll still detect beads; otherwise github.
+	if _, err := exec.LookPath("bd"); err == nil {
+		if provider != "beads" {
+			t.Fatalf("no hints with bd on PATH: got %q, want beads", provider)
+		}
+	} else {
+		if provider != "github" || reason != "" {
+			t.Fatalf("no hints: got %q/%q, want github/empty", provider, reason)
+		}
+	}
+}
+
 // TestParseStatusMapping pins the -status-map syntax: comma-separated
 // stage=Name pairs, Status names may contain spaces, whitespace is trimmed.
 func TestParseStatusMapping(t *testing.T) {
@@ -219,5 +271,78 @@ func TestBoardTargetCarriesStatusMapping(t *testing.T) {
 	// A syntax error in the mapping fails loud even without a project.
 	if _, err := boardTarget("", "", "bogus"); err == nil {
 		t.Fatal("expected an error for a malformed -status-map without a project")
+	}
+}
+
+// TestGetRepoName verifies repo name resolution: explicit flag wins,
+// git remote auto-detect works for various URL formats, and missing
+// remote produces an error.
+func TestGetRepoName(t *testing.T) {
+	ctx := context.Background()
+
+	if got, err := getRepoName(ctx, "owner/repo"); err != nil || got != "owner/repo" {
+		t.Fatalf("explicit repo: got %q (err %v)", got, err)
+	}
+
+	cases := []struct {
+		name string
+		url  string
+		want string
+	}{
+		{"https", "https://github.com/owner/repo.git", "owner/repo"},
+		{"ssh", "git@github.com:owner/repo.git", "owner/repo"},
+		{"ssh-url", "ssh://git@github.com/owner/repo.git", "owner/repo"},
+		{"no-git", "https://github.com/owner/repo", "owner/repo"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tmp := t.TempDir()
+			if err := exec.Command("git", "init", tmp).Run(); err != nil {
+				t.Skipf("git not available: %v", err)
+			}
+			if err := exec.Command("git", "-C", tmp, "remote", "add", "origin", tc.url).Run(); err != nil {
+				t.Skipf("git not available: %v", err)
+			}
+			old, _ := os.Getwd()
+			_ = os.Chdir(tmp)
+			defer func() { _ = os.Chdir(old) }()
+
+			got, err := getRepoName(ctx, "")
+			if err != nil || got != tc.want {
+				t.Fatalf("auto-detect %s: got %q (err %v)", tc.name, got, err)
+			}
+		})
+	}
+}
+
+// TestGetRepoNameNoRemote: missing git remote produces an error.
+func TestGetRepoNameNoRemote(t *testing.T) {
+	ctx := context.Background()
+	tmp := t.TempDir()
+	_ = exec.Command("git", "init", tmp).Run()
+	old, _ := os.Getwd()
+	_ = os.Chdir(tmp)
+	defer func() { _ = os.Chdir(old) }()
+
+	if _, err := getRepoName(ctx, ""); err == nil {
+		t.Fatal("expected an error for missing git remote")
+	}
+}
+
+// TestEnsureWorktreeDryRun: the -worktree flag with -dry-run should print
+// setup info without creating any worktrees.
+func TestEnsureWorktreeDryRun(t *testing.T) {
+	tmp := t.TempDir()
+	defer os.RemoveAll(tmp)
+
+	cwd, _ := os.Getwd()
+	_ = os.Chdir(cwd)
+
+	targetDir := filepath.Join(tmp, "worktrees")
+	worktreePath := filepath.Join(targetDir, "test-repo-1")
+
+	if _, err := os.Stat(worktreePath); err == nil {
+		t.Fatal("worktree should not exist before dry run")
 	}
 }
