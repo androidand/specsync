@@ -15,7 +15,7 @@ import (
 // Used for three-way merge: local stage, remote status, and last-synced base
 // detect what changed since last sync.
 type BoardBinding struct {
-	Provider           string    `json:"provider"`      // "github-projects", etc.
+	Provider           string    `json:"provider"` // "github-projects", etc.
 	ProjectID          string    `json:"project_id"`
 	ItemID             string    `json:"item_id"`
 	LocalStageBase     Stage     `json:"local_stage_base"`      // what local stage was last time
@@ -26,14 +26,14 @@ type BoardBinding struct {
 // BoardState wraps all board bindings for a change. Enables multi-provider
 // and multi-project support. Format: .specsync/board.json
 type BoardState struct {
-	Version  int                    `json:"version"`
+	Version  int                     `json:"version"`
 	Bindings map[string]BoardBinding `json:"bindings"` // key: "github-projects:owner/5"
 }
 
 // ThreeWayMerge result: what action to take based on local, remote, and base state.
 type ThreeWayDecision struct {
-	Action      string // "none", "push-local", "report-conflict", "report-remote-move"
-	Reason      string // human-readable explanation
+	Action        string // "none", "push-local", "report-conflict", "report-remote-move"
+	Reason        string // human-readable explanation
 	LocalChanged  bool
 	RemoteChanged bool
 }
@@ -454,6 +454,39 @@ func (p *GitHubProvider) boardMembership(ctx context.Context, ref Ref, schema *b
 	return m, nil
 }
 
+// GetBoardItem queries the board for the current item state. Returns the item ID,
+// status name, and status option ID. Returns empty values if the item is not on
+// the board. Used for three-way merge to get the current remote state.
+func (p *GitHubProvider) GetBoardItem(ctx context.Context, target BoardTarget, ref Ref) (itemID, statusName, statusOptionID string, err error) {
+	schema, err := p.resolveBoardSchema(ctx, target)
+	if err != nil {
+		return "", "", "", err
+	}
+	member, err := p.boardMembership(ctx, ref, schema)
+	if err != nil {
+		return "", "", "", err
+	}
+	return member.itemID, member.statusName, member.statusOptionID, nil
+}
+
+// resolveExpectedStatus resolves the expected Status option ID for a stage by
+// querying the board schema. Used for convergence checking in three-way merge.
+func resolveExpectedStatus(ctx context.Context, bp BoardProjector, target BoardTarget, stage Stage, ref Ref) (optionID, name string, err error) {
+	if gh, ok := bp.(*GitHubProvider); ok {
+		schema, err := gh.resolveBoardSchema(ctx, target)
+		if err != nil {
+			return "", "", err
+		}
+		name, optionID, err = gh.resolveStatus(target, stage, schema.statusField)
+		if err != nil {
+			return "", "", err
+		}
+		_ = ref // unused but kept for API consistency
+		return optionID, name, nil
+	}
+	return "", "", nil
+}
+
 func (p *GitHubProvider) addToBoard(ctx context.Context, projectID, contentID string) (string, error) {
 	q := `mutation($projectId: ID!, $contentId: ID!) {
   addProjectV2ItemById(input: { projectId: $projectId, contentId: $contentId }) { item { id } }
@@ -589,9 +622,11 @@ func parseIssueURL(url string) (owner, repo string, number int, err error) {
 // threeWayMerge compares local stage, remote option, and base to detect conflicts
 // or determine if the board was changed by a human (human-move detection).
 // Returns the decision and whether to push or skip based on local/remote changes.
-func threeWayMerge(local Stage, remote string, base BoardBinding) ThreeWayDecision {
+// currentRemote is the current remote option ID (from board query).
+// expectedRemote is the option ID the local stage maps to (for convergence check).
+func threeWayMerge(local Stage, currentRemote, expectedRemote string, base BoardBinding) ThreeWayDecision {
 	localChanged := local != base.LocalStageBase
-	remoteChanged := remote != base.RemoteOptionIDBase
+	remoteChanged := currentRemote != base.RemoteOptionIDBase
 
 	if !localChanged && !remoteChanged {
 		return ThreeWayDecision{
@@ -613,6 +648,14 @@ func threeWayMerge(local Stage, remote string, base BoardBinding) ThreeWayDecisi
 			Action:        "report-remote-move",
 			Reason:        "human moved the card on the board; specsync won't clobber it",
 			RemoteChanged: true,
+		}
+	}
+
+	// Both changed: check convergence.
+	if expectedRemote != "" && currentRemote == expectedRemote {
+		return ThreeWayDecision{
+			Action: "converged",
+			Reason: "both local and remote changed but converged to the same state",
 		}
 	}
 
@@ -680,7 +723,7 @@ func saveBoardBinding(changeDir string, target BoardTarget, provider string, sta
 	// Update binding base state to current (for next three-way merge).
 	// After a successful push, local stage and remote option are in sync.
 	binding.Provider = provider
-	binding.ProjectID = plan.ProjectID          // GraphQL node ID of the project
+	binding.ProjectID = plan.ProjectID // GraphQL node ID of the project
 	binding.LocalStageBase = stage
 	binding.RemoteOptionIDBase = plan.StatusOptionID // What we just pushed to the board
 	binding.SyncedAt = time.Now()

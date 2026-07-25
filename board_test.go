@@ -435,7 +435,7 @@ func TestThreeWayMergeNoChange(t *testing.T) {
 		RemoteOptionIDBase: "OPT_PROG",
 	}
 
-	decision := threeWayMerge(StageActive, "OPT_PROG", base)
+	decision := threeWayMerge(StageActive, "OPT_PROG", "", base)
 
 	if decision.Action != "none" {
 		t.Errorf("action = %q, want %q", decision.Action, "none")
@@ -452,7 +452,7 @@ func TestThreeWayMergeLocalChanged(t *testing.T) {
 		RemoteOptionIDBase: "OPT_PROG",
 	}
 
-	decision := threeWayMerge(StageComplete, "OPT_PROG", base)
+	decision := threeWayMerge(StageComplete, "OPT_PROG", "", base)
 
 	if decision.Action != "push-local" {
 		t.Errorf("action = %q, want %q", decision.Action, "push-local")
@@ -475,7 +475,7 @@ func TestThreeWayMergeRemoteChanged(t *testing.T) {
 
 	// Remote changed (human moved card from "In progress" to "Done")
 	// but local didn't change
-	decision := threeWayMerge(StageActive, "OPT_DONE", base)
+	decision := threeWayMerge(StageActive, "OPT_DONE", "", base)
 
 	if decision.Action != "report-remote-move" {
 		t.Errorf("action = %q, want %q (human move detection)", decision.Action, "report-remote-move")
@@ -496,7 +496,7 @@ func TestThreeWayMergeConflict(t *testing.T) {
 	}
 
 	// Both changed: local to complete, remote to blocked
-	decision := threeWayMerge(StageComplete, "OPT_BLOCKED", base)
+	decision := threeWayMerge(StageComplete, "OPT_BLOCKED", "", base)
 
 	if decision.Action != "report-conflict" {
 		t.Errorf("action = %q, want %q", decision.Action, "report-conflict")
@@ -509,6 +509,38 @@ func TestThreeWayMergeConflict(t *testing.T) {
 	}
 }
 
+// TestThreeWayMergeConvergenceCompleteToDone verifies that when both sides changed but
+// converged to the same state, no conflict is reported.
+func TestThreeWayMergeConvergenceCompleteToDone(t *testing.T) {
+	base := BoardBinding{
+		LocalStageBase:     StageActive,
+		RemoteOptionIDBase: "OPT_PROG",
+	}
+
+	// Both changed: local to complete, remote to "Done" (which is what complete maps to)
+	decision := threeWayMerge(StageComplete, "OPT_DONE", "OPT_DONE", base)
+
+	if decision.Action != "converged" {
+		t.Errorf("action = %q, want %q", decision.Action, "converged")
+	}
+}
+
+// TestThreeWayMergeConflictWithExpected verifies that when both sides changed and didn't converge,
+// conflict is still reported even with expectedRemote set.
+func TestThreeWayMergeConflictWithExpected(t *testing.T) {
+	base := BoardBinding{
+		LocalStageBase:     StageActive,
+		RemoteOptionIDBase: "OPT_PROG",
+	}
+
+	// Both changed: local to complete (expects OPT_DONE), but remote moved to BLOCKED
+	decision := threeWayMerge(StageComplete, "OPT_BLOCKED", "OPT_DONE", base)
+
+	if decision.Action != "report-conflict" {
+		t.Errorf("action = %q, want %q", decision.Action, "report-conflict")
+	}
+}
+
 // TestThreeWayMergeHumanMoveToBacklog verifies a specific real scenario.
 func TestThreeWayMergeHumanMoveToBacklog(t *testing.T) {
 	base := BoardBinding{
@@ -517,7 +549,7 @@ func TestThreeWayMergeHumanMoveToBacklog(t *testing.T) {
 	}
 
 	// Human moved card back to backlog/todo
-	decision := threeWayMerge(StageActive, "OPT_TODO", base)
+	decision := threeWayMerge(StageActive, "OPT_TODO", "", base)
 
 	if decision.Action != "report-remote-move" {
 		t.Errorf("action = %q, want %q", decision.Action, "report-remote-move")
@@ -772,7 +804,7 @@ func TestSaveBoardStateAtomicWrite(t *testing.T) {
 // TestArchivedStageOnBoard verifies archived changes map to terminal status.
 func TestArchivedStageOnBoard(t *testing.T) {
 	target := BoardTarget{
-		Owner: "owner",
+		Owner:  "owner",
 		Number: 5,
 	}
 
@@ -794,9 +826,25 @@ func TestThreeWayMergeConvergence(t *testing.T) {
 	}
 
 	// Both changed: local from backlog→active, remote from OPT_TODO→OPT_PROG
-	// This is a "both changed" case — currently reported as conflict.
-	decision := threeWayMerge(StageActive, "OPT_PROG", base)
+	// This is a "both changed" case — reported as conflict.
+	decision := threeWayMerge(StageActive, "OPT_PROG", "", base)
 	if decision.Action != "report-conflict" {
 		t.Errorf("action = %q, want %q", decision.Action, "report-conflict")
+	}
+}
+
+// TestThreeWayMergeConvergenceBothChanged verifies that when both sides changed
+// but the local stage maps to the same option ID as the remote, it converges.
+func TestThreeWayMergeConvergenceBothChanged(t *testing.T) {
+	base := BoardBinding{
+		LocalStageBase:     StageBacklog,
+		RemoteOptionIDBase: "OPT_TODO",
+	}
+
+	// Both changed: local from backlog→active, remote from OPT_TODO→OPT_PROG
+	// Local stage (active) maps to OPT_PROG, which matches the remote.
+	decision := threeWayMerge(StageActive, "OPT_PROG", "OPT_PROG", base)
+	if decision.Action != "converged" {
+		t.Errorf("action = %q, want %q", decision.Action, "converged")
 	}
 }

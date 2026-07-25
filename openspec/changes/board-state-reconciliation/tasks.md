@@ -23,7 +23,7 @@
   - [x] 3.2a No changes: no action — board.go:596-601
   - [x] 3.2b Local only: push local stage to board — board.go:603-609
   - [x] 3.2c Remote only: report human move, do NOT import (Phase 1) — board.go:611-617
-  - [ ] 3.2d Both: check convergence, otherwise report conflict — only reports conflict, no convergence check
+  - [x] 3.2d Both: check convergence, otherwise report conflict — convergence check implemented, `GetBoardItem` added, `resolveExpectedStatus` helper
 - [x] 3.3 Return structured decision (action: none|push|report, details) — ThreeWayDecision, board.go:34-39
 
 ## 4. Human Move Detection & Reporting

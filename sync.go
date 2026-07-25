@@ -147,28 +147,45 @@ func syncOne(ctx context.Context, prov WorkProvider, c Change, dryRun, reconcile
 			// If we have a prior binding, use three-way merge to detect changes.
 			bindingKey := fmt.Sprintf("%s:%d:%s", target.Owner, target.Number, prov.Name())
 			if binding, ok := boardState.Bindings[bindingKey]; ok && !dryRun {
-				// Get current remote state from board (perform board query).
-				// We query just to get the current status, then decide via three-way merge.
-				// For now, ProjectOntoBoard will still query; we just save state after.
-				// Future: optimize to avoid double-query by passing remote state to projector.
-				decision := threeWayMerge(item.Stage, binding.RemoteOptionIDBase, binding)
-				if decision.Action == "report-remote-move" {
-					// Human moved the card; respect it, don't clobber.
-					plan = BoardPlan{
-						ProjectID:     binding.ProjectID,
-						StatusField:   "Status",
-						StatusSkipped: decision.Reason,
+				// Query the board for current remote state.
+				if bquerier, ok := prov.(interface {
+					GetBoardItem(context.Context, BoardTarget, Ref) (string, string, string, error)
+				}); ok {
+					_, _, currentRemoteOptionID, err := bquerier.GetBoardItem(ctx, target, ref)
+					if err != nil {
+						return Ref{}, false, nil, BoardPlan{}, fmt.Errorf("query board item: %w", err)
 					}
-					// Skip the actual ProjectOntoBoard call; the decision stands.
-				} else if decision.Action == "report-conflict" {
-					// Both sides changed; report for manual review.
-					plan = BoardPlan{
-						ProjectID:     binding.ProjectID,
-						StatusField:   "Status",
-						StatusSkipped: decision.Reason,
+
+					// Resolve the expected option ID for the local stage.
+					expectedRemoteOptionID := ""
+					if bproj, ok := prov.(BoardProjector); ok {
+						expectedRemoteOptionID, _, _ = resolveExpectedStatus(ctx, bproj, target, item.Stage, ref)
+					}
+
+					decision := threeWayMerge(item.Stage, currentRemoteOptionID, expectedRemoteOptionID, binding)
+					if decision.Action == "report-remote-move" {
+						// Human moved the card; respect it, don't clobber.
+						plan = BoardPlan{
+							ProjectID:     binding.ProjectID,
+							StatusField:   "Status",
+							StatusSkipped: decision.Reason,
+						}
+					} else if decision.Action == "report-conflict" {
+						// Both sides changed; report for manual review.
+						plan = BoardPlan{
+							ProjectID:     binding.ProjectID,
+							StatusField:   "Status",
+							StatusSkipped: decision.Reason,
+						}
+					} else {
+						// "push-local", "none", or "converged": proceed with normal push.
+						plan, err = bp.ProjectOntoBoard(ctx, target, ref, item, dryRun)
+						if err != nil {
+							return Ref{}, false, nil, BoardPlan{}, err
+						}
 					}
 				} else {
-					// "push-local" or "none": proceed with normal push.
+					// Fallback: no board querier, proceed normally.
 					plan, err = bp.ProjectOntoBoard(ctx, target, ref, item, dryRun)
 					if err != nil {
 						return Ref{}, false, nil, BoardPlan{}, err
