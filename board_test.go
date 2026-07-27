@@ -3,6 +3,7 @@ package specsync
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -846,5 +847,174 @@ func TestThreeWayMergeConvergenceBothChanged(t *testing.T) {
 	decision := threeWayMerge(StageActive, "OPT_PROG", "OPT_PROG", base)
 	if decision.Action != "converged" {
 		t.Errorf("action = %q, want %q", decision.Action, "converged")
+	}
+}
+
+func TestResolveBoard(t *testing.T) {
+	tests := []struct {
+		name         string
+		projectFlag  string
+		configBoard  string
+		wantConfigured bool
+		wantOwner    string
+		wantNumber   int
+		wantRule     BoardRule
+	}{
+		{
+			name:         "flag wins over config",
+			projectFlag:  "acme/6",
+			configBoard:  "other/7",
+			wantConfigured: true,
+			wantOwner:    "acme",
+			wantNumber:   6,
+			wantRule:     BoardRuleFlag,
+		},
+		{
+			name:         "config used when no flag",
+			projectFlag:  "",
+			configBoard:  "org/3",
+			wantConfigured: true,
+			wantOwner:    "org",
+			wantNumber:   3,
+			wantRule:     BoardRuleConfig,
+		},
+		{
+			name:         "no board when neither flag nor config",
+			projectFlag:  "",
+			configBoard:  "",
+			wantConfigured: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a temp dir with optional config.
+			dir := t.TempDir()
+			if tt.configBoard != "" {
+				cfgPath := filepath.Join(dir, SpecSyncConfigPath)
+				cfgDir := filepath.Dir(cfgPath)
+				if err := os.MkdirAll(cfgDir, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(cfgPath, []byte("board: "+tt.configBoard+"\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			got, err := ResolveBoard(tt.projectFlag, dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.Configured() != tt.wantConfigured {
+				t.Errorf("configured = %v, want %v", got.Configured(), tt.wantConfigured)
+			}
+			if tt.wantConfigured {
+				if got.Owner != tt.wantOwner {
+					t.Errorf("owner = %q, want %q", got.Owner, tt.wantOwner)
+				}
+				if got.Number != tt.wantNumber {
+					t.Errorf("number = %d, want %d", got.Number, tt.wantNumber)
+				}
+				if got.Rule != tt.wantRule {
+					t.Errorf("rule = %v, want %v", got.Rule, tt.wantRule)
+				}
+			}
+		})
+	}
+}
+
+func TestBoardRefusal(t *testing.T) {
+	tests := []struct {
+		name      string
+		board     ResolvedBoard
+		repo      ResolvedRepo
+		wantError bool
+	}{
+		{
+			name:      "no board — no refusal",
+			board:     ResolvedBoard{},
+			repo:      ResolvedRepo{Repo: "user/repo"},
+			wantError: false,
+		},
+		{
+			name:      "explicit flag — no refusal even on mismatch",
+			board:     ResolvedBoard{BoardTarget: BoardTarget{Owner: "org", Number: 1}, Rule: BoardRuleFlag},
+			repo:      ResolvedRepo{Repo: "user/repo"},
+			wantError: false,
+		},
+		{
+			name:      "config board matches repo owner — no refusal",
+			board:     ResolvedBoard{BoardTarget: BoardTarget{Owner: "user", Number: 1}, Rule: BoardRuleConfig},
+			repo:      ResolvedRepo{Repo: "user/repo"},
+			wantError: false,
+		},
+		{
+			name:      "config board on different owner — refusal",
+			board:     ResolvedBoard{BoardTarget: BoardTarget{Owner: "org", Number: 1}, Rule: BoardRuleConfig},
+			repo:      ResolvedRepo{Repo: "user/repo"},
+			wantError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := BoardRefusal(tt.board, tt.repo)
+			if tt.wantError && err == nil {
+				t.Error("expected error, got nil")
+			}
+			if !tt.wantError && err != nil {
+				t.Errorf("expected no error, got: %v", err)
+			}
+		})
+	}
+}
+
+func TestParseSpecSyncConfig(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		want    SpecSyncConfig
+	}{
+		{
+			name:  "board only",
+			input: "board: acme/6\n",
+			want:  SpecSyncConfig{Board: "acme/6"},
+		},
+		{
+			name:  "with comments and blank lines",
+			input: "# specsync config\n\nboard: org/3\n",
+			want:  SpecSyncConfig{Board: "org/3"},
+		},
+		{
+			name:  "empty",
+			input: "",
+			want:  SpecSyncConfig{},
+		},
+		{
+			name:    "unknown key ignored",
+			input:   "unknown: value\nboard: acme/6\n",
+			want:    SpecSyncConfig{Board: "acme/6"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseSpecSyncConfig([]byte(tt.input))
+			if got != tt.want {
+				t.Errorf("got %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBoardRuleString(t *testing.T) {
+	if got := BoardRuleFlag.String(); got != "flag" {
+		t.Errorf("BoardRuleFlag.String() = %q, want %q", got, "flag")
+	}
+	if got := BoardRuleConfig.String(); got != "config" {
+		t.Errorf("BoardRuleConfig.String() = %q, want %q", got, "config")
+	}
+	if got := BoardRule(99).String(); got != "unknown" {
+		t.Errorf("unknown rule String() = %q, want %q", got, "unknown")
 	}
 }

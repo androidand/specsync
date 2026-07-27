@@ -80,7 +80,21 @@ specsync -dry-run            # preview the gh commands + rendered issue bodies (
 specsync -dry-run -change X    # preview a single change
 specsync                     # create/update issues for every change
 specsync -change X             # sync just one change
+specsync -repo owner/name      # target a specific repo (see resolution order below)
 specsync -openspec path/to/openspec   # point at a non-default openspec dir
+
+**Repo resolution order**, first match wins:
+
+1. `-repo owner/name` (explicit flag — overrides everything).
+2. `gh repo set-default` — the repository configured for this checkout, since
+   that is the user's stated intent.
+3. The `origin` remote.
+
+Every `gh` invocation carries an explicit `--repo`. When `origin` and `upstream`
+name different repositories (fork divergence), specsync targets `origin` and
+reports the divergence. It refuses to write to the upstream parent without an
+explicit `-repo` — a fork user's internal planning content should not silently
+appear on someone else's repository.
 ```
 
 All subcommands, at a glance:
@@ -282,8 +296,19 @@ assigned:
 ```bash
 specsync -project my-org/6                        # sync + project onto board 6
 specsync -project my-org/6 -status-map "active=In Progress,archived=Done"
-SPECSYNC_PROJECT=my-org/6 specsync                 # env var, so it need not be retyped
 ```
+
+Board resolution order, first match wins:
+
+1. `-project owner/number` (explicit flag — overrides everything).
+2. Repository-local declaration: `openspec/specsync.yml` with `board: owner/number`.
+3. **No board** — specsync makes zero board calls.
+
+There is deliberately **no global board default** (no env var, no `~/.config`
+setting). A shell-wide value that spans every repository is the exact mechanism
+by which personal work reaches a work board. If the board's owner differs from
+the resolved repository's owner, specsync refuses unless `-project` names it
+explicitly.
 
 Unset (the default), specsync makes zero board calls — completely
 backward-compatible. Status option names resolve case-insensitively against

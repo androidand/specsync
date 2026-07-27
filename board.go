@@ -731,3 +731,135 @@ func saveBoardBinding(changeDir string, target BoardTarget, provider string, sta
 	state.Bindings[bindingKey] = binding
 	return SaveBoardState(changeDir, state)
 }
+
+// SpecSyncConfig holds repository-local specsync configuration read from
+// openspec/specsync.yml.
+type SpecSyncConfig struct {
+	Board string // board as "owner/number"; empty = no board
+}
+
+// SpecSyncConfigPath is the conventional config file location relative to
+// the repository root.
+const SpecSyncConfigPath = "openspec/specsync.yml"
+
+// ReadSpecSyncConfig reads the repository-local config file. Returns the zero
+// config when the file is absent or unreadable.
+func ReadSpecSyncConfig(root string) SpecSyncConfig {
+	path := filepath.Join(root, SpecSyncConfigPath)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return SpecSyncConfig{}
+	}
+	return parseSpecSyncConfig(data)
+}
+
+// parseSpecSyncConfig parses a minimal YAML-like config. Supports lines of the
+// form "key: value" (top-level only, no nesting). Unknown keys are ignored.
+func parseSpecSyncConfig(data []byte) SpecSyncConfig {
+	cfg := SpecSyncConfig{}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		k, v, ok := strings.Cut(line, ":")
+		if !ok {
+			continue
+		}
+		k = strings.TrimSpace(k)
+		v = strings.TrimSpace(v)
+		switch k {
+		case "board":
+			cfg.Board = v
+		}
+	}
+	return cfg
+}
+
+// BoardRule names which mechanism selected a board target.
+type BoardRule int
+
+const (
+	BoardRuleFlag  BoardRule = iota // -project flag
+	BoardRuleConfig                 // openspec/specsync.yml
+)
+
+func (r BoardRule) String() string {
+	switch r {
+	case BoardRuleFlag:
+		return "flag"
+	case BoardRuleConfig:
+		return "config"
+	default:
+		return "unknown"
+	}
+}
+
+// ResolvedBoard holds the resolved board target and which rule selected it.
+type ResolvedBoard struct {
+	BoardTarget
+	Rule BoardRule
+}
+
+// ResolveBoard implements the board resolution order:
+// 1. -project flag (explicit)
+// 2. Repository-local declaration (openspec/specsync.yml)
+// 3. No board
+//
+// SPECSYNC_PROJECT is NOT used as a fallback — a shell-wide value that spans
+// every repository is the exact mechanism by which personal work reaches a
+// work board.
+func ResolveBoard(projectFlag string, root string) (ResolvedBoard, error) {
+	// 1. Explicit flag.
+	if strings.TrimSpace(projectFlag) != "" {
+		return parseBoardTarget(projectFlag, BoardRuleFlag)
+	}
+
+	// 2. Repository-local config.
+	cfg := ReadSpecSyncConfig(root)
+	if strings.TrimSpace(cfg.Board) != "" {
+		return parseBoardTarget(cfg.Board, BoardRuleConfig)
+	}
+
+	// 3. No board.
+	return ResolvedBoard{}, nil
+}
+
+// parseBoardTarget parses an "owner/number" string into a ResolvedBoard.
+func parseBoardTarget(s string, rule BoardRule) (ResolvedBoard, error) {
+	s = strings.TrimSpace(s)
+	parts := strings.Split(s, "/")
+	if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" {
+		return ResolvedBoard{}, fmt.Errorf("board must be owner/number, got %q", s)
+	}
+	number, err := strconv.Atoi(strings.TrimSpace(parts[1]))
+	if err != nil {
+		return ResolvedBoard{}, fmt.Errorf("board number is invalid in %q: %w", s, err)
+	}
+	return ResolvedBoard{
+		BoardTarget: BoardTarget{
+			Owner:  strings.TrimSpace(parts[0]),
+			Number: number,
+		},
+		Rule: rule,
+	}, nil
+}
+
+// BoardRefusal checks whether the resolved board's owner differs from the
+// resolved repository's owner. Returns an error when the board is NOT
+// explicitly named (rule != BoardRuleFlag) and the owners differ.
+func BoardRefusal(board ResolvedBoard, repo ResolvedRepo) error {
+	if !board.Configured() {
+		return nil
+	}
+	// Explicit flag always wins — the user chose this board.
+	if board.Rule == BoardRuleFlag {
+		return nil
+	}
+	repoOwner := strings.Split(repo.Repo, "/")[0]
+	if repoOwner != "" && board.Owner != repoOwner {
+		return fmt.Errorf("board %s belongs to %q, but repo %s is owned by %q — set -project explicitly to override",
+			board.Owner, board.Owner, repo.Repo, repoOwner)
+	}
+	return nil
+}

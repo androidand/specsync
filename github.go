@@ -23,7 +23,8 @@ type PRState struct {
 // holds no GitHub SDK dependency; everything is shelled out, which keeps this
 // package free of network/auth code and easy to fake in tests by swapping run.
 type GitHubProvider struct {
-	repo string // optional "owner/name"; empty = auto-detect from git remote
+	resolved ResolvedRepo // resolved repo and rule; zero = not yet resolved
+	explicit string       // -repo flag; empty if not set
 	// run executes gh and returns trimmed stdout. Overridable in tests.
 	run func(ctx context.Context, args ...string) (string, error)
 
@@ -39,16 +40,16 @@ type GitHubProvider struct {
 }
 
 // NewGitHubProvider returns a provider that drives the real `gh` binary,
-// targeting the repo auto-detected from the current directory's git remote.
+// resolving the target repo explicitly (explicit flag → gh-set-default → origin).
 func NewGitHubProvider() *GitHubProvider {
 	return &GitHubProvider{run: runGH}
 }
 
 // NewGitHubProviderWithRepo returns a provider targeting an explicit repo
-// ("owner/name") instead of the git-remote-detected one. The ref cache key
-// becomes "github:owner/name" so cross-repo refs coexist in one refs.json.
+// ("owner/name") instead of resolving it. The ref cache key becomes
+// "github:owner/name" so cross-repo refs coexist in one refs.json.
 func NewGitHubProviderWithRepo(repo string) *GitHubProvider {
-	return &GitHubProvider{repo: repo, run: runGH}
+	return &GitHubProvider{explicit: repo, run: runGH}
 }
 
 // NewGitHubProviderFunc returns a provider driven by the given runner instead of
@@ -58,7 +59,7 @@ func NewGitHubProviderFunc(run func(ctx context.Context, args ...string) (string
 }
 
 func NewGitHubProviderFuncWithRepo(repo string, run func(ctx context.Context, args ...string) (string, error)) *GitHubProvider {
-	return &GitHubProvider{repo: repo, run: run}
+	return &GitHubProvider{explicit: repo, run: run}
 }
 
 func runGH(ctx context.Context, args ...string) (string, error) {
@@ -83,25 +84,53 @@ func (p *GitHubProvider) Name() string {
 }
 
 func (p *GitHubProvider) resolveKey(ctx context.Context) string {
-	repo := p.repo
-	if repo == "" {
-		if out, err := p.run(ctx, "repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"); err == nil {
-			repo = strings.TrimSpace(out)
-		}
-	}
+	repo, _ := p.resolveRepo(ctx)
 	if repo == "" {
 		return "github"
 	}
 	return "github:" + repo
 }
 
-// repoFlag returns ["--repo", "owner/name"] when a repo override is set,
-// or nil when gh should auto-detect from the git remote.
-func (p *GitHubProvider) repoFlag() []string {
-	if p.repo != "" {
-		return []string{"--repo", p.repo}
+// resolveRepo returns the repo string, resolving explicitly if needed.
+func (p *GitHubProvider) resolveRepo(ctx context.Context) (string, RepoRule) {
+	if p.resolved.Repo != "" {
+		return p.resolved.Repo, p.resolved.Rule
 	}
-	return nil
+	resolver := NewRepoResolverFunc(p.explicit, p.run)
+	resolved, err := resolver.Resolve(ctx)
+	if err != nil {
+		// Degrade: use gh auto-detect as fallback.
+		if out, err2 := p.run(ctx, "repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"); err2 == nil {
+			resolved = ResolvedRepo{Repo: strings.TrimSpace(out), Rule: RuleDefault}
+		}
+	}
+	p.resolved = resolved
+	return resolved.Repo, resolved.Rule
+}
+
+// Resolve resolves the target repo and returns it with the rule that selected it.
+// Call this before any write to verify the target.
+func (p *GitHubProvider) Resolve(ctx context.Context) (ResolvedRepo, error) {
+	repo, rule := p.resolveRepo(ctx)
+	return ResolvedRepo{Repo: repo, Rule: rule}, nil
+}
+
+// CheckForkDivergence returns (divergent, upstreamRepo) if origin and upstream
+// name different repos. Returns false when the user explicitly named the repo
+// via -repo (their choice) or when there's no upstream.
+func (p *GitHubProvider) CheckForkDivergence(ctx context.Context) (bool, string, error) {
+	repo, rule := p.resolveRepo(ctx)
+	return IsForkDivergence(ctx, ResolvedRepo{Repo: repo, Rule: rule})
+}
+
+// repoFlag returns ["--repo", "owner/name"] with the resolved repo.
+// Unlike the old behavior, this always returns a flag — gh never auto-detects.
+func (p *GitHubProvider) repoFlag() []string {
+	repo, _ := p.resolveRepo(context.Background())
+	if repo == "" {
+		return nil
+	}
+	return []string{"--repo", repo}
 }
 
 // Get reads an existing issue so it can be pulled into a local change. It
@@ -384,6 +413,9 @@ func (p *GitHubProvider) labelDelta(ctx context.Context, num string, desired []s
 }
 
 func desiredLabels(item WorkItem) []string {
+	if item.Labels != nil {
+		return item.Labels
+	}
 	labels := []string{"specsync", "stage:" + string(item.Stage)}
 	if item.Priority > 0 {
 		labels = append(labels, fmt.Sprintf("priority:%d", item.Priority))

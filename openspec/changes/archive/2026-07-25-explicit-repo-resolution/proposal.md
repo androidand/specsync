@@ -53,3 +53,7 @@ This is a correctness and blast-radius defect, not an ergonomics one: the tool w
 - Dry-run output — prints the resolved `owner/name` and which rule produced it.
 - Behaviour change for existing fork users: runs that previously targeted the parent now target `origin`, or refuse. This is the fix, but it is a visible change and belongs in release notes.
 - Any workflow that deliberately relied on implicit parent targeting must now pass `-repo` explicitly.
+
+## Release note
+
+**Repo resolution is now explicit.** specsync resolves the target repository deterministically and always passes `--repo` to every `gh` invocation. Resolution order: `-repo` flag → `gh repo set-default` → `origin`. Fork-parent writes are refused by default; use `-repo` to override. Board resolution also gained a repository-local declaration: `openspec/specsync.yml` with `board: owner/number`. The `-project` flag and this config file are the only ways to set a board; the `SPECSYNC_PROJECT` env var is no longer used.
