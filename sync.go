@@ -16,6 +16,10 @@ type Options struct {
 	Reconcile      bool          // when true, merge issue checkbox state into tasks.md before pushing
 	CloseCompleted bool          // when true, a change whose every task is checked projects as closed
 	Project        BoardTarget   // optional GitHub Projects board; unset = no board operations
+	// Linker, when set, is consulted to resolve a change's issue ref when no
+	// cached ref exists. The first resolver to return a non-nil Ref wins,
+	// causing the sync to update the existing issue instead of creating a new one.
+	Linker Linker
 }
 
 // Result reports what a sync run did.
@@ -110,6 +114,15 @@ func Sync(ctx context.Context, opts Options) (Result, error) {
 			var existingPtr *Ref
 			if hadRef {
 				existingPtr = &existing
+			}
+
+			// When no cached ref, consult the Linker to resolve the issue
+			// (e.g. from branch name, marker, or external source).
+			if existingPtr == nil && opts.Linker != nil {
+				if ref, lerr := opts.Linker.Resolve(ctx, c.Dir); lerr == nil && ref != nil {
+					existingPtr = ref
+					hadRef = true
+				}
 			}
 
 			// For providers with an existing issue: reconcile inbound before
