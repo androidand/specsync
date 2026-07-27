@@ -152,28 +152,6 @@ Writes this skill file into the known global agent dirs. `--all` covers every su
 specsync trace [-change <change>] [-since <ref>] [-until <ref>] [-json] [-openspec <dir>]
 ```
 
-### Multi-agent worktree handoff
-
-When several agents work across repositories, use OpenSpec `references:` and
-`openspec workset` as the location source of truth, then run the coordination
-report before editing or merging. The report should establish:
-
-- the change, synced issue, and explicit provider (`-provider github` or
-  `-provider beads`);
-- each agent's worktree, branch, base/current revision, claimed tasks, and owned
-  paths;
-- duplicate worktrees or overlapping ownership;
-- stale bases, dirty/unpushed branches, missing PRs, and unresolved
-  `Blocked by` dependencies;
-- the deterministic merge order and post-merge cleanup actions.
-
-The report is read-only. It must recommend a handoff, rebase, sync, merge,
-archive, or cleanup command without executing those mutations. Use typed
-`## Blocked by` / `## Blocks` links for ordering; use `## Related` only for
-symmetric association. If related changes use different providers, make the
-provider explicit before attempting to link them instead of relying on
-auto-detection.
-
 ## Workflow
 
 ### Spec-first (plan → issue)
