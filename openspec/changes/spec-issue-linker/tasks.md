@@ -15,11 +15,11 @@
 ## 3. Integration
 
 - [x] 3.1 Wire Linker into sync engine ahead of provider `Find`
-- [ ] 3.2 Use Linker in `pull` for issue-first flow (resolve branch → issue)
+- [x] 3.2 Use Linker in `pull` for issue-first flow (resolve branch → issue)
 - [x] 3.3 Support spec-first creation when no link resolves (existing behavior)
 
 ## 4. Verification
 
 - [x] 4.1 Tests: branch-name pattern matching, marker parsing, cache lookup, chain order
-- [ ] 4.2 Integration test: sync resolves issue via branch name without explicit ref
-- [ ] 4.3 Update the specsync skill: how Linker resolves issues from branches/markers
+- [x] 4.2 Integration test: sync resolves issue via branch name without explicit ref
+- [x] 4.3 Update the specsync skill: how Linker resolves issues from branches/markers

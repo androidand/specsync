@@ -15,6 +15,10 @@ type Linker interface {
 	// Resolve returns the Ref for the given change directory. Returns nil if
 	// no resolver found a match.
 	Resolve(ctx context.Context, changeDir string) (*Ref, error)
+	// ResolveFromContext resolves without a change directory, using only
+	// the context (e.g., current branch name). Returns (nil, nil) if not
+	// supported by this linker.
+	ResolveFromContext(ctx context.Context) (*Ref, error)
 }
 
 // ChainLinker tries each resolver in order until one returns a non-nil Ref.
@@ -50,6 +54,26 @@ func (c *ChainLinker) Resolve(ctx context.Context, changeDir string) (*Ref, erro
 	return nil, nil
 }
 
+func (c *ChainLinker) ResolveFromContext(ctx context.Context) (*Ref, error) {
+	for _, r := range c.resolvers {
+		if cr, ok := r.(contextResolver); ok {
+			ref, err := cr.ResolveFromContext(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("resolver: %w", err)
+			}
+			if ref != nil {
+				return ref, nil
+			}
+		}
+	}
+	return nil, nil
+}
+
+// contextResolver is a resolver that can resolve without a change directory.
+type contextResolver interface {
+	ResolveFromContext(ctx context.Context) (*Ref, error)
+}
+
 // BranchResolver extracts an issue number from the current git branch name.
 // The pattern is configurable; default: `feat/(\d+)-.*` or `fix/(\d+)-.*`.
 type BranchResolver struct {
@@ -70,6 +94,14 @@ func NewBranchResolver(repo string, pats ...*regexp.Regexp) *BranchResolver {
 }
 
 func (b *BranchResolver) Resolve(_ context.Context, changeDir string) (*Ref, error) {
+	return b.resolveFromBranch()
+}
+
+func (b *BranchResolver) ResolveFromContext(_ context.Context) (*Ref, error) {
+	return b.resolveFromBranch()
+}
+
+func (b *BranchResolver) resolveFromBranch() (*Ref, error) {
 	if b.repo == "" {
 		return nil, nil
 	}
@@ -124,6 +156,10 @@ func (m *MarkerResolver) Resolve(ctx context.Context, changeDir string) (*Ref, e
 	return ref, nil
 }
 
+func (m *MarkerResolver) ResolveFromContext(_ context.Context) (*Ref, error) {
+	return nil, nil
+}
+
 // CacheResolver reads the local .specsync/refs.json cache.
 type CacheResolver struct {
 	providerName string // e.g. "github:owner/repo" or "github"
@@ -155,6 +191,10 @@ func (c *CacheResolver) Resolve(_ context.Context, changeDir string) (*Ref, erro
 	return nil, nil
 }
 
+func (c *CacheResolver) ResolveFromContext(_ context.Context) (*Ref, error) {
+	return nil, nil
+}
+
 // ExternalResolver is a configurable hook for external relation sources
 // (e.g. MCP, database, or custom logic).
 type ExternalResolver struct {
@@ -168,6 +208,10 @@ func NewExternalResolver(fn func(ctx context.Context, changeDir string) (*Ref, e
 
 func (e *ExternalResolver) Resolve(ctx context.Context, changeDir string) (*Ref, error) {
 	return e.fn(ctx, changeDir)
+}
+
+func (e *ExternalResolver) ResolveFromContext(_ context.Context) (*Ref, error) {
+	return nil, nil
 }
 
 // currentBranch returns the current git branch name, or "" if not on a branch.

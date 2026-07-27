@@ -29,3 +29,7 @@ flows converge on the same link.
 - `Linker` interface + chained resolver.
 - Branch-name resolver (configurable pattern).
 - Wire the resolver into the sync engine ahead of provider `Find`.
+
+## Release note
+
+Linker resolves spec↔issue from branch name, marker, or cache — sync updates the right issue instead of creating a duplicate.

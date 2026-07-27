@@ -314,7 +314,7 @@ func runSync(args []string) {
 func runPull(args []string) {
 	fs := flag.NewFlagSet("pull", flag.ExitOnError)
 	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
-	issue := fs.String("issue", "", "issue number to pull into a local change (required)")
+	issue := fs.String("issue", "", "issue number to pull into a local change (auto-resolved from branch name like feat/42-change when omitted)")
 	change := fs.String("change", "", "change name (default: derived from the issue title)")
 	repo := fs.String("repo", "", "source repo as owner/name (default: auto-detect from git remote)")
 	dryRun := fs.Bool("dry-run", false, "show what would be written without touching disk")
@@ -328,9 +328,6 @@ func runPull(args []string) {
 	}
 	_ = fs.Parse(args)
 
-	if strings.TrimSpace(*issue) == "" {
-		fail(fmt.Errorf("pull: -issue is required"))
-	}
 	abs, err := filepath.Abs(*openspec)
 	if err != nil {
 		fail(err)
@@ -354,6 +351,9 @@ func runPull(args []string) {
 		StatusMapping: statusMapping,
 	}
 
+	// Auto-resolve issue from branch name when -issue is not provided.
+	linker := buildPullLinker(*repo)
+
 	if *worktree {
 		runPullWithWorktree(*issue, *change, *repo, *dryRun, target, *worktreeDir)
 		return
@@ -366,6 +366,7 @@ func runPull(args []string) {
 		Slug:        *change,
 		DryRun:      *dryRun,
 		Project:     target,
+		Linker:      linker,
 	})
 	if err != nil {
 		fail(err)
@@ -373,15 +374,15 @@ func runPull(args []string) {
 
 	dest := filepath.Join("openspec", "changes", res.Slug)
 	if *dryRun {
-		fmt.Printf("DRY RUN — would write %s from issue %s\n\n", dest, *issue)
+		fmt.Printf("DRY RUN — would write %s from issue %s\n\n", dest, res.IssueID)
 		printPreview("proposal.md", res.Proposal)
 		if res.Tasks != "" {
 			printPreview("tasks.md", res.Tasks)
 		}
 		if res.MarkerPresent {
-			fmt.Printf("\nissue %s already carries the marker %s (no edit needed)\n", *issue, res.Marker)
+			fmt.Printf("\nissue %s already carries the marker %s (no edit needed)\n", res.IssueID, res.Marker)
 		} else {
-			fmt.Printf("\nwould add marker to issue %s body: %s\n", *issue, res.Marker)
+			fmt.Printf("\nwould add marker to issue %s body: %s\n", res.IssueID, res.Marker)
 		}
 		if res.TitleSuggestion != "" {
 			fmt.Printf("\ntitle could be tighter: %q — edit the proposal.md H1 if you agree\n", res.TitleSuggestion)
@@ -391,7 +392,7 @@ func runPull(args []string) {
 		}
 		return
 	}
-	fmt.Printf("specsync: pulled issue %s -> %s\n", *issue, dest)
+	fmt.Printf("specsync: pulled issue %s -> %s\n", res.IssueID, dest)
 	fmt.Println("  + proposal.md")
 	if res.Tasks != "" {
 		fmt.Println("  + tasks.md")
@@ -722,6 +723,18 @@ func makeProvider(repo string, dryRun bool, provider string) specsync.WorkProvid
 		}
 		return specsync.NewGitHubProvider()
 	}
+}
+
+// buildPullLinker creates a Linker for the pull command. It resolves the issue
+// from the current branch name (e.g., feat/42-change → #42) so -issue is
+// optional when on an issue-linked branch.
+func buildPullLinker(repo string) specsync.Linker {
+	r, err := getRepoName(context.Background(), repo)
+	if err != nil {
+		return nil
+	}
+	br := specsync.NewBranchResolver(r)
+	return specsync.NewChainLinker(br)
 }
 
 // parseStatusMapping parses "-status-map" (falling back to $SPECSYNC_STATUS_MAP)
