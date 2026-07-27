@@ -6,8 +6,9 @@
 - [ ] Version-guard + tolerant-parse the JSON (same discipline as the OpenSpec trace adapter); degrade cleanly when absent/older
 
 ## Surface in planning output
-- [ ] Add referenced siblings to `scan`/`relate`: sibling repo, local folder, its related changes/issues
+- [ ] Add referenced siblings to `scan` output: sibling repo, local folder, its related changes/issues
 - [ ] Optional `--references` view that lists just the coordination graph
+- [ ] Add referenced siblings to `relate` output once `work-graph` ships the `relate` subcommand
 
 ## Suggest tracker edges (never auto-create)
 - [ ] Where a reference implies a dependency, suggest a `## Blocked by` entry for confirmation
