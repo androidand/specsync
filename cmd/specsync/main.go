@@ -256,6 +256,7 @@ func runSync(args []string) {
 		Reconcile:      *reconcile,
 		CloseCompleted: *closeCompleted,
 		Project:        target,
+		Linker:         buildSyncLinker(*repo, providers),
 	})
 	if err != nil {
 		fail(err)
@@ -351,9 +352,6 @@ func runPull(args []string) {
 		StatusMapping: statusMapping,
 	}
 
-	// Auto-resolve issue from branch name when -issue is not provided.
-	linker := buildPullLinker(*repo)
-
 	if *worktree {
 		runPullWithWorktree(*issue, *change, *repo, *dryRun, target, *worktreeDir)
 		return
@@ -366,7 +364,6 @@ func runPull(args []string) {
 		Slug:        *change,
 		DryRun:      *dryRun,
 		Project:     target,
-		Linker:      linker,
 	})
 	if err != nil {
 		fail(err)
@@ -703,6 +700,23 @@ func detectProvider(provider string) (string, string) {
 	return "github", ""
 }
 
+// buildSyncLinker builds a ChainLinker for sync with discovery resolvers
+// in priority order: branch only. The cache is NOT a resolver here — the
+// provider loop already reads the cache for each provider. Including the
+// cache in the Linker would return a ref from one provider and use it as
+// a fallback for another, causing cross-provider ref pollution.
+func buildSyncLinker(repo string, providers []specsync.WorkProvider) specsync.Linker {
+	var resolvers []specsync.Resolver
+
+	// Branch resolver — slug-aware to prevent resolving all changes to the
+	// same issue when syncing multiple changes at once.
+	if repo != "" {
+		resolvers = append(resolvers, specsync.NewBranchResolver(repo))
+	}
+
+	return specsync.NewChainLinker(resolvers...)
+}
+
 // makeProvider builds the selected work provider, substituting a dry-runner that
 // prints commands instead of executing them when dryRun is set. github
 // (default) targets repo (auto-detect when empty); beads drives the local `bd`
@@ -723,18 +737,6 @@ func makeProvider(repo string, dryRun bool, provider string) specsync.WorkProvid
 		}
 		return specsync.NewGitHubProvider()
 	}
-}
-
-// buildPullLinker creates a Linker for the pull command. It resolves the issue
-// from the current branch name (e.g., feat/42-change → #42) so -issue is
-// optional when on an issue-linked branch.
-func buildPullLinker(repo string) specsync.Linker {
-	r, err := getRepoName(context.Background(), repo)
-	if err != nil {
-		return nil
-	}
-	br := specsync.NewBranchResolver(r)
-	return specsync.NewChainLinker(br)
 }
 
 // parseStatusMapping parses "-status-map" (falling back to $SPECSYNC_STATUS_MAP)

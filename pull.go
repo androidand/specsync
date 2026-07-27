@@ -13,20 +13,17 @@ import (
 type PullOptions struct {
 	OpenSpecDir string       // path to the spec root (openspec/, beads/, etc.)
 	Provider    WorkProvider // must implement IssueReader
-	IssueID     string       // provider id of the issue to pull (e.g. "42"); when empty, Linker is consulted
+	IssueID     string       // provider id of the issue to pull (e.g. "42"); when empty, resolved from branch name
 	Slug        string       // change slug; derived from the issue when empty
 	DryRun      bool         // when true, render but never touch disk
 	Project     BoardTarget  // optional GitHub Projects board; unset = no board operations
-	// Linker, when set and IssueID is empty, resolves the issue from context
-	// (e.g., current branch name). Returns error if no issue can be resolved.
-	Linker Linker
 }
 
 // PullResult reports what a pull produced (or would produce on a dry run).
 type PullResult struct {
 	Slug        string
 	Dir         string
-	IssueID     string // resolved issue ID (from -issue flag or Linker)
+	IssueID     string // resolved issue ID (from -issue flag or branch name)
 	IssueURL    string
 	Proposal    string
 	Tasks       string
@@ -63,17 +60,23 @@ func Pull(ctx context.Context, opts PullOptions) (PullResult, error) {
 
 	issueID := strings.TrimSpace(opts.IssueID)
 	if issueID == "" {
-		if opts.Linker == nil {
-			return PullResult{}, fmt.Errorf("issue id is required when no linker is set")
+		if opts.Provider.Name() != "github" && !strings.HasPrefix(opts.Provider.Name(), "github:") {
+			return PullResult{}, fmt.Errorf("issue id is required for non-github providers")
 		}
-		ref, err := opts.Linker.ResolveFromContext(ctx)
+		// Resolve issue from branch name (e.g., feat/42-change → #42).
+		repo := opts.Provider.Name()
+		if strings.HasPrefix(repo, "github:") {
+			repo = strings.TrimPrefix(repo, "github:")
+		}
+		br := NewBranchResolver(repo)
+		result, err := br.Resolve(ctx, "")
 		if err != nil {
-			return PullResult{}, fmt.Errorf("resolve issue from context: %w", err)
+			return PullResult{}, fmt.Errorf("resolve issue from branch: %w", err)
 		}
-		if ref == nil {
-			return PullResult{}, fmt.Errorf("could not resolve issue from context; specify -issue or use an issue-linked branch (e.g., feat/42-change-name)")
+		if result == nil || result.Ref == nil {
+			return PullResult{}, fmt.Errorf("could not resolve issue from branch name; specify -issue or use an issue-linked branch (e.g., feat/42-change-name)")
 		}
-		issueID = ref.ID
+		issueID = result.Ref.ID
 	}
 
 	item, err := reader.Get(ctx, issueID)

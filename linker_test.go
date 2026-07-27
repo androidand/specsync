@@ -2,124 +2,31 @@ package specsync
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"testing"
 )
 
-func TestChainLinker_FirstHitWins(t *testing.T) {
-	counts := [2]int{}
-	r1 := &stubResolver{
-		resolve: func(ctx context.Context, changeDir string) (*Ref, error) {
-			counts[0]++
-			return &Ref{Provider: "p1", ID: "1", URL: "http://p1/1"}, nil
-		},
-	}
-	r2 := &stubResolver{
-		resolve: func(ctx context.Context, changeDir string) (*Ref, error) {
-			counts[1]++
-			return &Ref{Provider: "p2", ID: "2", URL: "http://p2/2"}, nil
-		},
-	}
-
-	l := NewChainLinker(r1, r2)
-	ref, err := l.Resolve(context.Background(), "x")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if ref.Provider != "p1" {
-		t.Errorf("expected p1, got %s", ref.Provider)
-	}
-	if counts[1] != 0 {
-		t.Errorf("r2 was called; expected only r1 to run")
-	}
-}
-
-func TestChainLinker_PassThrough(t *testing.T) {
-	counts := [2]int{}
-	r1 := &stubResolver{
-		resolve: func(ctx context.Context, changeDir string) (*Ref, error) {
-			counts[0]++
-			return nil, nil
-		},
-	}
-	r2 := &stubResolver{
-		resolve: func(ctx context.Context, changeDir string) (*Ref, error) {
-			counts[1]++
-			return &Ref{Provider: "p2", ID: "2", URL: "http://p2/2"}, nil
-		},
-	}
-
-	l := NewChainLinker(r1, r2)
-	ref, err := l.Resolve(context.Background(), "x")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if ref.Provider != "p2" {
-		t.Errorf("expected p2, got %s", ref.Provider)
-	}
-	if counts[0] != 1 || counts[1] != 1 {
-		t.Errorf("expected both resolvers called, got counts=%v", counts)
-	}
-}
-
-func TestChainLinker_NoHit(t *testing.T) {
-	r1 := &stubResolver{resolve: func(ctx context.Context, changeDir string) (*Ref, error) {
-		return nil, nil
-	}}
-	r2 := &stubResolver{resolve: func(ctx context.Context, changeDir string) (*Ref, error) {
-		return nil, nil
-	}}
-
-	l := NewChainLinker(r1, r2)
-	ref, err := l.Resolve(context.Background(), "x")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if ref != nil {
-		t.Errorf("expected nil ref, got %v", ref)
-	}
-}
-
-func TestChainLinker_ErrorPropagates(t *testing.T) {
-	r1 := &stubResolver{
-		resolve: func(ctx context.Context, changeDir string) (*Ref, error) {
-			return nil, os.ErrPermission
-		},
-	}
-
-	l := NewChainLinker(r1)
-	ref, err := l.Resolve(context.Background(), "x")
-	if err == nil {
-		t.Fatalf("expected error, got nil")
-	}
-	if ref != nil {
-		t.Errorf("expected nil ref, got %v", ref)
-	}
-}
-
 func TestBranchResolver_ExtractsFromBranch(t *testing.T) {
-	ctx := context.Background()
-	branchResolver := NewBranchResolver("androidand/specsync")
+	br := NewBranchResolver("androidand/specsync")
 
-	// This test depends on the actual git branch. Skip if not on a matching branch.
-	ref, err := branchResolver.Resolve(ctx, "some-change")
+	result, err := br.Resolve(context.Background(), "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// If we're on a feat/N- branch, we should get a ref.
-	if ref != nil {
-		if ref.Provider != "github:androidand/specsync" {
-			t.Errorf("unexpected provider: %s", ref.Provider)
+	if result != nil && result.Ref != nil {
+		if result.Ref.Provider != "github:androidand/specsync" {
+			t.Errorf("unexpected provider: %s", result.Ref.Provider)
 		}
 	}
 }
 
 func TestBranchResolver_EmptyRepoReturnsNil(t *testing.T) {
 	r := NewBranchResolver("")
-	ref, err := r.Resolve(context.Background(), "x")
+	ref, err := r.Resolve(context.Background(), "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -130,396 +37,305 @@ func TestBranchResolver_EmptyRepoReturnsNil(t *testing.T) {
 
 func TestBranchResolver_CustomPattern(t *testing.T) {
 	repo := "androidand/specsync"
-	pat := regexp.MustCompile(`^custom/(\d+)-.*`)
+	pat := regexp.MustCompile(`^custom/(\d+)-(.+)$`)
 	r := NewBranchResolver(repo, pat)
 
-	// Won't match feat/123-foo branch, so returns nil.
-	ref, err := r.Resolve(context.Background(), "x")
+	result, err := r.Resolve(context.Background(), "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// Will be nil unless we happen to be on a custom/N- branch.
-	if ref != nil && ref.Provider != "github:"+repo {
-		t.Errorf("unexpected provider: %s", ref.Provider)
+
+	if result != nil && result.Ref != nil && result.Ref.Provider != "github:"+repo {
+		t.Errorf("unexpected provider: %s", result.Ref.Provider)
 	}
 }
 
-func TestMarkerResolver_FindsMarker(t *testing.T) {
-	dir := t.TempDir()
-	// Create a minimal change directory with a proposal.md
-	changeDir := filepath.Join(dir, "openspec", "changes", "test-change")
-	if err := os.MkdirAll(changeDir, 0755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(changeDir, "proposal.md"), []byte("# Test Change\n\nBody\n"), 0644); err != nil {
-		t.Fatal(err)
-	}
+func TestBranchResolver_SlugAware_Match(t *testing.T) {
+	// Simulate being on feat/42-my-change branch; resolving for "my-change" should match.
+	prev := currentBranchFn
+	currentBranchFn = func() (string, error) { return "feat/42-my-change", nil }
+	defer func() { currentBranchFn = prev }()
 
-	expected := &Ref{Provider: "test", ID: "42", URL: "http://test/42"}
-	provider := &markerStubProvider{
-		findFunc: func(ctx context.Context, slug string) (*Ref, error) {
-			if slug != "test-change" {
-				t.Errorf("expected slug test-change, got %s", slug)
-			}
-			return expected, nil
-		},
-	}
-
-	r := NewMarkerResolver(provider)
-	ref, err := r.Resolve(context.Background(), changeDir)
+	br := NewBranchResolver("owner/repo")
+	result, err := br.Resolve(context.Background(), "openspec/changes/my-change")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if ref == nil {
+	if result == nil || result.Ref == nil {
 		t.Fatal("expected ref, got nil")
 	}
-	if ref.Provider != expected.Provider || ref.ID != expected.ID {
-		t.Errorf("expected %+v, got %+v", expected, ref)
+	if result.Ref.ID != "42" {
+		t.Errorf("expected ID 42, got %s", result.Ref.ID)
+	}
+	if result.Ref.Provider != "github:owner/repo" {
+		t.Errorf("unexpected provider: %s", result.Ref.Provider)
+	}
+	if result.Ref.URL != "https://github.com/owner/repo/issues/42" {
+		t.Errorf("unexpected URL: %s", result.Ref.URL)
+	}
+	if result.Source != "branch" {
+		t.Errorf("expected source branch, got %s", result.Source)
 	}
 }
 
-func TestMarkerResolver_NoMarker(t *testing.T) {
-	dir := t.TempDir()
-	changeDir := filepath.Join(dir, "openspec", "changes", "test-change")
-	if err := os.MkdirAll(changeDir, 0755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(changeDir, "proposal.md"), []byte("# Test\n"), 0644); err != nil {
-		t.Fatal(err)
-	}
+func TestBranchResolver_SlugAware_NoMatch(t *testing.T) {
+	// On feat/42-other branch, resolving for "my-change" should NOT match.
+	prev := currentBranchFn
+	currentBranchFn = func() (string, error) { return "feat/42-other", nil }
+	defer func() { currentBranchFn = prev }()
 
-	provider := &markerStubProvider{
-		findFunc: func(ctx context.Context, slug string) (*Ref, error) {
-			return nil, nil
-		},
-	}
-
-	r := NewMarkerResolver(provider)
-	ref, err := r.Resolve(context.Background(), changeDir)
+	br := NewBranchResolver("owner/repo")
+	ref, err := br.Resolve(context.Background(), "openspec/changes/my-change")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if ref != nil {
-		t.Errorf("expected nil, got %v", ref)
+		t.Errorf("expected nil, got %+v", ref)
 	}
 }
 
-func TestCacheResolver_FindsProviderKey(t *testing.T) {
-	dir := t.TempDir()
-	refsPath := filepath.Join(dir, ".specsync", "refs.json")
-	if err := os.MkdirAll(filepath.Dir(refsPath), 0755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(refsPath, []byte(`{"github:androidand/specsync":{"Provider":"github:androidand/specsync","ID":"55","URL":"http://x/55"}}`), 0644); err != nil {
-		t.Fatal(err)
-	}
+func TestBranchResolver_SlugAware_EmptyChangeDir(t *testing.T) {
+	// With empty changeDir, any matching branch should resolve (no slug check).
+	prev := currentBranchFn
+	currentBranchFn = func() (string, error) { return "feat/42-something", nil }
+	defer func() { currentBranchFn = prev }()
 
-	r := NewCacheResolver("github:androidand/specsync")
-	ref, err := r.Resolve(context.Background(), dir)
+	br := NewBranchResolver("owner/repo")
+	result, err := br.Resolve(context.Background(), "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if ref == nil {
+	if result == nil || result.Ref == nil {
 		t.Fatal("expected ref, got nil")
 	}
-	if ref.ID != "55" {
-		t.Errorf("expected ID 55, got %s", ref.ID)
+	if result.Ref.ID != "42" {
+		t.Errorf("expected ID 42, got %s", result.Ref.ID)
 	}
 }
 
-func TestCacheResolver_LegacyBareGithubKey(t *testing.T) {
-	dir := t.TempDir()
-	refsPath := filepath.Join(dir, ".specsync", "refs.json")
-	if err := os.MkdirAll(filepath.Dir(refsPath), 0755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(refsPath, []byte(`{"github":{"Provider":"github","ID":"10","URL":"http://x/10"}}`), 0644); err != nil {
-		t.Fatal(err)
-	}
+func TestBranchResolver_FixBranch(t *testing.T) {
+	prev := currentBranchFn
+	currentBranchFn = func() (string, error) { return "fix/99-bugfix", nil }
+	defer func() { currentBranchFn = prev }()
 
-	r := NewCacheResolver("github:androidand/specsync")
-	ref, err := r.Resolve(context.Background(), dir)
+	br := NewBranchResolver("owner/repo")
+	result, err := br.Resolve(context.Background(), "openspec/changes/bugfix")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if ref == nil {
+	if result == nil || result.Ref == nil {
 		t.Fatal("expected ref, got nil")
 	}
-	if ref.ID != "10" {
-		t.Errorf("expected ID 10, got %s", ref.ID)
+	if result.Ref.ID != "99" {
+		t.Errorf("expected ID 99, got %s", result.Ref.ID)
 	}
 }
 
-func TestCacheResolver_NoMatch(t *testing.T) {
-	dir := t.TempDir()
-	refsPath := filepath.Join(dir, ".specsync", "refs.json")
-	if err := os.MkdirAll(filepath.Dir(refsPath), 0755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(refsPath, []byte(`{"other":{"Provider":"other","ID":"1","URL":"http://x/1"}}`), 0644); err != nil {
-		t.Fatal(err)
-	}
+func TestBranchResolver_NotOnBranch(t *testing.T) {
+	prev := currentBranchFn
+	currentBranchFn = func() (string, error) { return "HEAD", nil } // detached HEAD
+	defer func() { currentBranchFn = prev }()
 
-	r := NewCacheResolver("github:androidand/specsync")
-	ref, err := r.Resolve(context.Background(), dir)
+	br := NewBranchResolver("owner/repo")
+	ref, err := br.Resolve(context.Background(), "openspec/changes/something")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if ref != nil {
-		t.Errorf("expected nil, got %v", ref)
-	}
-}
-
-func TestExternalResolver(t *testing.T) {
-	expected := &Ref{Provider: "ext", ID: "99", URL: "http://ext/99"}
-	r := NewExternalResolver(func(ctx context.Context, changeDir string) (*Ref, error) {
-		return expected, nil
-	})
-
-	ref, err := r.Resolve(context.Background(), "x")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if ref.Provider != "ext" || ref.ID != "99" {
-		t.Errorf("expected %+v, got %+v", expected, ref)
-	}
-}
-
-func TestResolveOpenSpecDir(t *testing.T) {
-	tests := []struct {
-		input    string
-		expected string
-	}{
-		{"openspec/changes/foo", "openspec"},
-		{"openspec/archive/foo", "openspec"},
-		{"/abs/openspec/changes/foo", "/abs/openspec"},
-		{"/abs/openspec/archive/foo", "/abs/openspec"},
-		{"foo", ""},
-	}
-	for _, tc := range tests {
-		got := resolveOpenSpecDir(tc.input)
-		if got != tc.expected {
-			t.Errorf("resolveOpenSpecDir(%q) = %q, want %q", tc.input, got, tc.expected)
-		}
-	}
-}
-
-func TestChainLinker_ResolveFromContext_FirstHitWins(t *testing.T) {
-	counts := [2]int{}
-	r1 := &stubContextResolver{
-		resolveFromContext: func(ctx context.Context) (*Ref, error) {
-			counts[0]++
-			return &Ref{Provider: "p1", ID: "1", URL: "http://p1/1"}, nil
-		},
-	}
-	r2 := &stubContextResolver{
-		resolveFromContext: func(ctx context.Context) (*Ref, error) {
-			counts[1]++
-			return &Ref{Provider: "p2", ID: "2", URL: "http://p2/2"}, nil
-		},
-	}
-
-	l := NewChainLinker(r1, r2)
-	ref, err := l.ResolveFromContext(context.Background())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if ref.Provider != "p1" {
-		t.Errorf("expected p1, got %s", ref.Provider)
-	}
-	if counts[1] != 0 {
-		t.Errorf("r2 was called; expected only r1 to run")
-	}
-}
-
-func TestChainLinker_ResolveFromContext_SkipsNonContextResolvers(t *testing.T) {
-	// BranchResolver supports context resolution, CacheResolver does not.
-	// The chain should skip CacheResolver and still resolve via BranchResolver.
-	br := &stubContextResolver{
-		resolveFromContext: func(ctx context.Context) (*Ref, error) {
-			return &Ref{Provider: "branch", ID: "42", URL: "http://x/42"}, nil
-		},
-	}
-	cr := NewCacheResolver("github:androidand/specsync") // doesn't support context
-	l := NewChainLinker(br, cr)
-
-	ref, err := l.ResolveFromContext(context.Background())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if ref == nil || ref.ID != "42" {
-		t.Errorf("expected ID 42, got %v", ref)
-	}
-}
-
-func TestChainLinker_ResolveFromContext_NoHit(t *testing.T) {
-	cr := NewCacheResolver("github:androidand/specsync")
-	l := NewChainLinker(cr)
-
-	ref, err := l.ResolveFromContext(context.Background())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if ref != nil {
-		t.Errorf("expected nil, got %v", ref)
+		t.Errorf("expected nil on detached HEAD, got %+v", ref)
 	}
 }
 
 func TestBranchResolver_ResolveFromContext(t *testing.T) {
-	r := NewBranchResolver("androidand/specsync")
+	prev := currentBranchFn
+	currentBranchFn = func() (string, error) { return "feat/55-feature", nil }
+	defer func() { currentBranchFn = prev }()
 
-	// ResolveFromContext should work the same as Resolve (both read branch name).
-	ref, err := r.ResolveFromContext(context.Background())
+	br := NewBranchResolver("androidand/specsync")
+	result, err := br.ResolveFromContext(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-
-	// Compare with Resolve output.
-	ref2, err2 := r.Resolve(context.Background(), "dummy")
-	if (err != nil) != (err2 != nil) {
-		t.Fatalf("ResolveFromContext and Resolve diverged: err=%v, err2=%v", err, err2)
+	if result == nil || result.Ref == nil {
+		t.Fatal("expected ref, got nil")
 	}
-	if (ref == nil) != (ref2 == nil) {
-		t.Fatalf("ResolveFromContext and Resolve diverged: ref=%v, ref2=%v", ref, ref2)
+	if result.Ref.ID != "55" {
+		t.Errorf("expected ID 55, got %s", result.Ref.ID)
 	}
-	if ref != nil && ref2 != nil && ref.ID != ref2.ID {
-		t.Errorf("ResolveFromContext and Resolve diverged: ID=%s vs ID=%s", ref.ID, ref2.ID)
+	if result.Ref.Provider != "github:androidand/specsync" {
+		t.Errorf("unexpected provider: %s", result.Ref.Provider)
+	}
+	if result.Source != "branch" {
+		t.Errorf("expected source branch, got %s", result.Source)
 	}
 }
 
-func TestMarkerResolver_ResolveFromContext_ReturnsNil(t *testing.T) {
-	r := NewMarkerResolver(&markerStubProvider{
-		findFunc: func(ctx context.Context, slug string) (*Ref, error) {
-			return nil, nil
-		},
-	})
-	ref, err := r.ResolveFromContext(context.Background())
+func TestChainLinker_FirstHitWins(t *testing.T) {
+	hit := 0
+	r1 := &mockResolver{resultFn: func() (*LinkerResult, error) {
+		hit++
+		return &LinkerResult{Ref: &Ref{ID: "42"}, Source: "test"}, nil
+	}}
+	r2 := &mockResolver{resultFn: func() (*LinkerResult, error) {
+		t.Fatal("r2 should not be called")
+		return nil, nil
+	}}
+
+	chain := NewChainLinker(r1, r2)
+	result, err := chain.Resolve(context.Background(), "test")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if ref != nil {
-		t.Errorf("expected nil, got %v", ref)
+	if result == nil || result.Ref == nil || result.Ref.ID != "42" {
+		t.Errorf("expected ref 42, got %v", result)
+	}
+	if hit != 1 {
+		t.Errorf("expected 1 hit, got %d", hit)
 	}
 }
 
-func TestCacheResolver_ResolveFromContext_ReturnsNil(t *testing.T) {
-	r := NewCacheResolver("github:androidand/specsync")
-	ref, err := r.ResolveFromContext(context.Background())
+func TestChainLinker_SkipsNil(t *testing.T) {
+	r1 := &mockResolver{resultFn: func() (*LinkerResult, error) {
+		return nil, nil
+	}}
+	r2 := &mockResolver{resultFn: func() (*LinkerResult, error) {
+		return &LinkerResult{Ref: &Ref{ID: "99"}, Source: "test"}, nil
+	}}
+
+	chain := NewChainLinker(r1, r2)
+	result, err := chain.Resolve(context.Background(), "test")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if ref != nil {
-		t.Errorf("expected nil, got %v", ref)
+	if result == nil || result.Ref == nil || result.Ref.ID != "99" {
+		t.Errorf("expected ref 99, got %v", result)
 	}
 }
 
-func TestExternalResolver_ResolveFromContext_ReturnsNil(t *testing.T) {
-	r := NewExternalResolver(func(ctx context.Context, changeDir string) (*Ref, error) {
-		return &Ref{Provider: "ext", ID: "1", URL: "http://x/1"}, nil
-	})
-	ref, err := r.ResolveFromContext(context.Background())
+func TestChainLinker_AllNil(t *testing.T) {
+	r1 := &mockResolver{resultFn: func() (*LinkerResult, error) {
+		return nil, nil
+	}}
+	r2 := &mockResolver{resultFn: func() (*LinkerResult, error) {
+		return nil, nil
+	}}
+
+	chain := NewChainLinker(r1, r2)
+	result, err := chain.Resolve(context.Background(), "test")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if ref != nil {
-		t.Errorf("expected nil, got %v", ref)
+	if result != nil {
+		t.Errorf("expected nil, got %v", result)
 	}
 }
 
-func TestSync_ResolvesIssueViaLinker(t *testing.T) {
+func TestChainLinker_ErrorPropagates(t *testing.T) {
+	r1 := &mockResolver{resultFn: func() (*LinkerResult, error) {
+		return nil, nil
+	}}
+	r2 := &mockResolver{resultFn: func() (*LinkerResult, error) {
+		return nil, errBoom
+	}}
+
+	chain := NewChainLinker(r1, r2)
+	_, err := chain.Resolve(context.Background(), "test")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+func TestChainLinker_ResolveFromContext(t *testing.T) {
+	r1 := &mockContextResolver{resultFn: func() (*LinkerResult, error) {
+		return nil, nil
+	}}
+	r2 := &mockContextResolver{resultFn: func() (*LinkerResult, error) {
+		return &LinkerResult{Ref: &Ref{ID: "77"}, Source: "ctx"}, nil
+	}}
+
+	chain := NewChainLinker(r1, r2)
+	result, err := chain.ResolveFromContext(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result == nil || result.Ref == nil || result.Ref.ID != "77" {
+		t.Errorf("expected ref 77, got %v", result)
+	}
+}
+
+func TestCacheResolver_FindsRef(t *testing.T) {
 	dir := t.TempDir()
-	changeDir := filepath.Join(dir, "changes", "test-change")
-	if err := os.MkdirAll(changeDir, 0755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(changeDir, "proposal.md"), []byte("# Test Change\n\nBody\n"), 0644); err != nil {
-		t.Fatal(err)
-	}
+	refsPath := filepath.Join(dir, ".specsync", "refs.json")
+	os.MkdirAll(filepath.Dir(refsPath), 0755)
+	os.WriteFile(refsPath, []byte(`{"github:owner/repo":{"id":"42","url":"https://github.com/owner/repo/issues/42"}}`), 0644)
 
-	// No cached ref — the Linker should resolve the issue from context.
-	linker := &stubContextResolver{
-		resolve: func(ctx context.Context, changeDir string) (*Ref, error) {
-			return &Ref{Provider: "github:o/r", ID: "42", URL: "https://github.com/o/r/issues/42"}, nil
-		},
-	}
-
-	pushed := false
-	var capturedRef *Ref
-	prov := &syncLinkerTestProvider{
-		name: "github:o/r",
-		pushFn: func(ctx context.Context, item WorkItem, ref *Ref) (Ref, error) {
-			pushed = true
-			capturedRef = ref
-			return Ref{Provider: "github:o/r", ID: "42", URL: "https://github.com/o/r/issues/42"}, nil
-		},
-	}
-
-	res, err := Sync(context.Background(), Options{
-		OpenSpecDir: dir,
-		Provider:    prov,
-		Linker:      linker,
-	})
+	cr := NewCacheResolver("github:owner/repo")
+	result, err := cr.Resolve(context.Background(), dir)
 	if err != nil {
-		t.Fatalf("Sync: %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if !pushed {
-		t.Fatal("expected Push to be called with Linker-resolved ref")
+	if result == nil || result.Ref == nil {
+		t.Fatal("expected ref, got nil")
 	}
-	if capturedRef == nil {
-		t.Fatal("expected ref from Linker, got nil")
+	if result.Ref.ID != "42" {
+		t.Errorf("expected ID 42, got %s", result.Ref.ID)
 	}
-	if capturedRef.ID != "42" {
-		t.Errorf("expected ref ID 42, got %s", capturedRef.ID)
-	}
-	if res.Items[0].Slug != "test-change" {
-		t.Errorf("expected slug test-change, got %s", res.Items[0].Slug)
+	if result.Source != "cache" {
+		t.Errorf("expected source cache, got %s", result.Source)
 	}
 }
 
-// syncLinkerTestProvider implements WorkProvider for the sync+linker test.
-type syncLinkerTestProvider struct {
-	name   string
-	pushFn func(ctx context.Context, item WorkItem, ref *Ref) (Ref, error)
-}
+func TestCacheResolver_LegacyKey(t *testing.T) {
+	dir := t.TempDir()
+	refsPath := filepath.Join(dir, ".specsync", "refs.json")
+	os.MkdirAll(filepath.Dir(refsPath), 0755)
+	os.WriteFile(refsPath, []byte(`{"github":{"id":"42","url":"https://github.com/owner/repo/issues/42"}}`), 0644)
 
-func (s *syncLinkerTestProvider) Name() string                                         { return s.name }
-func (s *syncLinkerTestProvider) Find(context.Context, string) (*Ref, error)           { return nil, nil }
-func (s *syncLinkerTestProvider) Push(ctx context.Context, item WorkItem, ref *Ref) (Ref, error) { return s.pushFn(ctx, item, ref) }
-
-// stubResolver implements Resolver for tests.
-type stubResolver struct {
-	resolve func(ctx context.Context, changeDir string) (*Ref, error)
-}
-
-func (s *stubResolver) Resolve(ctx context.Context, changeDir string) (*Ref, error) {
-	return s.resolve(ctx, changeDir)
-}
-
-// stubContextResolver implements Resolver + contextResolver for tests.
-type stubContextResolver struct {
-	resolve          func(ctx context.Context, changeDir string) (*Ref, error)
-	resolveFromContext func(ctx context.Context) (*Ref, error)
-}
-
-func (s *stubContextResolver) Resolve(ctx context.Context, changeDir string) (*Ref, error) {
-	if s.resolve != nil {
-		return s.resolve(ctx, changeDir)
+	cr := NewCacheResolver("github:owner/repo")
+	result, err := cr.Resolve(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	return nil, nil
-}
-
-func (s *stubContextResolver) ResolveFromContext(ctx context.Context) (*Ref, error) {
-	if s.resolveFromContext != nil {
-		return s.resolveFromContext(ctx)
+	if result == nil || result.Ref == nil {
+		t.Fatal("expected ref, got nil")
 	}
-	return nil, nil
+	if result.Ref.ID != "42" {
+		t.Errorf("expected ID 42, got %s", result.Ref.ID)
+	}
 }
 
-// markerStubProvider implements WorkProvider for MarkerResolver tests.
-type markerStubProvider struct {
-	findFunc func(ctx context.Context, slug string) (*Ref, error)
+func TestCacheResolver_NoRef(t *testing.T) {
+	dir := t.TempDir()
+	cr := NewCacheResolver("github:owner/repo")
+	result, err := cr.Resolve(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result != nil {
+		t.Errorf("expected nil, got %v", result)
+	}
 }
 
-func (s *markerStubProvider) Name() string { return "test" }
-func (s *markerStubProvider) Find(ctx context.Context, slug string) (*Ref, error) { return s.findFunc(ctx, slug) }
-func (s *markerStubProvider) Push(ctx context.Context, item WorkItem, ref *Ref) (Ref, error) { return Ref{}, nil }
+// mockResolver implements Resolver.
+type mockResolver struct {
+	resultFn func() (*LinkerResult, error)
+}
+
+func (m *mockResolver) Resolve(ctx context.Context, changeDir string) (*LinkerResult, error) {
+	return m.resultFn()
+}
+
+// mockContextResolver implements Resolver + contextResolver.
+type mockContextResolver struct {
+	resultFn func() (*LinkerResult, error)
+}
+
+func (m *mockContextResolver) Resolve(ctx context.Context, changeDir string) (*LinkerResult, error) {
+	return m.resultFn()
+}
+
+func (m *mockContextResolver) ResolveFromContext(ctx context.Context) (*LinkerResult, error) {
+	return m.resultFn()
+}
+
+var errBoom = fmt.Errorf("boom")
