@@ -34,6 +34,29 @@ specsync [-dry-run] [-change <change>] [-repo owner/name] [-reconcile=false] [-c
 
 **Lifecycle stages.** specsync labels each issue `stage:<stage>`. The stage is derived automatically: `active` while any task is unchecked, `complete` once every task is checked (before archiving), and `archived` once the change moves under `changes/archive/`. A `.status` file in the change folder overrides the derived stage. This means finishing the last task flips the issue out of `stage:active` on the next sync — no manual bookkeeping.
 
+### Automatic issue resolution (Linker)
+
+When no cached ref exists (no prior sync), specsync can resolve the linked issue
+automatically using the **Linker** — a chain of resolvers tried in order until
+one hits:
+
+1. **Branch-name resolver** — reads the current branch name and matches a pattern
+   like `feat/(\d+)-.*` → issue `#1`. Works for both `sync` and `pull`.
+2. **Marker resolver** — parses `<!-- specsync:change=<slug> -->` from the
+   provider's issue body (via `Find`).
+3. **Cache resolver** — reads `.specsync/refs.json` (existing behavior).
+4. **External resolver** — optional hook for MCP or other relation sources.
+
+For `pull`, this means you can omit `-issue` when on a properly-named branch:
+
+```
+git checkout -b feat/42-my-feature
+specsync pull          # auto-resolves issue #42 from branch name
+```
+
+For `sync`, the Linker resolves the issue on first sync without needing a prior
+`pull` to cache the ref.
+
 ### Pull an issue into a local change
 
 ```
@@ -72,7 +95,10 @@ specsync scan github.go
 specsync link [-dry-run] [-openspec <dir>] <change1> <change2> [<change3>...]
 ```
 
-At least 2 changes required. Writes `links.md` into each change directory and syncs them so a "## Related" section appears in each GitHub issue.
+At least 2 changes required. Arguments may be **change slugs** (as today) or **issue references** (`#N`, `owner/repo#N`, full URL) — slugs and references can be mixed in one invocation.
+
+- **Slug arguments**: write `links.md` in each change directory, then sync each spec so the "## Related" section appears in each GitHub issue.
+- **Reference arguments**: link directly on GitHub with no local spec. specsync fetches the issue, upserts a managed `## Related` section pointing at the other linked issues, and pushes the edited body. Cross-repo targeting is per reference — each `owner/repo#N` resolves to its own repo.
 
 ### Spin off emergent work
 

@@ -13,16 +13,20 @@ import (
 type PullOptions struct {
 	OpenSpecDir string       // path to the spec root (openspec/, beads/, etc.)
 	Provider    WorkProvider // must implement IssueReader
-	IssueID     string       // provider id of the issue to pull (e.g. "42")
+	IssueID     string       // provider id of the issue to pull (e.g. "42"); when empty, Linker is consulted
 	Slug        string       // change slug; derived from the issue when empty
 	DryRun      bool         // when true, render but never touch disk
 	Project     BoardTarget  // optional GitHub Projects board; unset = no board operations
+	// Linker, when set and IssueID is empty, resolves the issue from context
+	// (e.g., current branch name). Returns error if no issue can be resolved.
+	Linker Linker
 }
 
 // PullResult reports what a pull produced (or would produce on a dry run).
 type PullResult struct {
 	Slug        string
 	Dir         string
+	IssueID     string // resolved issue ID (from -issue flag or Linker)
 	IssueURL    string
 	Proposal    string
 	Tasks       string
@@ -56,11 +60,23 @@ func Pull(ctx context.Context, opts PullOptions) (PullResult, error) {
 	if !ok {
 		return PullResult{}, fmt.Errorf("provider %q cannot read issues", opts.Provider.Name())
 	}
-	if strings.TrimSpace(opts.IssueID) == "" {
-		return PullResult{}, fmt.Errorf("issue id is required")
+
+	issueID := strings.TrimSpace(opts.IssueID)
+	if issueID == "" {
+		if opts.Linker == nil {
+			return PullResult{}, fmt.Errorf("issue id is required when no linker is set")
+		}
+		ref, err := opts.Linker.ResolveFromContext(ctx)
+		if err != nil {
+			return PullResult{}, fmt.Errorf("resolve issue from context: %w", err)
+		}
+		if ref == nil {
+			return PullResult{}, fmt.Errorf("could not resolve issue from context; specify -issue or use an issue-linked branch (e.g., feat/42-change-name)")
+		}
+		issueID = ref.ID
 	}
 
-	item, err := reader.Get(ctx, opts.IssueID)
+	item, err := reader.Get(ctx, issueID)
 	if err != nil {
 		return PullResult{}, err
 	}
@@ -80,6 +96,7 @@ func Pull(ctx context.Context, opts PullOptions) (PullResult, error) {
 	res := PullResult{
 		Slug:            slug,
 		Dir:             filepath.Join(opts.OpenSpecDir, "changes", slug),
+		IssueID:         issueID,
 		IssueURL:        item.URL,
 		Proposal:        proposal,
 		Tasks:           tasks,

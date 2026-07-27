@@ -304,6 +304,188 @@ func TestResolveOpenSpecDir(t *testing.T) {
 	}
 }
 
+func TestChainLinker_ResolveFromContext_FirstHitWins(t *testing.T) {
+	counts := [2]int{}
+	r1 := &stubContextResolver{
+		resolveFromContext: func(ctx context.Context) (*Ref, error) {
+			counts[0]++
+			return &Ref{Provider: "p1", ID: "1", URL: "http://p1/1"}, nil
+		},
+	}
+	r2 := &stubContextResolver{
+		resolveFromContext: func(ctx context.Context) (*Ref, error) {
+			counts[1]++
+			return &Ref{Provider: "p2", ID: "2", URL: "http://p2/2"}, nil
+		},
+	}
+
+	l := NewChainLinker(r1, r2)
+	ref, err := l.ResolveFromContext(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ref.Provider != "p1" {
+		t.Errorf("expected p1, got %s", ref.Provider)
+	}
+	if counts[1] != 0 {
+		t.Errorf("r2 was called; expected only r1 to run")
+	}
+}
+
+func TestChainLinker_ResolveFromContext_SkipsNonContextResolvers(t *testing.T) {
+	// BranchResolver supports context resolution, CacheResolver does not.
+	// The chain should skip CacheResolver and still resolve via BranchResolver.
+	br := &stubContextResolver{
+		resolveFromContext: func(ctx context.Context) (*Ref, error) {
+			return &Ref{Provider: "branch", ID: "42", URL: "http://x/42"}, nil
+		},
+	}
+	cr := NewCacheResolver("github:androidand/specsync") // doesn't support context
+	l := NewChainLinker(br, cr)
+
+	ref, err := l.ResolveFromContext(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ref == nil || ref.ID != "42" {
+		t.Errorf("expected ID 42, got %v", ref)
+	}
+}
+
+func TestChainLinker_ResolveFromContext_NoHit(t *testing.T) {
+	cr := NewCacheResolver("github:androidand/specsync")
+	l := NewChainLinker(cr)
+
+	ref, err := l.ResolveFromContext(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ref != nil {
+		t.Errorf("expected nil, got %v", ref)
+	}
+}
+
+func TestBranchResolver_ResolveFromContext(t *testing.T) {
+	r := NewBranchResolver("androidand/specsync")
+
+	// ResolveFromContext should work the same as Resolve (both read branch name).
+	ref, err := r.ResolveFromContext(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Compare with Resolve output.
+	ref2, err2 := r.Resolve(context.Background(), "dummy")
+	if (err != nil) != (err2 != nil) {
+		t.Fatalf("ResolveFromContext and Resolve diverged: err=%v, err2=%v", err, err2)
+	}
+	if (ref == nil) != (ref2 == nil) {
+		t.Fatalf("ResolveFromContext and Resolve diverged: ref=%v, ref2=%v", ref, ref2)
+	}
+	if ref != nil && ref2 != nil && ref.ID != ref2.ID {
+		t.Errorf("ResolveFromContext and Resolve diverged: ID=%s vs ID=%s", ref.ID, ref2.ID)
+	}
+}
+
+func TestMarkerResolver_ResolveFromContext_ReturnsNil(t *testing.T) {
+	r := NewMarkerResolver(&markerStubProvider{
+		findFunc: func(ctx context.Context, slug string) (*Ref, error) {
+			return nil, nil
+		},
+	})
+	ref, err := r.ResolveFromContext(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ref != nil {
+		t.Errorf("expected nil, got %v", ref)
+	}
+}
+
+func TestCacheResolver_ResolveFromContext_ReturnsNil(t *testing.T) {
+	r := NewCacheResolver("github:androidand/specsync")
+	ref, err := r.ResolveFromContext(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ref != nil {
+		t.Errorf("expected nil, got %v", ref)
+	}
+}
+
+func TestExternalResolver_ResolveFromContext_ReturnsNil(t *testing.T) {
+	r := NewExternalResolver(func(ctx context.Context, changeDir string) (*Ref, error) {
+		return &Ref{Provider: "ext", ID: "1", URL: "http://x/1"}, nil
+	})
+	ref, err := r.ResolveFromContext(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ref != nil {
+		t.Errorf("expected nil, got %v", ref)
+	}
+}
+
+func TestSync_ResolvesIssueViaLinker(t *testing.T) {
+	dir := t.TempDir()
+	changeDir := filepath.Join(dir, "changes", "test-change")
+	if err := os.MkdirAll(changeDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(changeDir, "proposal.md"), []byte("# Test Change\n\nBody\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// No cached ref — the Linker should resolve the issue from context.
+	linker := &stubContextResolver{
+		resolve: func(ctx context.Context, changeDir string) (*Ref, error) {
+			return &Ref{Provider: "github:o/r", ID: "42", URL: "https://github.com/o/r/issues/42"}, nil
+		},
+	}
+
+	pushed := false
+	var capturedRef *Ref
+	prov := &syncLinkerTestProvider{
+		name: "github:o/r",
+		pushFn: func(ctx context.Context, item WorkItem, ref *Ref) (Ref, error) {
+			pushed = true
+			capturedRef = ref
+			return Ref{Provider: "github:o/r", ID: "42", URL: "https://github.com/o/r/issues/42"}, nil
+		},
+	}
+
+	res, err := Sync(context.Background(), Options{
+		OpenSpecDir: dir,
+		Provider:    prov,
+		Linker:      linker,
+	})
+	if err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	if !pushed {
+		t.Fatal("expected Push to be called with Linker-resolved ref")
+	}
+	if capturedRef == nil {
+		t.Fatal("expected ref from Linker, got nil")
+	}
+	if capturedRef.ID != "42" {
+		t.Errorf("expected ref ID 42, got %s", capturedRef.ID)
+	}
+	if res.Items[0].Slug != "test-change" {
+		t.Errorf("expected slug test-change, got %s", res.Items[0].Slug)
+	}
+}
+
+// syncLinkerTestProvider implements WorkProvider for the sync+linker test.
+type syncLinkerTestProvider struct {
+	name   string
+	pushFn func(ctx context.Context, item WorkItem, ref *Ref) (Ref, error)
+}
+
+func (s *syncLinkerTestProvider) Name() string                                         { return s.name }
+func (s *syncLinkerTestProvider) Find(context.Context, string) (*Ref, error)           { return nil, nil }
+func (s *syncLinkerTestProvider) Push(ctx context.Context, item WorkItem, ref *Ref) (Ref, error) { return s.pushFn(ctx, item, ref) }
+
 // stubResolver implements Resolver for tests.
 type stubResolver struct {
 	resolve func(ctx context.Context, changeDir string) (*Ref, error)
@@ -311,6 +493,26 @@ type stubResolver struct {
 
 func (s *stubResolver) Resolve(ctx context.Context, changeDir string) (*Ref, error) {
 	return s.resolve(ctx, changeDir)
+}
+
+// stubContextResolver implements Resolver + contextResolver for tests.
+type stubContextResolver struct {
+	resolve          func(ctx context.Context, changeDir string) (*Ref, error)
+	resolveFromContext func(ctx context.Context) (*Ref, error)
+}
+
+func (s *stubContextResolver) Resolve(ctx context.Context, changeDir string) (*Ref, error) {
+	if s.resolve != nil {
+		return s.resolve(ctx, changeDir)
+	}
+	return nil, nil
+}
+
+func (s *stubContextResolver) ResolveFromContext(ctx context.Context) (*Ref, error) {
+	if s.resolveFromContext != nil {
+		return s.resolveFromContext(ctx)
+	}
+	return nil, nil
 }
 
 // markerStubProvider implements WorkProvider for MarkerResolver tests.
