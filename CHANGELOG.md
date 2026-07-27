@@ -4,6 +4,37 @@ All notable changes to this project are documented here. One entry per shipped
 OpenSpec change — see the linked issues for the full spec and discussion.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.9.1] - 2026-07-28
+
+### Added
+
+- Change status CLI: query and mutate workflow state locally (#43)
+- Emergent work spin-off (#9)
+- **Repo resolution is now explicit.** specsync resolves the target repository deterministically and always passes `--repo` to every `gh` invocation. Resolution order: `-repo` flag → `gh repo set-default` → `origin`. Fork-parent writes are refused by default; use `-repo` to override. Board resolution also gained a repository-local declaration: `openspec/specsync.yml` with `board: owner/number`. The `-project` flag and this config file are the only ways to set a board; the `SPECSYNC_PROJECT` env var is no longer used. (#76)
+- Added `specsync audit-tasks` to detect unchecked tasks where code exists, enforced via CI. Reconciled 47 changes — checked off done tasks, spun off follow-ups, fixed design docs that didn't match code. (#60)
+- Multi-provider sync (fan-out) (#24)
+- Auto-detect Beads provider (#62)
+- Claim work in flight so concurrent agents don't collide (#78)
+- Link existing issues by reference, without scaffolding specs (#18)
+- convergence check for 3-way board merge (#42) (#74) (04ea25a6)
+- linker cleanup — LinkerResult, slug-matching, dead code removal (#97) (079b9132)
+- add --worktree flag to pull — create or reuse worktree (#51) (#72) (18c09518)
+- add specsync validate command for change structure (#64) (#67) (22cfa581)
+- spec-issue-linker — pull integration, Linker context resolution, skill doc (#95) (47cedb84)
+- spec-issue-linker — Linker interface, resolvers, sync integration (8b752045)
+- stable task ID — position-based mapping for rewritten task detection (#65) (#73) (b542d927)
+- slug validation, archived priority support (#43) (#75) (f0d8d40e)
+
+### Changed
+
+- Work graph (#19)
+
+### Fixed
+
+- Add `specsync audit` — a read-only command that cross-references archived OpenSpec changes against GitHub PRs to find archived changes whose PR was never merged. Also add a new `shipped` stage that represents the final step in the lifecycle: the PR has landed. (#59)
+
+<!-- 19 internal commit(s) omitted (chore/docs/ci/...) -->
+
 ## [0.9.0] - 2026-07-17
 
 ### Added
