@@ -72,7 +72,10 @@ specsync scan github.go
 specsync link [-dry-run] [-openspec <dir>] <change1> <change2> [<change3>...]
 ```
 
-At least 2 changes required. Writes `links.md` into each change directory and syncs them so a "## Related" section appears in each GitHub issue.
+At least 2 changes required. Arguments may be **change slugs** (as today) or **issue references** (`#N`, `owner/repo#N`, full URL) — slugs and references can be mixed in one invocation.
+
+- **Slug arguments**: write `links.md` in each change directory, then sync each spec so the "## Related" section appears in each GitHub issue.
+- **Reference arguments**: link directly on GitHub with no local spec. specsync fetches the issue, upserts a managed `## Related` section pointing at the other linked issues, and pushes the edited body. Cross-repo targeting is per reference — each `owner/repo#N` resolves to its own repo.
 
 ### Spin off emergent work
 

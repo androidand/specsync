@@ -601,6 +601,28 @@ func runLink(args []string) {
 			}
 			fmt.Println()
 		}
+		// Reference path: show what each issue would be edited to contain.
+		for _, lr := range result.Refs {
+			var others []specsync.Ref
+			for _, p := range result.Pairs {
+				others = append(others, p.Ref)
+			}
+			for _, other := range result.Refs {
+				if other.ID != lr.ID || other.Repo != lr.Repo {
+					others = append(others, other.Ref)
+				}
+			}
+			relatedBody := specsync.UpsertRelatedSection("(existing issue body)", others)
+			fmt.Printf("  %s would be edited:\n", lr.Ref.URL)
+			fmt.Printf("    ## Related section:\n")
+			for _, line := range strings.Split(relatedBody, "\n") {
+				if strings.HasPrefix(line, "- ") || strings.HasPrefix(line, "## Related") {
+					fmt.Println("      " + line)
+				}
+			}
+			fmt.Println()
+		}
+
 		fmt.Printf("specsync link: would cross-link %d specs and %d issue refs\n", len(result.Pairs), len(result.Refs))
 		return
 	}
