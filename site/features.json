@@ -70,5 +70,17 @@
     "icon": "board",
     "title": "Per-repository board",
     "body": "Board resolution per-repository: <code>-project</code> flag → <code>openspec/specsync.yml</code> → no board. No global default; each repo syncs only to its own declared board."
+  },
+  {
+    "group": "collaborate",
+    "icon": "board",
+    "title": "Per-repository board",
+    "body": "Board resolution per-repository: <code>-project</code> flag → <code>openspec/specsync.yml</code> → no board. No global default; each repo syncs only to its own declared board."
+  },
+  {
+    "group": "collaborate",
+    "icon": "idempotent",
+    "title": "Spec ↔ issue linker",
+    "body": "specsync resolves a change's issue from branch name (<code>feat/42-my-change</code>), issue marker, or ref cache — so <code>pull</code> without <code>-issue</code> and idempotent <code>sync</code> update the right issue instead of creating duplicates."
   }
 ]
