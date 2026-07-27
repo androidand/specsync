@@ -380,122 +380,40 @@ func TestPullSavesOriginalAsk(t *testing.T) {
 	}
 }
 
-func TestPull_RequiresIssueOrLinker(t *testing.T) {
+func TestPull_RequiresIssueForNonGithub(t *testing.T) {
 	dir := t.TempDir()
 	_, err := Pull(context.Background(), PullOptions{
 		OpenSpecDir: dir,
-		Provider:    NewGitHubProviderFunc(func(context.Context, ...string) (string, error) { return "", nil }),
+		Provider:    &stubNonGithubProvider{},
 		IssueID:     "",
 	})
 	if err == nil {
-		t.Fatal("expected error when no issue and no linker")
+		t.Fatal("expected error when no issue for non-github provider")
 	}
-	if !strings.Contains(err.Error(), "issue id is required when no linker is set") {
+	if !strings.Contains(err.Error(), "issue id is required for non-github providers") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
-func TestPull_RequiresIssueWhenLinkerCannotResolve(t *testing.T) {
-	dir := t.TempDir()
-	linker := NewChainLinker(NewCacheResolver("github:androidand/specsync")) // won't resolve
+type stubNonGithubProvider struct{}
 
+func (s *stubNonGithubProvider) Name() string                                         { return "beads" }
+func (s *stubNonGithubProvider) Find(context.Context, string) (*Ref, error)           { return nil, nil }
+func (s *stubNonGithubProvider) Push(context.Context, WorkItem, *Ref) (Ref, error)    { return Ref{}, nil }
+func (s *stubNonGithubProvider) Get(context.Context, string) (FetchedItem, error)     { return FetchedItem{}, nil }
+
+func TestPull_CannotResolveFromBranch(t *testing.T) {
+	dir := t.TempDir()
+	// On a branch that doesn't match the pattern, Pull should error.
 	_, err := Pull(context.Background(), PullOptions{
 		OpenSpecDir: dir,
-		Provider:    NewGitHubProviderFunc(func(context.Context, ...string) (string, error) { return "", nil }),
+		Provider:    NewGitHubProviderFuncWithRepo("o/r", func(context.Context, ...string) (string, error) { return "", nil }),
 		IssueID:     "",
-		Linker:      linker,
 	})
 	if err == nil {
-		t.Fatal("expected error when linker cannot resolve")
+		t.Fatal("expected error when branch name doesn't match")
 	}
-	if !strings.Contains(err.Error(), "could not resolve issue from context") {
+	if !strings.Contains(err.Error(), "could not resolve issue from branch name") {
 		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestPull_ResolvesIssueFromLinker(t *testing.T) {
-	dir := t.TempDir()
-	issue := fakeIssue{
-		Number: 42,
-		URL:    "https://github.com/o/r/issues/42",
-		Title:  "Add feature",
-		State:  "open",
-		Body:   "# Add feature\n\nThe request.\n",
-	}
-	var calls [][]string
-	prov := NewGitHubProviderFunc(ghRunner(issue, &calls))
-
-	// Linker resolves issue #42 from context.
-	linker := &stubContextResolver{
-		resolveFromContext: func(ctx context.Context) (*Ref, error) {
-			return &Ref{
-				Provider: "github:o/r",
-				ID:       "42",
-				URL:      "https://github.com/o/r/issues/42",
-			}, nil
-		},
-	}
-
-	res, err := Pull(context.Background(), PullOptions{
-		OpenSpecDir: dir,
-		Provider:    prov,
-		IssueID:     "", // not provided — should be resolved by Linker
-		Linker:      linker,
-	})
-	if err != nil {
-		t.Fatalf("Pull: %v", err)
-	}
-	if res.IssueID != "42" {
-		t.Errorf("expected IssueID 42, got %s", res.IssueID)
-	}
-	if res.Slug != "add-feature" {
-		t.Errorf("expected slug add-feature, got %s", res.Slug)
-	}
-}
-
-func TestPull_IssueIDFromLinker_SavedInRef(t *testing.T) {
-	dir := t.TempDir()
-	issue := fakeIssue{
-		Number: 55,
-		URL:    "https://github.com/o/r/issues/55",
-		Title:  "Some task",
-		State:  "open",
-		Body:   "# Some task\n\nBody.\n",
-	}
-	var calls [][]string
-	prov := NewGitHubProviderFuncWithRepo("o/r", ghRunner(issue, &calls))
-
-	linker := &stubContextResolver{
-		resolveFromContext: func(ctx context.Context) (*Ref, error) {
-			return &Ref{Provider: "github:o/r", ID: "55", URL: "https://github.com/o/r/issues/55"}, nil
-		},
-	}
-
-	res, err := Pull(context.Background(), PullOptions{
-		OpenSpecDir: dir,
-		Provider:    prov,
-		IssueID:     "",
-		Linker:      linker,
-	})
-	if err != nil {
-		t.Fatalf("Pull: %v", err)
-	}
-
-	// Verify the ref was saved so a later sync can find it.
-	refsPath := filepath.Join(dir, "changes", res.Slug, ".specsync", "refs.json")
-	data, err := os.ReadFile(refsPath)
-	if err != nil {
-		t.Fatalf("read refs.json: %v", err)
-	}
-	var refs map[string]Ref
-	if err := json.Unmarshal(data, &refs); err != nil {
-		t.Fatalf("unmarshal refs.json: %v", err)
-	}
-	ref, ok := refs["github:o/r"]
-	if !ok {
-		t.Fatalf("refs.json missing key github:o/r: %s", string(data))
-	}
-	if ref.ID != "55" {
-		t.Errorf("expected ref ID 55, got %s", ref.ID)
 	}
 }

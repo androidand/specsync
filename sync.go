@@ -15,11 +15,8 @@ type Options struct {
 	DryRun         bool          // when true, never persist refs to the cache
 	Reconcile      bool          // when true, merge issue checkbox state into tasks.md before pushing
 	CloseCompleted bool          // when true, a change whose every task is checked projects as closed
-	Project        BoardTarget   // optional GitHub Projects board; unset = no board operations
-	// Linker, when set, is consulted to resolve a change's issue ref when no
-	// cached ref exists. The first resolver to return a non-nil Ref wins,
-	// causing the sync to update the existing issue instead of creating a new one.
-	Linker Linker
+	Project BoardTarget // optional GitHub Projects board; unset = no board operations
+	Linker         Linker        // optional linker to resolve issue refs; nil = cache-only
 }
 
 // Result reports what a sync run did.
@@ -85,6 +82,20 @@ func Sync(ctx context.Context, opts Options) (Result, error) {
 			continue
 		}
 
+		// Try the Linker first to resolve an issue ref for this change.
+		// This is used when the change has no cache entry but can be linked
+		// via branch name or other discovery strategy.
+		var linkerResult *LinkerResult
+		if opts.Linker != nil {
+			result, err := opts.Linker.Resolve(ctx, c.Dir)
+			if err != nil {
+				return res, fmt.Errorf("linker resolve %s: %w", c.Slug, err)
+			}
+			if result != nil && result.Ref != nil {
+				linkerResult = result
+			}
+		}
+
 		var allFlips []TaskFlip
 		var firstRef Ref
 		var firstCreated bool
@@ -114,18 +125,14 @@ func Sync(ctx context.Context, opts Options) (Result, error) {
 			var existingPtr *Ref
 			if hadRef {
 				existingPtr = &existing
+			} else if linkerResult != nil && linkerResult.Ref.Provider == key {
+				// Linker found a ref but the cache doesn't have one.
+				// Only use it if the provider matches — a GitHub ref from
+				// the Linker should not be used as a fallback for Beads.
+				existingPtr = linkerResult.Ref
 			}
 
-			// When no cached ref, consult the Linker to resolve the issue
-			// (e.g. from branch name, marker, or external source).
-			if existingPtr == nil && opts.Linker != nil {
-				if ref, lerr := opts.Linker.Resolve(ctx, c.Dir); lerr == nil && ref != nil {
-					existingPtr = ref
-					hadRef = true
-				}
-			}
-
-			// For providers with an existing issue: reconcile inbound before
+		// For providers with an existing issue: reconcile inbound before
 			// rendering, so the push carries the merged state.
 			if opts.Reconcile && !opts.DryRun && existingPtr != nil {
 				resolved, flips, rerr := reconcileTaskState(ctx, prov, &c, existingPtr)
