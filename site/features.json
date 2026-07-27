@@ -58,5 +58,17 @@
     "icon": "audit",
     "title": "Archive audit",
     "body": "<code>specsync audit</code> cross-references archived changes against GitHub PRs to find archived-but-unmerged work. Add <code>-mark-shipped</code> to record the final lifecycle step."
+  },
+  {
+    "group": "collaborate",
+    "icon": "idempotent",
+    "title": "Explicit repo resolution",
+    "body": "specsync resolves the target repository deterministically: <code>-repo</code> flag → <code>gh repo set-default</code> → <code>origin</code>. Fork-parent writes are refused by default; use <code>-repo</code> to override."
+  },
+  {
+    "group": "collaborate",
+    "icon": "board",
+    "title": "Per-repository board",
+    "body": "Board resolution per-repository: <code>-project</code> flag → <code>openspec/specsync.yml</code> → no board. No global default; each repo syncs only to its own declared board."
   }
 ]
