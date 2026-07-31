@@ -228,6 +228,21 @@ func Sync(ctx context.Context, opts Options) (Result, error) {
 					return res, fmt.Errorf("refresh state after post-push reconcile: %w", err)
 				}
 			}
+
+			// Reconcile dependency edges with GitHub.
+			if gp, ok := prov.(*GitHubProvider); ok && (len(c.BlockedBy) > 0 || len(c.Blocks) > 0) {
+				if _, err := DepSync(ctx, DepSyncOptions{
+					ChangeDir: c.Dir,
+					Provider:  gp,
+					Ref:       ref,
+					BlockedBy: c.BlockedBy,
+					Blocks:    c.Blocks,
+					DryRun:    opts.DryRun,
+				}); err != nil {
+					// Dependency sync errors are non-fatal — the issue was
+					// already pushed successfully. Log and continue.
+				}
+			}
 		}
 
 		// No suggestion for archived changes.
@@ -287,8 +302,8 @@ func WorkItemFor(c Change, closeCompleted bool) WorkItem {
 			}
 		}
 	}
-	if len(c.Links) > 0 {
-		body = UpsertRelatedSection(body, c.Links)
+	if len(c.Links) > 0 || len(c.BlockedBy) > 0 || len(c.Blocks) > 0 {
+		body = UpsertDependencySections(body, c.Links, c.BlockedBy, c.Blocks)
 	}
 	priority := 0
 	if c.Priority != nil {

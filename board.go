@@ -565,14 +565,24 @@ func (p *GitHubProvider) graphql(ctx context.Context, op, query string, out any,
 	if err != nil {
 		return classifyBoardError(op, err)
 	}
-	if out == nil {
-		return nil
-	}
 	var env struct {
-		Data json.RawMessage `json:"data"`
+		Data   json.RawMessage `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
 	}
 	if err := json.Unmarshal([]byte(raw), &env); err != nil {
 		return fmt.Errorf("%s: parse graphql response: %w", op, err)
+	}
+	if len(env.Errors) > 0 {
+		var msgs []string
+		for _, e := range env.Errors {
+			msgs = append(msgs, e.Message)
+		}
+		return fmt.Errorf("%s: %s", op, strings.Join(msgs, "; "))
+	}
+	if out == nil {
+		return nil
 	}
 	payload := env.Data
 	if len(payload) == 0 {

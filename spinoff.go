@@ -157,7 +157,7 @@ func Spinoff(ctx context.Context, opts SpinoffOptions) (SpinoffResult, error) {
 	if parentURL != "" {
 		// Add the parent as a link in the child.
 		parentRef := Ref{Provider: "github", ID: opts.Parent, URL: parentURL}
-		if err := saveLinksToMD(childDir, []Ref{parentRef}); err != nil {
+		if err := saveLinksToMD(childDir, []Ref{parentRef}, nil, nil); err != nil {
 			// Non-fatal: link recording failed but spinoff succeeded.
 		}
 		res.Linked = true

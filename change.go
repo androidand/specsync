@@ -145,7 +145,9 @@ type Change struct {
 	Title         string // first H1 of proposal.md, falling back to Slug
 	Body          string // proposal.md contents
 	TasksMarkdown string // tasks.md contents, may be ""
-	Links         []Ref  // resolved related issue refs from links.md
+	Links         []Ref  // resolved related issue refs from links.md (## Related)
+	BlockedBy     []Ref  // resolved blocked-by refs from links.md (## Blocked by)
+	Blocks        []Ref  // resolved blocks refs from links.md (## Blocks)
 	OriginalAsk   string // original-ask.md contents, may be ""
 	Discoveries   string // discoveries.md contents, may be ""
 	Archived      bool
@@ -240,7 +242,7 @@ func LoadChange(dir string, archived bool, openspecDir string) (*Change, error) 
 	}
 
 	// Optional related issues: links.md (human/agent/machine-writable).
-	c.Links = parseLinksMD(dir, openspecDir)
+	c.Links, c.BlockedBy, c.Blocks = parseLinksMD(dir, openspecDir)
 
 	return c, nil
 }
@@ -277,14 +279,19 @@ var reShorthand = regexp.MustCompile(`^[A-Za-z0-9_.\-]+/[A-Za-z0-9_.\-]+#\d+$`)
 //   - owner/repo#N                             (GitHub shorthand)
 //   - some-slug                                (sibling slug, resolved via refs.json)
 //   - some-slug repo:owner/name                (sibling slug + explicit repo hint)
-func parseLinksMD(changeDir, openspecDir string) []Ref {
+func parseLinksMD(changeDir, openspecDir string) ([]Ref, []Ref, []Ref) {
 	b, err := os.ReadFile(filepath.Join(changeDir, "links.md"))
 	if err != nil {
-		return nil
+		return nil, nil, nil
 	}
-	var refs []Ref
+	var links, blockedBy, blocks []Ref
+	var section string
 	for _, rawLine := range strings.Split(string(b), "\n") {
 		line := strings.TrimSpace(rawLine)
+		if strings.HasPrefix(line, "## ") {
+			section = strings.TrimSpace(line[3:])
+			continue
+		}
 		if !strings.HasPrefix(line, "- ") {
 			continue
 		}
@@ -293,10 +300,19 @@ func parseLinksMD(changeDir, openspecDir string) []Ref {
 			continue
 		}
 		if ref := resolveEntry(entry, openspecDir); ref != nil {
-			refs = append(refs, *ref)
+			r := *ref
+			switch section {
+			case "Blocked by":
+				blockedBy = append(blockedBy, r)
+			case "Blocks":
+				blocks = append(blocks, r)
+			default:
+				// ## Related or no section header
+				links = append(links, r)
+			}
 		}
 	}
-	return refs
+	return links, blockedBy, blocks
 }
 
 func resolveEntry(entry, openspecDir string) *Ref {

@@ -90,7 +90,7 @@ func Link(ctx context.Context, opts LinkOptions) (*LinkResult, error) {
 		}
 		links := refsExcept(allRefs, e.ref)
 		if !opts.DryRun {
-			if err := saveLinksToMD(e.slugDir, links); err != nil {
+			if err := saveLinksToMD(e.slugDir, links, nil, nil); err != nil {
 				return nil, fmt.Errorf("save links for %s: %w", e.slugDir, err)
 			}
 		}
@@ -225,6 +225,50 @@ func UpsertRelatedSection(body string, links []Ref) string {
 	// Append new block at the end.
 	newBlock := strings.Join(refLabels(links), "\n")
 	return body + relatedHeader + newBlock + "\n"
+}
+
+// UpsertDependencySections appends or replaces "## Related", "## Blocked by",
+// and "## Blocks" sections in body. It uses UpsertRelatedSection for the
+// Related section, then appends Blocked by and Blocks as needed.
+func UpsertDependencySections(body string, links, blockedBy, blocks []Ref) string {
+	if len(links) == 0 && len(blockedBy) == 0 && len(blocks) == 0 {
+		return body
+	}
+
+	body = UpsertRelatedSection(body, links)
+
+	if len(blockedBy) > 0 {
+		body = upsertSection(body, "## Blocked by", refLabels(blockedBy))
+	}
+
+	if len(blocks) > 0 {
+		body = upsertSection(body, "## Blocks", refLabels(blocks))
+	}
+
+	return body
+}
+
+// upsertSection replaces or appends a section header with the given lines.
+func upsertSection(body, header string, lines []string) string {
+	headerBlock := "\n\n" + header + "\n\n"
+	idx := strings.Index(body, headerBlock)
+	if idx >= 0 {
+		// Find the end of the existing block — next "##" heading or EOF.
+		rest := body[idx+len(headerBlock):]
+		endIdx := strings.Index(rest, "\n\n## ")
+		if endIdx < 0 {
+			endIdx = len(rest)
+		}
+		newBlock := strings.Join(lines, "\n")
+		if endIdx >= len(rest) && endIdx > 0 && rest[endIdx-1] == '\n' {
+			newBlock += "\n"
+		}
+		return body[:idx+len(headerBlock)] + newBlock + rest[endIdx:]
+	}
+
+	// Append new block at the end.
+	newBlock := strings.Join(lines, "\n")
+	return body + headerBlock + newBlock + "\n"
 }
 
 // refLabels returns formatted link labels for a list of Refs.

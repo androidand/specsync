@@ -437,3 +437,184 @@ func numberFromURL(url string) string {
 	}
 	return url
 }
+
+// ReadDependencies queries GitHub for the blockedBy and blocking edges on the
+// issue identified by ref. It returns the list of edges. This is the source of
+// truth for dependency reconciliation on GitHub.
+func (p *GitHubProvider) ReadDependencies(ctx context.Context, ref Ref) ([]DependencyEdge, error) {
+	owner, repo, number, err := parseIssueURL(ref.URL)
+	if err != nil {
+		return nil, err
+	}
+
+	query := `
+		query($owner: String!, $repo: String!, $number: Int!) {
+			repository(owner: $owner, name: $repo) {
+				issue(number: $number) {
+					issueDependenciesSummary {
+						blockedBy {
+							edges {
+								node {
+									... on Issue {
+										id
+										databaseId
+										url
+									}
+								}
+							}
+						}
+						blocking {
+							edges {
+								node {
+									... on Issue {
+										id
+										databaseId
+										url
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	`
+
+	var out struct {
+		Repository struct {
+			Issue struct {
+				IssueDependenciesSummary struct {
+					BlockedBy struct {
+						Edges []struct {
+							Node struct {
+								ID        string `json:"id"`
+								DatabaseID int    `json:"databaseId"`
+								URL       string `json:"url"`
+							} `json:"node"`
+						} `json:"edges"`
+					} `json:"blockedBy"`
+					Blocking struct {
+						Edges []struct {
+							Node struct {
+								ID        string `json:"id"`
+								DatabaseID int    `json:"databaseId"`
+								URL       string `json:"url"`
+							} `json:"node"`
+						} `json:"edges"`
+					} `json:"blocking"`
+				} `json:"issueDependenciesSummary"`
+			} `json:"issue"`
+		} `json:"repository"`
+	}
+
+	if err := p.graphql(ctx, "readDependencies", query, &out,
+		"-f", "owner="+owner,
+		"-f", "repo="+repo,
+		"-F", "number="+fmt.Sprintf("%d", number),
+	); err != nil {
+		return nil, err
+	}
+
+	var edges []DependencyEdge
+	for _, e := range out.Repository.Issue.IssueDependenciesSummary.BlockedBy.Edges {
+		r := *refFromURL(e.Node.URL)
+		edges = append(edges, DependencyEdge{
+			Ref:    r,
+			NodeID: e.Node.ID,
+		})
+	}
+	for _, e := range out.Repository.Issue.IssueDependenciesSummary.Blocking.Edges {
+		r := *refFromURL(e.Node.URL)
+		edges = append(edges, DependencyEdge{
+			Ref:      r,
+			NodeID:   e.Node.ID,
+			IsBlocks: true,
+		})
+	}
+	return edges, nil
+}
+
+// ReadDependenciesForRef reads the blockedBy edges for a specific ref
+// (used to check the inverse edge for "## Blocks").
+func (p *GitHubProvider) ReadDependenciesForRef(ctx context.Context, ref Ref) ([]DependencyEdge, error) {
+	edges, err := p.ReadDependencies(ctx, ref)
+	if err != nil {
+		return nil, err
+	}
+	// Only return blockedBy edges (not blocks).
+	var blockedBy []DependencyEdge
+	for _, e := range edges {
+		if !e.IsBlocks {
+			blockedBy = append(blockedBy, e)
+		}
+	}
+	return blockedBy, nil
+}
+
+// ResolveNodeID returns the GitHub node id for the issue at url.
+// The node id is required for addBlockedBy / removeBlockedBy mutations.
+func (p *GitHubProvider) ResolveNodeID(ctx context.Context, url string) (string, error) {
+	owner, repo, number, err := parseIssueURL(url)
+	if err != nil {
+		return "", err
+	}
+
+	query := `
+		query($owner: String!, $repo: String!, $number: Int!) {
+			repository(owner: $owner, name: $repo) {
+				issue(number: $number) {
+					id
+				}
+			}
+		}
+	`
+
+	var out struct {
+		Repository struct {
+			Issue struct {
+				ID string `json:"id"`
+			} `json:"issue"`
+		} `json:"repository"`
+	}
+
+	if err := p.graphql(ctx, "resolveNodeID", query, &out,
+		"-f", "owner="+owner,
+		"-f", "repo="+repo,
+		"-F", "number="+fmt.Sprintf("%d", number),
+	); err != nil {
+		return "", err
+	}
+	return out.Repository.Issue.ID, nil
+}
+
+// AddBlockedBy adds a dependency edge: the issue with number issueNum is
+// blocked by the issue with nodeID.
+func (p *GitHubProvider) AddBlockedBy(ctx context.Context, issueNum, blockedByNodeID string) error {
+	mutation := `
+		mutation($issueId: ID!, $blockedById: ID!) {
+			addBlockedBy(input: {issueId: $issueId, blockedById: $blockedById}) {
+				clientMutationId
+			}
+		}
+	`
+	return p.graphql(ctx, "addBlockedBy", mutation, nil,
+		"-f", "issueId="+issueNum,
+		"-f", "blockedById="+blockedByNodeID,
+	)
+}
+
+// RemoveBlockedBy removes a dependency edge: the issue with number issueNum
+// is no longer blocked by the issue with nodeID.
+func (p *GitHubProvider) RemoveBlockedBy(ctx context.Context, issueNum, blockedByNodeID string) error {
+	mutation := `
+		mutation($issueId: ID!, $blockedById: ID!) {
+			removeBlockedBy(input: {issueId: $issueId, blockedById: $blockedById}) {
+				clientMutationId
+			}
+		}
+	`
+	return p.graphql(ctx, "removeBlockedBy", mutation, nil,
+		"-f", "issueId="+issueNum,
+		"-f", "blockedById="+blockedByNodeID,
+	)
+}

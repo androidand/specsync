@@ -100,6 +100,23 @@ At least 2 changes required. Arguments may be **change slugs** (as today) or **i
 - **Slug arguments**: write `links.md` in each change directory, then sync each spec so the "## Related" section appears in each GitHub issue.
 - **Reference arguments**: link directly on GitHub with no local spec. specsync fetches the issue, upserts a managed `## Related` section pointing at the other linked issues, and pushes the edited body. Cross-repo targeting is per reference — each `owner/repo#N` resolves to its own repo.
 
+### Directed dependency links
+
+`links.md` supports **directed** dependency edges via two section headers:
+
+- **`## Blocked by`** — this change is blocked by the listed issues. sync creates a GitHub dependency (`addBlockedBy`) on the linked issue.
+- **`## Blocks`** — this change blocks the listed issues. sync sets the inverse edge (the named issue is blocked by this one).
+
+Entries use the same format as `## Related`: `#N`, `owner/repo#N`, or full URL.
+
+During sync, specsync reads GitHub's current dependencies (`issueDependenciesSummary`), reconciles against a `.specsync/deps/<provider>.json` baseline, and performs:
+
+- **Push local adds** — `BlockedBy`/`Blocks` not yet on GitHub → `addBlockedBy`
+- **Pull remote adds** — dependencies on GitHub not in `links.md` → pulled into `links.md`
+- **Remove local removals** — edges in baseline but removed from `links.md` → `removeBlockedBy`
+
+If GitHub returns an error (e.g. "Dependency cycle detected"), the error is surfaced in the sync output rather than being silently swallowed.
+
 ### Spin off emergent work
 
 ```

@@ -41,6 +41,7 @@ func runTrace(args []string) {
 func runScan(args []string) {
 	fs := flag.NewFlagSet("scan", flag.ExitOnError)
 	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	openspecs := fs.String("openspecs", "", "comma-separated list of openspec directories for cross-repo scanning")
 	asJSON := fs.Bool("json", false, "emit JSON for a planning agent")
 	_ = fs.Parse(args)
 
@@ -48,27 +49,65 @@ func runScan(args []string) {
 	if len(paths) == 0 && topic == "" {
 		fail(fmt.Errorf("scan: give an area — one or more paths and/or a topic\nusage: specsync scan <path...> [topic]"))
 	}
-	abs, err := filepath.Abs(*openspec)
-	if err != nil {
-		fail(err)
+
+	// Determine if this is a cross-repo scan
+	var abs []string
+	if *openspecs != "" {
+		// Cross-repo scan mode
+		dirs := strings.Split(*openspecs, ",")
+		for _, dir := range dirs {
+			d, err := filepath.Abs(strings.TrimSpace(dir))
+			if err != nil {
+				fail(err)
+			}
+			abs = append(abs, d)
+		}
+	} else {
+		// Single-repo scan mode
+		d, err := filepath.Abs(*openspec)
+		if err != nil {
+			fail(err)
+		}
+		abs = append(abs, d)
 	}
+
 	ctx := context.Background()
 	scope := specsync.Scope{Paths: paths, Topic: topic}
-	in, err := specsync.GatherTrace(ctx, abs, specsync.NewGitCommitSource(), scope)
-	if err != nil {
-		fail(err)
+
+	var in specsync.TraceInput
+	if len(abs) == 1 {
+		// Single-repo scan (original behavior)
+		var err error
+		in, err = specsync.GatherTrace(ctx, abs[0], specsync.NewGitCommitSource(), scope)
+		if err != nil {
+			fail(err)
+		}
+	} else {
+		// Cross-repo scan (new behavior)
+		var err error
+		in, err = specsync.GatherTraceMulti(ctx, abs, specsync.NewGitCommitSource(), scope)
+		if err != nil {
+			fail(err)
+		}
 	}
+
 	tr := specsync.ResolveTrace(in, scope)
 	looseIssues, issuesNote := openIssuesInArea(ctx, in, topic)
 
+	// Compute cross-repo relationships for multi-repo scans
+	var crossRepo map[string][]specsync.ChangeRelationship
+	if len(abs) > 1 {
+		crossRepo = specsync.CrossRepoCorrelation(in.Changes, scope)
+	}
+
 	if *asJSON {
-		emitJSON(map[string]any{"trace": tr, "openIssuesNoChange": looseIssues})
+		emitJSON(map[string]any{"trace": tr, "openIssuesNoChange": looseIssues, "crossRepo": crossRepo})
 		return
 	}
 	label := strings.Join(append(append([]string{}, paths...), quoteIf(topic)...), "  +  ")
 	fmt.Printf("Scan  %s\n\n", strings.TrimSpace(label))
 	changes := nodesOfKind(tr, specsync.NodeChange)
-	if len(changes) == 0 && len(looseIssues) == 0 {
+	if len(changes) == 0 && len(looseIssues) == 0 && len(crossRepo) == 0 {
 		fmt.Println("Nothing exists here yet.")
 		return
 	}
@@ -78,6 +117,17 @@ func runScan(args []string) {
 			fmt.Printf("  %-32s %s\n", strings.TrimPrefix(n.ID, "change:"), n.Label)
 		}
 	}
+
+	// Print cross-repo relationships
+	if len(crossRepo) > 0 {
+		fmt.Println("\nCross-repo relationships")
+		for slug, rels := range crossRepo {
+			for _, rel := range rels {
+				fmt.Printf("  %-32s --[%s]--> %s (%s)\n", slug, rel.Provenance, rel.RelatedChange.Slug, rel.RelatedChange.Title)
+			}
+		}
+	}
+
 	fmt.Println("\nOpen issues here (no linked change)")
 	if issuesNote != "" {
 		fmt.Printf("  (%s)\n", issuesNote)

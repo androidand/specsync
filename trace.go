@@ -11,12 +11,14 @@ import (
 type Provenance string
 
 const (
-	ProvMarker       Provenance = "marker"        // specsync:change= marker in an issue body
-	ProvBranch       Provenance = "branch"        // issue-linked branch name
-	ProvCommitFooter Provenance = "commit-footer" // a reference in a commit message
-	ProvPRBody       Provenance = "pr-body"       // a reference read from a PR body via gh
-	ProvRefCache     Provenance = "ref-cache"     // the local refs.json binding
-	ProvLinksMD      Provenance = "links-md"      // a links.md entry
+	ProvMarker         Provenance = "marker"           // specsync:change= marker in an issue body
+	ProvBranch         Provenance = "branch"           // issue-linked branch name
+	ProvCommitFooter   Provenance = "commit-footer"    // a reference in a commit message
+	ProvPRBody         Provenance = "pr-body"          // a reference read from a PR body via gh
+	ProvRefCache       Provenance = "ref-cache"        // the local refs.json binding
+	ProvLinksMD        Provenance = "links-md"         // a links.md entry
+	ProvTopicCorrelation Provenance = "topic-correlation" // cross-repo topic match
+	ProvPathCorrelation  Provenance = "path-correlation"  // cross-repo path match
 )
 
 // NodeKind is the type of a trace node.
@@ -42,6 +44,12 @@ type TraceLink struct {
 	From       string
 	To         string
 	Provenance Provenance
+}
+
+// ChangeRelationship describes a cross-repo relationship between two changes.
+type ChangeRelationship struct {
+	RelatedChange Change
+	Provenance    Provenance
 }
 
 // Gap is an unresolved relationship — reported, never fabricated into a link.

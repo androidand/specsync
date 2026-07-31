@@ -71,13 +71,24 @@ func saveRef(changeDir, provider string, ref Ref) error {
 // "- owner/repo#N" line (or bare URL when the shorthand can't be derived).
 // links.md is the human- and agent-readable source of relationship truth;
 // it is loaded by LoadChange on every sync so the Related section stays current.
-func saveLinksToMD(changeDir string, refs []Ref) error {
+// The function writes three sections: Related (flat links), Blocked by, and
+// Blocks. Sections with no entries are omitted.
+func saveLinksToMD(changeDir string, links, blockedBy, blocks []Ref) error {
 	var sb strings.Builder
-	for _, r := range refs {
-		sb.WriteString("- ")
-		sb.WriteString(ghShortEntry(r.URL))
-		sb.WriteByte('\n')
+	writeSection := func(header string, refs []Ref) {
+		if len(refs) == 0 {
+			return
+		}
+		sb.WriteString("## " + header + "\n")
+		for _, r := range refs {
+			sb.WriteString("- ")
+			sb.WriteString(ghShortEntry(r.URL))
+			sb.WriteByte('\n')
+		}
 	}
+	writeSection("Related", links)
+	writeSection("Blocked by", blockedBy)
+	writeSection("Blocks", blocks)
 	return os.WriteFile(filepath.Join(changeDir, "links.md"), []byte(sb.String()), 0o644)
 }
 
