@@ -27,6 +27,8 @@
 - [x] Without `-close-completed`, neither close nor reopen is called
 - [x] Rewrote `TestGitHubPushReopensManagedActiveIssue`, which encoded the old requirement
 - [x] Re-pull carries the base forward (verified failing before the fix)
+- [x] Pull records the task base from what it wrote; task-less pull keeps the prior one
+- [x] End-to-end: an uncheck on the issue propagates after a pull (verified failing before the fix)
 - [x] Full suite green
 
 ## Deferred (see proposal Non-Goals)

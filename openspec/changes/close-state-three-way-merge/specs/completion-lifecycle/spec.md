@@ -42,6 +42,32 @@ itself to reopen.
 - **THEN** the recorded base is carried forward unchanged
 - **AND** it is not re-seeded from the issue's current open/closed state
 
+## ADDED Requirements
+
+### Requirement: Pull records the task merge base it creates
+specsync SHALL record a task merge base whenever `pull` writes `tasks.md` from an
+issue body, using the content it wrote. Pull makes local and remote identical,
+which is exactly what a merge base records, so the pulled content — not a carried
+over earlier base — is the correct base. When the issue carries no `## Tasks`
+section, `tasks.md` is left untouched and the prior base SHALL be preserved rather
+than dropped. Without a base, the next sync degrades to a monotonic union in which
+a task unchecked on the issue can never propagate back.
+
+#### Scenario: Pull seeds the base from what it wrote
+- **WHEN** an issue with a `## Tasks` section is pulled
+- **THEN** the recorded base equals the `tasks.md` content pull wrote
+- **AND** the recorded base checksum matches that content
+
+#### Scenario: An uncheck propagates after a pull
+- **GIVEN** a change pulled from an issue with a checked task
+- **WHEN** that task is unchecked on the issue and sync runs with reconcile
+- **THEN** the uncheck propagates into `tasks.md`
+
+#### Scenario: A task-less pull keeps the prior base
+- **WHEN** an issue with no `## Tasks` section is pulled over an existing change
+- **THEN** `tasks.md` is unchanged
+- **AND** the previously recorded task base and checksum survive
+
 #### Scenario: Archived change
 - **GIVEN** a change under `changes/archive/`
 - **WHEN** sync runs
