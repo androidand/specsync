@@ -25,11 +25,15 @@ jobs:
       - run: go build -o specsync ./cmd/specsync
       - name: Enforce OpenSpec archive hygiene
         run: go run ./cmd/specsync release-plan -fail-on-archive-candidates
+      # No -close-completed here, by design. Closing an issue is a decision about
+      # whether the work is done and reviewed — it belongs to whoever merges the
+      # PR (human or agent), not to a path filter on a spec push. CI's job is to
+      # keep issue *content* current; open/closed state is the tracker's own.
       - name: Preview (dry run)
         env:
           GH_TOKEN: ${{ github.token }}
-        run: ./specsync -dry-run -close-completed
+        run: ./specsync -dry-run
       - name: Sync OpenSpec changes to issues
         env:
           GH_TOKEN: ${{ github.token }}
-        run: ./specsync -close-completed
+        run: ./specsync
