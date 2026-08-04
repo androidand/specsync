@@ -177,3 +177,24 @@ func readFileStr(t *testing.T, path string) string {
 	}
 	return string(b)
 }
+
+// TestSaveLinksToMD_DedupsAcrossProviderKeyForms guards the dedup key: the same
+// issue carries a bare "github" provider in a legacy or spinoff-built ref and a
+// qualified "github:owner/repo" one when parsed back from the file. Keying on
+// provider+id would treat those as two links and append a duplicate.
+func TestSaveLinksToMD_DedupsAcrossProviderKeyForms(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "links.md")
+	existing := "- owner/repo#42\n"
+	if err := os.WriteFile(path, []byte(existing), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// The bare-"github" form spinoff writes, pointing at the same issue.
+	legacy := Ref{Provider: "github", ID: "42", URL: "https://github.com/owner/repo/issues/42"}
+	if err := saveLinksToMD(dir, "", []Ref{legacy}); err != nil {
+		t.Fatalf("saveLinksToMD: %v", err)
+	}
+	if got := readFileStr(t, path); got != existing {
+		t.Errorf("bare and qualified provider forms must be one link:\nwant %q\ngot  %q", existing, got)
+	}
+}

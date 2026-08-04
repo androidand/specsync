@@ -93,7 +93,7 @@ func saveLinksToMD(changeDir, openspecDir string, refs []Ref) error {
 
 	recorded := map[string]bool{}
 	for _, r := range parseLinksMD(changeDir, openspecDir) {
-		recorded[r.Provider+"#"+r.ID] = true
+		recorded[linkKey(r)] = true
 	}
 
 	var sb strings.Builder
@@ -102,7 +102,7 @@ func saveLinksToMD(changeDir, openspecDir string, refs []Ref) error {
 		if entry == "" {
 			continue // nothing to point at; a bare "- " is noise, not a link
 		}
-		key := r.Provider + "#" + r.ID
+		key := linkKey(r)
 		if recorded[key] {
 			continue
 		}
@@ -122,6 +122,19 @@ func saveLinksToMD(changeDir, openspecDir string, refs []Ref) error {
 		out += "\n"
 	}
 	return os.WriteFile(path, []byte(out+sb.String()), 0o644)
+}
+
+// linkKey identifies the issue a Ref points at, for deduplicating links.md
+// entries. It keys on the normalized URL rather than provider+id because the
+// provider string is not canonical: the same issue is "github" in a legacy ref
+// and "github:owner/repo" in a current one (see saveRef's migration), and
+// spinoff builds bare-"github" refs while parseLinksMD resolves the identical
+// URL to the qualified form. Keying on the URL makes those all one link.
+func linkKey(r Ref) string {
+	if r.URL != "" {
+		return ghShortEntry(r.URL)
+	}
+	return r.Provider + "#" + r.ID
 }
 
 // ghShortEntry converts a GitHub issue URL to "owner/repo#N" shorthand.

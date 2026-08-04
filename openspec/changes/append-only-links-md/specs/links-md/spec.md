@@ -38,6 +38,11 @@ issue SHALL all count as the same link.
   and specsync records the ref for issue 42
 - **THEN** no `- owner/repo#42` line is added
 
+#### Scenario: Provider key spelling does not split one link in two
+- **WHEN** the recorded ref carries a bare `github` provider and the file's entry
+  resolves to the qualified `github:owner/repo` form for the same issue
+- **THEN** they count as one link and no duplicate entry is added
+
 #### Scenario: A sibling slug already counts as recorded
 - **WHEN** `links.md` contains `- other-change` and that sibling's ref cache
   resolves to `owner/repo#42`, and specsync records the ref for issue 42

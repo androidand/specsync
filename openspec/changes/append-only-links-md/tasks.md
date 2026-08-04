@@ -3,7 +3,9 @@
 ## Append-only write (`cache.go`)
 - [x] `saveLinksToMD` reads the existing file and appends only unrecorded refs
 - [x] Take an `openspecDir` argument so slug entries resolve during dedup
-- [x] Deduplicate on resolved `provider#id` via `parseLinksMD`, not string match
+- [x] Deduplicate on the resolved entry via `parseLinksMD`, not string match
+- [x] Key dedup on the normalized URL (`linkKey`) — the provider string is not
+      canonical (`github` vs `github:owner/repo`), so keying on it splits one link in two
 - [x] Write nothing when every ref is already recorded (byte-for-byte idempotent)
 - [x] Insert a newline first when the existing file does not end in one
 - [x] Keep from-scratch output a plain list — no section header imposed
