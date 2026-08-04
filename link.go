@@ -90,7 +90,7 @@ func Link(ctx context.Context, opts LinkOptions) (*LinkResult, error) {
 		}
 		links := refsExcept(allRefs, e.ref)
 		if !opts.DryRun {
-			if err := saveLinksToMD(e.slugDir, links); err != nil {
+			if err := saveLinksToMD(e.slugDir, opts.OpenSpecDir, links); err != nil {
 				return nil, fmt.Errorf("save links for %s: %w", e.slugDir, err)
 			}
 		}
