@@ -32,6 +32,8 @@ specsync [-dry-run] [-change <change>] [-repo owner/name] [-reconcile=false] [-c
 
 **Discoveries.** Capture findings during implementation without scope decisions. `specsync note -change <slug> "<text>"` appends a line to `discoveries.md`, rendered as `## Discoveries` in the issue. On pull, the section is stripped (like `## Tasks`). The original issue body is saved as `original-ask.md` on first pull (write-once, never overwritten) and rendered as `## Original ask`.
 
+**Provider selection.** `-provider` (repeatable: `github`, `beads`) picks the tracker; absent it, specsync auto-detects. Auto-detection chooses `beads` only when the project carries a `.beads/` directory (repo root or working directory) *and* `bd` is on PATH — `bd` merely being installed is not a signal. Otherwise it chooses `github`. When auto-detection lands on a non-github provider, specsync prints the provider and the reason. If a sync ever names a provider you did not expect, stop and pass `-provider github` explicitly rather than letting it create items in the wrong tracker.
+
 **Lifecycle stages.** specsync labels each issue `stage:<stage>`. The stage is derived automatically: `active` while any task is unchecked, `complete` once every task is checked (before archiving), and `archived` once the change moves under `changes/archive/`. A `.status` file in the change folder overrides the derived stage. This means finishing the last task flips the issue out of `stage:active` on the next sync — no manual bookkeeping.
 
 ### Automatic issue resolution (Linker)
@@ -97,8 +99,10 @@ specsync link [-dry-run] [-openspec <dir>] <change1> <change2> [<change3>...]
 
 At least 2 changes required. Arguments may be **change slugs** (as today) or **issue references** (`#N`, `owner/repo#N`, full URL) — slugs and references can be mixed in one invocation.
 
-- **Slug arguments**: write `links.md` in each change directory, then sync each spec so the "## Related" section appears in each GitHub issue.
+- **Slug arguments**: record the link in `links.md` in each change directory, then sync each spec so the "## Related" section appears in each GitHub issue.
 - **Reference arguments**: link directly on GitHub with no local spec. specsync fetches the issue, upserts a managed `## Related` section pointing at the other linked issues, and pushes the edited body. Cross-repo targeting is per reference — each `owner/repo#N` resolves to its own repo.
+
+**`links.md` is append-only.** It is yours to write in — prose, dependency order, sequencing notes, `## Blocked by` / `## Blocks` sections — and specsync only ever *adds* entries it does not already find there. Nothing you wrote is rewritten or dropped by `link`, `pull`, or `spinoff`, and a link already recorded (in any spelling: full URL, `owner/repo#N`, or a sibling slug) writes nothing at all. Removing a link is your edit to make.
 
 ### Spin off emergent work
 

@@ -195,7 +195,7 @@ func runSync(args []string) {
 	// Build provider set. When -provider is absent, auto-detect a single one.
 	var providers []specsync.WorkProvider
 	if len(providerNames) == 0 {
-		provider, providerReason := detectProvider("")
+		provider, providerReason := detectProvider("", repoRoot)
 		prov := makeProvider(*repo, *dryRun, provider)
 		providers = []specsync.WorkProvider{prov}
 		if *dryRun {
@@ -207,6 +207,10 @@ func runSync(args []string) {
 				printTarget(prov, *repo)
 			}
 			fmt.Println()
+		} else if providerReason != "" {
+			// Auto-detecting away from the github default decides where every
+			// item in this run lands; say so on real runs, not just dry-runs.
+			fmt.Printf("provider: %s (auto-detected: %s)\n", provider, providerReason)
 		}
 	} else {
 		for _, pn := range providerNames {
@@ -685,17 +689,30 @@ func runLink(args []string) {
 }
 
 // detectProvider returns ("beads", reason) when Beads should be auto-selected,
-// or ("github", "") otherwise. Checks (in order): explicit provider flag,
-// `bd` on PATH, `.beads/` in working directory.
-func detectProvider(provider string) (string, string) {
+// or ("github", "") otherwise. An explicit -provider always wins.
+//
+// The signal for Beads is a Beads database in *this project* — a `.beads/`
+// directory at the repo root or in the working directory. `bd` merely being
+// installed is not a signal: a globally installed `bd` used to redirect every
+// repo's sync away from GitHub, so a plain `specsync sync` in a GitHub project
+// would create phantom beads instead of updating the issues it had already
+// created. `bd` on PATH is still necessary — a project carrying `.beads/` on a
+// machine without the binary falls back to github rather than failing on the
+// first shell-out.
+func detectProvider(provider, repoRoot string) (string, string) {
 	if provider != "" {
 		return provider, ""
 	}
-	if _, err := exec.LookPath("bd"); err == nil {
-		return "beads", "`bd` found on PATH"
+	if _, err := exec.LookPath("bd"); err != nil {
+		return "github", ""
 	}
-	if _, err := os.Stat(".beads"); err == nil {
-		return "beads", ".beads/ found in working directory"
+	for _, dir := range []string{repoRoot, "."} {
+		if dir == "" {
+			continue
+		}
+		if fi, err := os.Stat(filepath.Join(dir, ".beads")); err == nil && fi.IsDir() {
+			return "beads", ".beads/ found at " + dir
+		}
 	}
 	return "github", ""
 }

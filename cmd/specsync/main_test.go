@@ -135,51 +135,69 @@ func TestVersionDefault(t *testing.T) {
 	}
 }
 
-// TestDetectProvider pins auto-detection: explicit flag wins, `bd` on PATH
-// selects beads, `.beads/` directory selects beads, fallback is github.
+// TestDetectProvider pins auto-detection: an explicit flag wins, and Beads is
+// selected only for a project that actually carries a `.beads/` database.
 func TestDetectProvider(t *testing.T) {
-	// Explicit flag always wins.
-	provider, reason := detectProvider("github")
+	// Explicit flag always wins, whatever the environment looks like.
+	provider, reason := detectProvider("github", t.TempDir())
 	if provider != "github" || reason != "" {
 		t.Fatalf("explicit github: got %q/%q, want github/empty", provider, reason)
 	}
-	provider, reason = detectProvider("beads")
+	provider, reason = detectProvider("beads", t.TempDir())
 	if provider != "beads" || reason != "" {
 		t.Fatalf("explicit beads: got %q/%q, want beads/empty", provider, reason)
 	}
 
-	// Empty string with `bd` on PATH → beads (PATH check fires first).
+	bdInstalled := false
 	if _, err := exec.LookPath("bd"); err == nil {
-		provider, reason = detectProvider("")
-		if provider != "beads" || reason != "`bd` found on PATH" {
-			t.Fatalf("bd on PATH: got %q/%q, want beads/bd on PATH", provider, reason)
-		}
-	} else {
-		// No `bd` on PATH — test .beads/ detection.
-		tmpDir := t.TempDir()
-		if err := os.Mkdir(filepath.Join(tmpDir, ".beads"), 0755); err != nil {
-			t.Fatal(err)
-		}
-		t.Chdir(tmpDir)
-		provider, reason = detectProvider("")
-		if provider != "beads" || reason != ".beads/ found in working directory" {
-			t.Fatalf(".beads/ detection: got %q/%q, want beads/.beads/ reason", provider, reason)
-		}
+		bdInstalled = true
 	}
 
-	// No hints → github (use a clean temp dir, no .beads/).
-	tmpDir := t.TempDir()
-	t.Chdir(tmpDir)
-	provider, reason = detectProvider("")
-	// If `bd` is on PATH, it'll still detect beads; otherwise github.
-	if _, err := exec.LookPath("bd"); err == nil {
-		if provider != "beads" {
-			t.Fatalf("no hints with bd on PATH: got %q, want beads", provider)
+	// A project with no `.beads/` is github — even with `bd` installed. This is
+	// the regression: a globally installed `bd` used to hijack every repo and
+	// create phantom beads instead of updating its GitHub issues.
+	clean := t.TempDir()
+	t.Chdir(clean)
+	provider, reason = detectProvider("", clean)
+	if provider != "github" || reason != "" {
+		t.Fatalf("no .beads/ (bd installed=%v): got %q/%q, want github/empty", bdInstalled, provider, reason)
+	}
+
+	// `.beads/` at the repo root selects beads — but only when `bd` can run.
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, ".beads"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	provider, reason = detectProvider("", root)
+	if bdInstalled {
+		if provider != "beads" || reason != ".beads/ found at "+root {
+			t.Fatalf(".beads/ at repo root: got %q/%q, want beads/.beads/ reason", provider, reason)
 		}
-	} else {
-		if provider != "github" || reason != "" {
-			t.Fatalf("no hints: got %q/%q, want github/empty", provider, reason)
-		}
+	} else if provider != "github" || reason != "" {
+		t.Fatalf(".beads/ without bd on PATH: got %q/%q, want github/empty", provider, reason)
+	}
+
+	// `.beads/` in the working directory also counts, so running from inside a
+	// beads project with an out-of-tree -openspec still resolves to beads.
+	wd := t.TempDir()
+	if err := os.Mkdir(filepath.Join(wd, ".beads"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(wd)
+	provider, _ = detectProvider("", t.TempDir())
+	if bdInstalled && provider != "beads" {
+		t.Fatalf(".beads/ in working dir: got %q, want beads", provider)
+	}
+
+	// A `.beads` *file* is not a database and must not trigger detection.
+	fileOnly := t.TempDir()
+	t.Chdir(fileOnly)
+	if err := os.WriteFile(filepath.Join(fileOnly, ".beads"), []byte("not a dir\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	provider, reason = detectProvider("", fileOnly)
+	if provider != "github" || reason != "" {
+		t.Fatalf(".beads regular file: got %q/%q, want github/empty", provider, reason)
 	}
 }
 
