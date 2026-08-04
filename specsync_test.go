@@ -126,23 +126,87 @@ func TestGitHubPushUpdateReconcilesLabels(t *testing.T) {
 	}
 }
 
-func TestGitHubPushReopensManagedActiveIssue(t *testing.T) {
+// TestGitHubPushReopenGate pins the three-way merge on open/closed state: a
+// closed issue is reopened only when the close was specsync's own last assertion
+// (base true) and local work has since reappeared. A close that came from outside
+// — a merged PR, a human, a reviewing agent — is left alone, because reopening it
+// on the next unrelated spec push is the clobber, not a projection.
+func TestGitHubPushReopenGate(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		baseClosed *bool
+		wantReopen bool
+	}{
+		{"specsync closed it, work reappeared", boolPtr(true), true},
+		{"closed by someone else", boolPtr(false), false},
+		{"no base — fresh or discarded cache", nil, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var calls [][]string
+			p := &GitHubProvider{run: func(_ context.Context, args ...string) (string, error) {
+				calls = append(calls, args)
+				if args[0] == "issue" && args[1] == "view" {
+					return `{"state":"CLOSED","labels":[{"name":"stage:complete"}]}`, nil
+				}
+				return "", nil
+			}}
+			ref, err := p.Push(context.Background(), WorkItem{
+				Slug: "my-change", Title: "T", Stage: StageActive, ManageClosed: true,
+			}, &Ref{Provider: "github", ID: "7", BaseClosed: tc.baseClosed})
+			if err != nil {
+				t.Fatalf("Push: %v", err)
+			}
+
+			reopened := findCall(calls, "issue", "reopen", "7") != nil
+			if reopened != tc.wantReopen {
+				t.Fatalf("reopened=%v, want %v; calls: %v", reopened, tc.wantReopen, calls)
+			}
+			// The issue body/labels are still updated either way — only the
+			// open/closed state is deferred.
+			if findCall(calls, "issue", "edit", "7") == nil {
+				t.Errorf("expected the issue content to be updated; calls: %v", calls)
+			}
+
+			if tc.wantReopen {
+				if ref.BaseClosed == nil || *ref.BaseClosed {
+					t.Errorf("after reopen the base should record open, got %v", ref.BaseClosed)
+				}
+				return
+			}
+			// A skipped reopen must not adopt the external close as the new base,
+			// or specsync would re-arm itself to reopen on a later run.
+			if tc.baseClosed == nil && ref.BaseClosed != nil {
+				t.Errorf("skip must not invent a base, got %v", *ref.BaseClosed)
+			}
+			if tc.baseClosed != nil && (ref.BaseClosed == nil || *ref.BaseClosed != *tc.baseClosed) {
+				t.Errorf("skip must leave the base untouched, got %v", ref.BaseClosed)
+			}
+		})
+	}
+}
+
+// TestGitHubPushClosesAndRecordsBase: closing is still one call away, and it
+// records the base that later licenses a reopen.
+func TestGitHubPushClosesAndRecordsBase(t *testing.T) {
 	var calls [][]string
 	p := &GitHubProvider{run: func(_ context.Context, args ...string) (string, error) {
 		calls = append(calls, args)
 		if args[0] == "issue" && args[1] == "view" {
-			return `{"state":"CLOSED","labels":[{"name":"stage:complete"}]}`, nil
+			return `{"state":"OPEN","labels":[]}`, nil
 		}
 		return "", nil
 	}}
-	_, err := p.Push(context.Background(), WorkItem{
-		Slug: "my-change", Title: "T", Stage: StageActive, ManageClosed: true,
+	ref, err := p.Push(context.Background(), WorkItem{
+		Slug: "my-change", Title: "T", Stage: StageComplete, Closed: true, ManageClosed: true,
 	}, &Ref{Provider: "github", ID: "7"})
 	if err != nil {
 		t.Fatalf("Push: %v", err)
 	}
-	if findCall(calls, "issue", "reopen", "7") == nil {
-		t.Fatalf("expected managed active issue to reopen; calls: %v", calls)
+	if findCall(calls, "issue", "close", "7") == nil {
+		t.Fatalf("expected the completed issue to close; calls: %v", calls)
+	}
+	if ref.BaseClosed == nil || !*ref.BaseClosed {
+		t.Fatalf("close should record base closed, got %v", ref.BaseClosed)
 	}
 }
 

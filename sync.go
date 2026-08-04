@@ -190,6 +190,12 @@ func Sync(ctx context.Context, opts Options) (Result, error) {
 					ref.BaseSHA = existingPtr.BaseSHA
 					ref.Base = existingPtr.Base
 				}
+				// Same for the open/closed base: a provider that asserted nothing
+				// this run (or has no notion of closed state) must not erase the
+				// claim recorded by an earlier run.
+				if existingPtr != nil && ref.BaseClosed == nil {
+					ref.BaseClosed = existingPtr.BaseClosed
+				}
 				if err := saveRef(c.Dir, key, ref); err != nil {
 					providerResults = append(providerResults, ProviderResult{
 						ProviderName: prov.Name(),
