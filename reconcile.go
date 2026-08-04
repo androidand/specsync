@@ -214,8 +214,13 @@ func extractTaskTexts(md string) []string {
 }
 
 // currentTaskSHA returns the SHA-256 of the current tasks.md content.
-func currentTaskSHA(c *Change) string {
-	h := sha256.Sum256([]byte(c.TasksMarkdown))
+func currentTaskSHA(c *Change) string { return taskSHA(c.TasksMarkdown) }
+
+// taskSHA returns the SHA-256 of tasks.md content. Split out from
+// currentTaskSHA so callers holding the content but no Change — pull, which
+// writes tasks.md straight from the issue — can record a base too.
+func taskSHA(tasksMarkdown string) string {
+	h := sha256.Sum256([]byte(tasksMarkdown))
 	return hex.EncodeToString(h[:])
 }
 

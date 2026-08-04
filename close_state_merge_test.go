@@ -2,7 +2,9 @@ package specsync
 
 import (
 	"context"
+	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -202,5 +204,142 @@ func TestPullPreservesCloseStateBase(t *testing.T) {
 	_, ref := firstRef(refs)
 	if ref.BaseClosed == nil || !*ref.BaseClosed {
 		t.Fatalf("re-pull must carry the base forward, got %v", ref.BaseClosed)
+	}
+}
+
+// TestPullRecordsTaskBase covers the task merge base across pull. Pull overwrites
+// tasks.md from the issue, so local and remote end up identical — that is a real
+// sync point and becomes the new base. Without it the next sync falls back to a
+// monotonic union, where a task unchecked on the issue can never propagate.
+func TestPullRecordsTaskBase(t *testing.T) {
+	root := t.TempDir()
+	cdir := filepath.Join(root, "changes", "pulled-tasks")
+	mustWrite(t, filepath.Join(cdir, "proposal.md"), "# Pulled\n\nbody\n")
+	mustWrite(t, filepath.Join(cdir, "tasks.md"), "- [ ] stale local\n")
+
+	body := "# Pulled\n\nbody\n\n## Tasks\n\n- [x] first\n- [ ] second\n"
+	prov := NewGitHubProviderFuncWithRepo("o/r", func(_ context.Context, args ...string) (string, error) {
+		if args[0] == "issue" && args[1] == "view" {
+			b, _ := json.Marshal(map[string]any{
+				"number": 7, "url": "https://github.com/o/r/issues/7",
+				"title": "Pulled", "body": body, "state": "OPEN", "labels": []any{},
+			})
+			return string(b), nil
+		}
+		return "", nil
+	})
+
+	if _, err := Pull(context.Background(), PullOptions{
+		OpenSpecDir: root, Provider: prov, IssueID: "7", Slug: "pulled-tasks",
+	}); err != nil {
+		t.Fatalf("Pull: %v", err)
+	}
+
+	refs, err := loadRefs(cdir)
+	if err != nil {
+		t.Fatalf("loadRefs: %v", err)
+	}
+	_, ref := firstRef(refs)
+	if ref.Base == "" {
+		t.Fatal("pull must record a task merge base, got empty")
+	}
+	// The base must describe what pull actually wrote to tasks.md.
+	onDisk := readFileStr(t, filepath.Join(cdir, "tasks.md"))
+	if ref.Base != onDisk {
+		t.Errorf("base does not match tasks.md:\nbase   %q\non disk %q", ref.Base, onDisk)
+	}
+	if ref.BaseSHA != taskSHA(onDisk) {
+		t.Errorf("BaseSHA does not match its content")
+	}
+}
+
+// TestPullWithoutTasksKeepsPriorTaskBase: no "## Tasks" section means tasks.md was
+// left alone, so the prior base still describes it and must survive.
+func TestPullWithoutTasksKeepsPriorTaskBase(t *testing.T) {
+	root := t.TempDir()
+	cdir := filepath.Join(root, "changes", "no-tasks")
+	mustWrite(t, filepath.Join(cdir, "proposal.md"), "# NoTasks\n\nbody\n")
+	mustWrite(t, filepath.Join(cdir, "tasks.md"), "- [x] local work\n")
+	priorBase := "- [ ] local work\n"
+	mustWrite(t, filepath.Join(cdir, ".specsync", "refs.json"),
+		`{"github:o/r":{"provider":"github:o/r","id":"7","url":"https://github.com/o/r/issues/7","base":"- [ ] local work\n","base_sha":"deadbeef"}}`)
+
+	prov := NewGitHubProviderFuncWithRepo("o/r", func(_ context.Context, args ...string) (string, error) {
+		if args[0] == "issue" && args[1] == "view" {
+			b, _ := json.Marshal(map[string]any{
+				"number": 7, "url": "https://github.com/o/r/issues/7",
+				"title": "NoTasks", "body": "# NoTasks\n\nbody\n", "state": "OPEN", "labels": []any{},
+			})
+			return string(b), nil
+		}
+		return "", nil
+	})
+
+	if _, err := Pull(context.Background(), PullOptions{
+		OpenSpecDir: root, Provider: prov, IssueID: "7", Slug: "no-tasks",
+	}); err != nil {
+		t.Fatalf("Pull: %v", err)
+	}
+
+	refs, _ := loadRefs(cdir)
+	_, ref := firstRef(refs)
+	if ref.Base != priorBase {
+		t.Errorf("prior task base must survive a task-less pull:\nwant %q\ngot  %q", priorBase, ref.Base)
+	}
+	if ref.BaseSHA != "deadbeef" {
+		t.Errorf("prior BaseSHA must survive, got %q", ref.BaseSHA)
+	}
+}
+
+// TestUncheckPropagatesAfterPull is the user-facing payoff of recording a base at
+// pull time: with one, the next sync runs a real three-way merge and an uncheck on
+// the issue reaches tasks.md. With no base, reconcile degrades to a monotonic
+// union where "checked wins" and the uncheck is silently dropped.
+func TestUncheckPropagatesAfterPull(t *testing.T) {
+	root := t.TempDir()
+	cdir := filepath.Join(root, "changes", "uncheck-flow")
+
+	issueBody := "# Uncheck flow\n\nbody\n\n## Tasks\n\n- [x] first\n- [ ] second\n"
+	viewJSON := func(body string) string {
+		b, _ := json.Marshal(map[string]any{
+			"number": 7, "url": "https://github.com/o/r/issues/7",
+			"title": "Uncheck flow", "body": body, "state": "OPEN", "labels": []any{},
+		})
+		return string(b)
+	}
+
+	// Pull the issue: tasks.md becomes "- [x] first", and that is the base.
+	pullProv := NewGitHubProviderFuncWithRepo("o/r", func(_ context.Context, args ...string) (string, error) {
+		if args[0] == "issue" && args[1] == "view" {
+			return viewJSON(issueBody), nil
+		}
+		return "", nil
+	})
+	if _, err := Pull(context.Background(), PullOptions{
+		OpenSpecDir: root, Provider: pullProv, IssueID: "7", Slug: "uncheck-flow",
+	}); err != nil {
+		t.Fatalf("Pull: %v", err)
+	}
+	if got := readFileStr(t, filepath.Join(cdir, "tasks.md")); !strings.Contains(got, "- [x] first") {
+		t.Fatalf("pull should have written the checked task, got %q", got)
+	}
+
+	// The task is now unchecked on the issue. Sync with reconcile must honor it.
+	unchecked := "# Uncheck flow\n\nbody\n\n## Tasks\n\n- [ ] first\n- [ ] second\n"
+	syncProv := NewGitHubProviderFuncWithRepo("o/r", func(_ context.Context, args ...string) (string, error) {
+		if args[0] == "issue" && args[1] == "view" {
+			return viewJSON(unchecked), nil
+		}
+		return "", nil
+	})
+	if _, err := Sync(context.Background(), Options{
+		OpenSpecDir: root, Provider: syncProv, Slug: "uncheck-flow", Reconcile: true,
+	}); err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+
+	got := readFileStr(t, filepath.Join(cdir, "tasks.md"))
+	if strings.Contains(got, "- [x] first") {
+		t.Errorf("uncheck did not propagate; tasks.md still has it checked:\n%s", got)
 	}
 }
