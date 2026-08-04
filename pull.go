@@ -191,6 +191,16 @@ func Pull(ctx context.Context, opts PullOptions) (PullResult, error) {
 	}
 	// Link the change to the source issue so the next push updates it.
 	ref := Ref{Provider: opts.Provider.Name(), ID: item.ID, URL: item.URL}
+	// Carry forward the open/closed merge base. A re-pull is not a reset: losing
+	// the base would silently revoke specsync's license to reopen an item it
+	// closed itself. Note we deliberately do NOT seed it from item.Closed —
+	// adopting the observed remote state would license undoing a close specsync
+	// never made, which is the clobber the base exists to prevent.
+	if prior, err := loadRefs(res.Dir); err == nil {
+		if p, ok := prior[opts.Provider.Name()]; ok {
+			ref.BaseClosed = p.BaseClosed
+		}
+	}
 	if err := saveRef(res.Dir, opts.Provider.Name(), ref); err != nil {
 		return PullResult{}, err
 	}

@@ -151,6 +151,7 @@ type Change struct {
 	OriginalAsk   string // original-ask.md contents, may be ""
 	Discoveries   string // discoveries.md contents, may be ""
 	Archived      bool
+	Significant   bool // true if the change is significant enough to warrant a kept archive
 	Progress      TaskProgress // what the task checklist says
 	Stage         Stage        // current workflow placement
 	StageSource   StageSource  // how we arrived at Stage (default/tasks/metadata/legacy-status/folder)
@@ -236,6 +237,10 @@ func LoadChange(dir string, archived bool, openspecDir string) (*Change, error) 
 	if meta, err := LoadChangeMetadata(dir); err == nil && meta != nil && meta.BaselineTaskCount != nil {
 		c.BaselineTasks = meta.BaselineTaskCount
 	}
+
+	// Determine significance: explicit marker file takes priority, then
+	// heuristic fallback (has design.md or task count exceeds threshold).
+	c.Significant = isSignificant(dir, c.TasksMarkdown)
 
 	if err := refreshState(c); err != nil {
 		return nil, fmt.Errorf("load state for %s: %w", slug, err)
@@ -693,4 +698,35 @@ func atoiSafe(s string) int {
 		n = n*10 + int(r-'0')
 	}
 	return n
+}
+
+// significantMarker is the filename that explicitly marks a change as
+// significant (worth a kept archive).
+const significantMarker = "significant"
+
+// designDoc is the filename that signals a change has design depth.
+const designDoc = "design.md"
+
+// defaultTaskThreshold is the number of live tasks above which a change is
+// considered significant by heuristic.
+const defaultTaskThreshold = 5
+
+// isSignificant determines whether a change is significant enough to warrant
+// a kept archive. It checks for an explicit marker file first, then falls
+// back to heuristics: presence of design.md or task count exceeding the
+// threshold.
+func isSignificant(dir, tasksMarkdown string) bool {
+	// Explicit marker takes priority.
+	if _, err := os.Stat(filepath.Join(dir, significantMarker)); err == nil {
+		return true
+	}
+
+	// Heuristic 1: has a design document.
+	if _, err := os.Stat(filepath.Join(dir, designDoc)); err == nil {
+		return true
+	}
+
+	// Heuristic 2: task count exceeds threshold.
+	total, _ := CountCheckboxes(tasksMarkdown)
+	return total >= defaultTaskThreshold
 }

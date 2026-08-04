@@ -1,4 +1,4 @@
-- [ ] Define retention policy resolution: `-retain move|prune` flag → `.specsync/config` → significance heuristic; add a small config reader (no new format, plain keys)
+- [x] Define retention policy resolution: `-retain move|prune` flag → `.specsync/config` → significance heuristic; add a small config reader (no new format, plain keys)
 - [ ] Add significance signal: `<change>/significant` marker recognized in `LoadChange`; heuristic fallback (has `design.md` or task count > threshold)
 - [ ] Add `Close`/label verification to the GitHub provider if not already covered; ensure `spec:archived` label is created idempotently
 - [ ] Implement `Archive(ctx, ArchiveOptions)` in a new `archive.go`: final push, unchecked-task check (refuse without `-force`), close + `spec:archived`, then apply retention

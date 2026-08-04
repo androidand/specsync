@@ -166,3 +166,41 @@ func TestDefaultSyncNeverTouchesClosedState(t *testing.T) {
 		}
 	}
 }
+
+// TestPullPreservesCloseStateBase: a re-pull must not reset the open/closed merge
+// base. Losing it silently revokes specsync's license to reopen an item it closed
+// itself — and seeding it from the observed remote state would be worse, licensing
+// the undo of a close specsync never made.
+func TestPullPreservesCloseStateBase(t *testing.T) {
+	root := t.TempDir()
+	cdir := filepath.Join(root, "changes", "pulled-change")
+	mustWrite(t, filepath.Join(cdir, "proposal.md"), "# Pulled\n\nbody\n")
+	mustWrite(t, filepath.Join(cdir, "tasks.md"), "- [x] done\n")
+	mustWrite(t, filepath.Join(cdir, ".specsync", "refs.json"),
+		`{"github:o/r":{"provider":"github:o/r","id":"7","url":"https://github.com/o/r/issues/7","base_closed":true}}`)
+
+	prov := NewGitHubProviderFuncWithRepo("o/r", func(_ context.Context, args ...string) (string, error) {
+		if args[0] == "issue" && args[1] == "view" {
+			return `{"number":7,"url":"https://github.com/o/r/issues/7","title":"Pulled","body":"# Pulled\n\nbody\n","state":"CLOSED","labels":[]}`, nil
+		}
+		return "", nil
+	})
+
+	if _, err := Pull(context.Background(), PullOptions{
+		OpenSpecDir: root,
+		Provider:    prov,
+		IssueID:     "7",
+		Slug:        "pulled-change",
+	}); err != nil {
+		t.Fatalf("Pull: %v", err)
+	}
+
+	refs, err := loadRefs(cdir)
+	if err != nil {
+		t.Fatalf("loadRefs: %v", err)
+	}
+	_, ref := firstRef(refs)
+	if ref.BaseClosed == nil || !*ref.BaseClosed {
+		t.Fatalf("re-pull must carry the base forward, got %v", ref.BaseClosed)
+	}
+}

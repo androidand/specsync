@@ -4,6 +4,9 @@
 - [x] Add `Ref.BaseClosed *bool` — the open/closed state specsync last asserted
 - [x] Keep `nil` distinct from `false` ("no claim" vs "specsync left it open")
 - [x] Preserve the base across pushes when a provider asserts nothing this run
+- [x] `pull` carries the base forward instead of building a fresh ref that drops it —
+      and must NOT seed it from the observed remote state (that would license
+      undoing a close specsync never made)
 
 ## Reopen gate (`github.go`)
 - [x] Reopen only when the base says specsync closed it
@@ -23,6 +26,7 @@
 - [x] Externally closed issue is left alone, content still synced, base not adopted
 - [x] Without `-close-completed`, neither close nor reopen is called
 - [x] Rewrote `TestGitHubPushReopensManagedActiveIssue`, which encoded the old requirement
+- [x] Re-pull carries the base forward (verified failing before the fix)
 - [x] Full suite green
 
 ## Deferred (see proposal Non-Goals)

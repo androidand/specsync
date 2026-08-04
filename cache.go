@@ -94,13 +94,13 @@ func saveLinksToMD(changeDir, openspecDir string, links, blockedBy, blocks []Ref
 	exLinks, exBlockedBy, exBlocks := parseLinksMD(changeDir, openspecDir)
 	recorded := map[string]bool{}
 	for _, r := range exLinks {
-		recorded[r.Provider+"#"+r.ID] = true
+		recorded[linkKey(r)] = true
 	}
 	for _, r := range exBlockedBy {
-		recorded[r.Provider+"#"+r.ID] = true
+		recorded[linkKey(r)] = true
 	}
 	for _, r := range exBlocks {
-		recorded[r.Provider+"#"+r.ID] = true
+		recorded[linkKey(r)] = true
 	}
 
 	// Build new entries per section.
@@ -140,7 +140,7 @@ func saveLinksToMD(changeDir, openspecDir string, links, blockedBy, blocks []Ref
 func newEntriesStr(refs []Ref, recorded map[string]bool) string {
 	var sb strings.Builder
 	for _, r := range refs {
-		key := r.Provider + "#" + r.ID
+		key := linkKey(r)
 		if recorded[key] {
 			continue
 		}
@@ -154,6 +154,19 @@ func newEntriesStr(refs []Ref, recorded map[string]bool) string {
 		recorded[key] = true
 	}
 	return sb.String()
+}
+
+// linkKey identifies the issue a Ref points at, for deduplicating links.md
+// entries. It keys on the normalized URL rather than provider+id because the
+// provider string is not canonical: the same issue is "github" in a legacy ref
+// and "github:owner/repo" in a current one (see saveRef's migration), and
+// spinoff builds bare-"github" refs while parseLinksMD resolves the identical
+// URL to the qualified form. Keying on the URL makes those all one link.
+func linkKey(r Ref) string {
+	if r.URL != "" {
+		return ghShortEntry(r.URL)
+	}
+	return r.Provider + "#" + r.ID
 }
 
 // ghShortEntry converts a GitHub issue URL to "owner/repo#N" shorthand.

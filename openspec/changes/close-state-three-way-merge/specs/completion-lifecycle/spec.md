@@ -36,6 +36,12 @@ itself to reopen.
 - **THEN** the item is still not reopened
 - **AND** no open/closed base is invented for it
 
+#### Scenario: A re-pull does not reset the base
+- **GIVEN** a change whose ref records an open/closed base
+- **WHEN** the issue is pulled again
+- **THEN** the recorded base is carried forward unchanged
+- **AND** it is not re-seeded from the issue's current open/closed state
+
 #### Scenario: Archived change
 - **GIVEN** a change under `changes/archive/`
 - **WHEN** sync runs
