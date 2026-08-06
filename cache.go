@@ -92,7 +92,8 @@ func saveLinksToMD(changeDir, openspecDir string, refs []Ref) error {
 	}
 
 	recorded := map[string]bool{}
-	for _, r := range parseLinksMD(changeDir, openspecDir) {
+	links, blockedBy, blocks := parseLinksMD(changeDir, openspecDir)
+	for _, r := range append(links, append(blockedBy, blocks...)...) {
 		recorded[linkKey(r)] = true
 	}
 

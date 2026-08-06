@@ -151,3 +151,81 @@ func (r AuditResult) HasUnmerged() bool {
 	}
 	return false
 }
+
+// TaskAuditFinding represents the result of auditing a single change's tasks.
+type TaskAuditFinding struct {
+	Slug      string // change slug
+	Unchecked int    // number of unchecked tasks
+	Total     int    // total number of tasks
+	HasCode   bool   // whether code files reference this change
+	CodeRefs  int    // number of code references found
+	Progress  string // task progress string
+	Stage     string // current stage
+	Note      string // additional note (e.g., "spun off", "external repo")
+}
+
+// TaskAuditResult holds the findings from a task audit run.
+type TaskAuditResult struct {
+	Findings   []TaskAuditFinding
+	Mismatches []TaskAuditFinding // subset: unchecked tasks but code exists
+}
+
+// AuditTasks scans all changes and reports unchecked tasks, flagging mismatches
+// where code exists but tasks remain unchecked (the dogfooding failure mode).
+func AuditTasks(changes []Change) TaskAuditResult {
+	var result TaskAuditResult
+
+	for _, c := range changes {
+		tc := countTaskStates(c.TasksMarkdown)
+		if tc.LiveTotal() == 0 {
+			continue
+		}
+
+		finding := TaskAuditFinding{
+			Slug:      c.Slug,
+			Unchecked: tc.Todo,
+			Total:     tc.LiveTotal(),
+			Progress:  string(c.Progress),
+			Stage:     string(c.Stage),
+		}
+
+		if tc.Todo > 0 {
+			if hasImplementationEvidence(c.Dir) {
+				finding.HasCode = true
+				finding.CodeRefs = 1
+			}
+		}
+
+		result.Findings = append(result.Findings, finding)
+
+		if tc.Todo > 0 && finding.HasCode {
+			result.Mismatches = append(result.Mismatches, finding)
+		}
+	}
+
+	return result
+}
+
+// HasMismatches reports whether the result contains any mismatches.
+func (r TaskAuditResult) HasMismatches() bool {
+	return len(r.Mismatches) > 0
+}
+
+// hasImplementationEvidence checks for strong evidence that code was written
+// for this change. Relies on .specsync/metadata.json with stage "complete"
+// or "implemented" — the only reliable signal that the change was actively
+// worked on.
+func hasImplementationEvidence(changeDir string) bool {
+	metaPath := filepath.Join(changeDir, ".specsync", "metadata.json")
+	if data, err := os.ReadFile(metaPath); err == nil {
+		content := string(data)
+		if strings.Contains(content, `"stage":"complete"`) ||
+			strings.Contains(content, `"stage":"implemented"`) ||
+			strings.Contains(content, `"stage": "complete"`) ||
+			strings.Contains(content, `"stage": "implemented"`) {
+			return true
+		}
+	}
+
+	return false
+}
