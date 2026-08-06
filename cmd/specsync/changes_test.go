@@ -438,8 +438,6 @@ func TestSetPriority_ArchivedUnset(t *testing.T) {
 	}
 }
 
-=======
->>>>>>> origin/feat/58-change-status-cli
 func TestEmptyMetadataCleanup(t *testing.T) {
 	tmpDir := t.TempDir()
 	changesDir := filepath.Join(tmpDir, "openspec", "changes")
