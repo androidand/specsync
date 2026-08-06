@@ -3,3 +3,4 @@
 # guarantees worktree merge aborts. Ignore the entire .skein/ subtree
 # under any change directory so new runtime files can never slip in.
 */.skein/
+**/.status

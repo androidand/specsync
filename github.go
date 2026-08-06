@@ -220,7 +220,11 @@ func (p *GitHubProvider) Push(ctx context.Context, item WorkItem, existing *Ref)
 		}
 		ref := Ref{Provider: p.Name(), ID: numberFromURL(url), URL: url}
 		if item.Closed {
+			ref.BaseClosed = boolPtr(true)
 			return ref, p.close(ctx, ref.ID)
+		}
+		if item.ManageClosed {
+			ref.BaseClosed = boolPtr(false)
 		}
 		return ref, nil
 	}
@@ -241,14 +245,43 @@ func (p *GitHubProvider) Push(ctx context.Context, item WorkItem, existing *Ref)
 	if _, err := p.run(ctx, args...); err != nil {
 		return Ref{}, err
 	}
-	if item.ManageClosed && item.Closed && !currentlyClosed {
-		return *existing, p.close(ctx, num)
+	ref := *existing
+	if !item.ManageClosed {
+		return ref, nil
 	}
-	if item.ManageClosed && !item.Closed && currentlyClosed {
-		return *existing, p.reopen(ctx, num)
+	switch {
+	case item.Closed && !currentlyClosed:
+		ref.BaseClosed = boolPtr(true)
+		return ref, p.close(ctx, num)
+
+	case !item.Closed && currentlyClosed:
+		// Three-way merge on open/closed state, mirroring the board's human-move
+		// detection. specsync may only undo a close it made itself: with a base of
+		// true, "closed" is specsync's own last assertion and local work has since
+		// reappeared, which is what reopen is for. With a base of false or nil the
+		// close came from outside — a merged PR, a human, a reviewing agent — and
+		// specsync is glue, not a second authority on it. Reopening there is the
+		// clobber: it would undo a deliberate close on the next unrelated spec push.
+		//
+		// Note the asymmetry: an external close is never adopted as the new base, so
+		// specsync stays deferential from then on rather than re-arming itself to
+		// reopen later. Whoever took over the state keeps it until specsync closes
+		// the item again on its own.
+		if existing.BaseClosed == nil || !*existing.BaseClosed {
+			return ref, nil
+		}
+		ref.BaseClosed = boolPtr(false)
+		return ref, p.reopen(ctx, num)
+
+	default:
+		// Remote already matches the desired state; record it as the base so a
+		// later divergence is measured against something.
+		ref.BaseClosed = boolPtr(item.Closed)
+		return ref, nil
 	}
-	return *existing, nil
 }
+
+func boolPtr(b bool) *bool { return &b }
 
 func (p *GitHubProvider) Find(ctx context.Context, slug string) (*Ref, error) {
 	// Search the inner token (not the full HTML comment) for friendlier indexing.

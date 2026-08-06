@@ -161,7 +161,7 @@ func Pull(ctx context.Context, opts PullOptions) (PullResult, error) {
 				refs = append(refs, *r)
 			}
 		}
-		if err := saveLinksToMD(res.Dir, refs, nil, nil); err != nil {
+		if err := saveLinksToMD(res.Dir, opts.OpenSpecDir, refs); err != nil {
 			return PullResult{}, fmt.Errorf("write links.md: %w", err)
 		}
 	}
@@ -191,6 +191,30 @@ func Pull(ctx context.Context, opts PullOptions) (PullResult, error) {
 	}
 	// Link the change to the source issue so the next push updates it.
 	ref := Ref{Provider: opts.Provider.Name(), ID: item.ID, URL: item.URL}
+	// Carry the merge bases forward: a re-pull links the change, it does not reset
+	// its history. Building a bare ref here used to drop both of them.
+	//
+	// For open/closed, losing the base silently revokes specsync's license to
+	// reopen an item it closed itself. We deliberately do NOT seed it from
+	// item.Closed — adopting the observed remote state would license undoing a
+	// close specsync never made, which is the clobber the base exists to prevent.
+	if prior, err := loadRefs(res.Dir); err == nil {
+		if p, ok := prior[opts.Provider.Name()]; ok {
+			ref.BaseClosed = p.BaseClosed
+			ref.Base, ref.BaseSHA = p.Base, p.BaseSHA
+		}
+	}
+	// The task base is different: when pull wrote tasks.md from the issue body,
+	// local and remote are now *identical*, and that is precisely what a merge base
+	// records — so the pulled content becomes the new base rather than being
+	// carried over stale. This is what lets the next sync run a real three-way
+	// merge; with no base it falls back to a monotonic union, where a task
+	// unchecked on the issue can never propagate back. When the issue carried no
+	// "## Tasks" section, tasks.md was left untouched and the prior base still
+	// describes it, so it stands.
+	if tasks != "" {
+		ref.Base, ref.BaseSHA = tasks, taskSHA(tasks)
+	}
 	if err := saveRef(res.Dir, opts.Provider.Name(), ref); err != nil {
 		return PullResult{}, err
 	}

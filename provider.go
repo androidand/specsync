@@ -24,6 +24,14 @@ type Ref struct {
 	URL      string `json:"url"`                // human-facing link
 	BaseSHA  string `json:"base_sha,omitempty"` // SHA-256 of tasks.md at last sync (for 3-way reconcile)
 	Base     string `json:"base,omitempty"`     // base tasks.md content at last sync (for 3-way reconcile)
+
+	// BaseClosed is the open/closed state specsync itself last asserted on the
+	// item — the merge base for open/closed, exactly as Base is for tasks.md. nil
+	// means specsync has never asserted it (first sync, or a discarded cache), and
+	// is deliberately distinct from false: it is the difference between "specsync
+	// left this open" and "specsync has no claim here". Only a base of true
+	// licenses a reopen; see the reopen gate in the GitHub provider's Push.
+	BaseClosed *bool `json:"base_closed,omitempty"`
 }
 
 // WorkProvider projects WorkItems outward. Implementations must be idempotent:

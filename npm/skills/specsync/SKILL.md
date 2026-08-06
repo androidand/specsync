@@ -118,7 +118,8 @@ During sync, specsync reads GitHub's current dependencies (`issueDependenciesSum
 - **Remove local removals** — edges in baseline but removed from `links.md` → `removeBlockedBy`
 
 If GitHub returns an error (e.g. "Dependency cycle detected"), the error is surfaced in the sync output rather than being silently swallowed.
-**`links.md` is append-only.** It is yours to write in — prose, dependency order, sequencing notes, `## Blocked by` / `## Blocks` sections — and specsync only ever *adds* entries it does not already find there. Nothing you wrote is rewritten or dropped by `link`, `pull`, or `spinoff`, and a link already recorded (in any spelling: full URL, `owner/repo#N`, or a sibling slug) writes nothing at all. Removing a link is your edit to make.
+
+**`links.md` is append-only.****`links.md` is append-only.** It is yours to write in — prose, dependency order, sequencing notes, `## Blocked by` / `## Blocks` sections — and specsync only ever *adds* entries it does not already find there. Nothing you wrote is rewritten or dropped by `link`, `pull`, or `spinoff`, and a link already recorded (in any spelling: full URL, `owner/repo#N`, or a sibling slug) writes nothing at all. Removing a link is your edit to make.
 
 ### Spin off emergent work
 

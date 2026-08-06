@@ -311,6 +311,52 @@ func TestLink_MixedSlugAndReference(t *testing.T) {
 	}
 }
 
+// TestLink_PreservesAuthoredLinksMD is the end-to-end guard on the reported bug:
+// `specsync link` on a change whose links.md carries dependency order and
+// sequencing notes must add its entry without touching any of that.
+func TestLink_PreservesAuthoredLinksMD(t *testing.T) {
+	root := t.TempDir()
+	openspecDir := filepath.Join(root, "openspec")
+	cdir := filepath.Join(openspecDir, "changes", "my-change")
+	os.MkdirAll(filepath.Join(cdir, ".specsync"), 0o755)
+	os.WriteFile(filepath.Join(cdir, "proposal.md"), []byte("# my-change\n\nbody\n"), 0o644)
+	os.WriteFile(filepath.Join(cdir, "tasks.md"), []byte("- [ ] task\n"), 0o644)
+	os.WriteFile(filepath.Join(cdir, ".specsync", "refs.json"),
+		[]byte(`{"github:owner/repo":{"provider":"github:owner/repo","id":"73","url":"https://github.com/owner/repo/issues/73"}}`), 0o644)
+
+	authored := "# Links\n\nThe schema migration must land first.\n\n## Blocked by\n\n- owner/repo#10\n"
+	linksPath := filepath.Join(cdir, "links.md")
+	os.WriteFile(linksPath, []byte(authored), 0o644)
+
+	if _, err := Link(context.Background(), LinkOptions{
+		OpenSpecDir: openspecDir,
+		Args:        []string{"my-change", "owner/repo#99"},
+		Repo:        "owner/repo",
+	}); err != nil {
+		t.Fatalf("Link: %v", err)
+	}
+
+	got := readFileStr(t, linksPath)
+	if !containsStr(got, authored) {
+		t.Fatalf("authored links.md not preserved:\n%s", got)
+	}
+	if !containsStr(got, "- owner/repo#99") {
+		t.Errorf("new link not recorded:\n%s", got)
+	}
+
+	// Re-running must not duplicate the entry.
+	if _, err := Link(context.Background(), LinkOptions{
+		OpenSpecDir: openspecDir,
+		Args:        []string{"my-change", "owner/repo#99"},
+		Repo:        "owner/repo",
+	}); err != nil {
+		t.Fatalf("Link (second run): %v", err)
+	}
+	if again := readFileStr(t, linksPath); again != got {
+		t.Errorf("second run changed the file:\nfirst %q\nagain %q", got, again)
+	}
+}
+
 // fakeLinkProvider implements WorkProvider + IssueReader for link tests.
 type fakeLinkProvider struct {
 	ref    Ref
