@@ -161,7 +161,7 @@ func Pull(ctx context.Context, opts PullOptions) (PullResult, error) {
 				refs = append(refs, *r)
 			}
 		}
-		if err := saveLinksToMD(res.Dir, refs, nil, nil); err != nil {
+		if err := saveLinksToMD(res.Dir, opts.OpenSpecDir, refs, nil, nil); err != nil {
 			return PullResult{}, fmt.Errorf("write links.md: %w", err)
 		}
 	}

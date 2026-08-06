@@ -67,29 +67,93 @@ func saveRef(changeDir, provider string, ref Ref) error {
 	return nil
 }
 
-// saveLinksToMD writes links.md in the change dir root. Each ref becomes a
-// "- owner/repo#N" line (or bare URL when the shorthand can't be derived).
-// links.md is the human- and agent-readable source of relationship truth;
-// it is loaded by LoadChange on every sync so the Related section stays current.
-// The function writes three sections: Related (flat links), Blocked by, and
-// Blocks. Sections with no entries are omitted.
-func saveLinksToMD(changeDir string, links, blockedBy, blocks []Ref) error {
-	var sb strings.Builder
-	writeSection := func(header string, refs []Ref) {
-		if len(refs) == 0 {
-			return
-		}
-		sb.WriteString("## " + header + "\n")
-		for _, r := range refs {
-			sb.WriteString("- ")
-			sb.WriteString(ghShortEntry(r.URL))
-			sb.WriteByte('\n')
-		}
+// saveLinksToMD records refs in links.md in the change dir root. Each ref not
+// already recorded becomes a "- owner/repo#N" line (or a bare URL when the
+// shorthand can't be derived), appended to the correct section of whatever the
+// file already contains.
+//
+// The append is the point. links.md is the human- and agent-readable source of
+// relationship truth, and people write more into it than link entries: prose,
+// dependency order, sequencing notes. Rewriting the file to a bare list of URLs
+// — as this used to — silently destroyed all of it. So specsync only ever adds
+// lines here; removing one is the author's call.
+//
+// Refs are deduplicated against the file's *resolved* entries (via
+// parseLinksMD), so a full URL and its "owner/repo#N" shorthand count as the
+// same link. A ref set that is already fully recorded writes nothing at all.
+// The three ref lists (links, blockedBy, blocks) are appended under their
+// respective section headers.
+func saveLinksToMD(changeDir, openspecDir string, links, blockedBy, blocks []Ref) error {
+	path := filepath.Join(changeDir, "links.md")
+
+	// Collect all already-recorded refs for dedup.
+	existing, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("read links.md: %w", err)
 	}
-	writeSection("Related", links)
-	writeSection("Blocked by", blockedBy)
-	writeSection("Blocks", blocks)
-	return os.WriteFile(filepath.Join(changeDir, "links.md"), []byte(sb.String()), 0o644)
+	exLinks, exBlockedBy, exBlocks := parseLinksMD(changeDir, openspecDir)
+	recorded := map[string]bool{}
+	for _, r := range exLinks {
+		recorded[r.Provider+"#"+r.ID] = true
+	}
+	for _, r := range exBlockedBy {
+		recorded[r.Provider+"#"+r.ID] = true
+	}
+	for _, r := range exBlocks {
+		recorded[r.Provider+"#"+r.ID] = true
+	}
+
+	// Build new entries per section.
+	newLinks := newEntriesStr(links, recorded)
+	newBlockedBy := newEntriesStr(blockedBy, recorded)
+	newBlocks := newEntriesStr(blocks, recorded)
+
+	if newLinks == "" && newBlockedBy == "" && newBlocks == "" {
+		return nil
+	}
+
+	var sb strings.Builder
+	out := string(existing)
+	if out != "" && !strings.HasSuffix(out, "\n") {
+		out += "\n"
+		sb.WriteString("\n")
+	}
+
+	if newLinks != "" {
+		sb.WriteString("## Related\n")
+		sb.WriteString(newLinks)
+	}
+
+	if newBlockedBy != "" {
+		sb.WriteString("## Blocked by\n")
+		sb.WriteString(newBlockedBy)
+	}
+
+	if newBlocks != "" {
+		sb.WriteString("## Blocks\n")
+		sb.WriteString(newBlocks)
+	}
+
+	return os.WriteFile(path, []byte(out+sb.String()), 0o644)
+}
+
+func newEntriesStr(refs []Ref, recorded map[string]bool) string {
+	var sb strings.Builder
+	for _, r := range refs {
+		key := r.Provider + "#" + r.ID
+		if recorded[key] {
+			continue
+		}
+		entry := ghShortEntry(r.URL)
+		if entry == "" {
+			continue
+		}
+		sb.WriteString("- ")
+		sb.WriteString(entry)
+		sb.WriteByte('\n')
+		recorded[key] = true
+	}
+	return sb.String()
 }
 
 // ghShortEntry converts a GitHub issue URL to "owner/repo#N" shorthand.
