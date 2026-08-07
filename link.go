@@ -172,7 +172,7 @@ func classifyArg(arg, openspecDir, repo string) (linkEntry, error) {
 	if err != nil {
 		return linkEntry{}, fmt.Errorf("%q is not a known change slug", arg)
 	}
-	refs, err := loadRefs(c.Dir)
+	refs, err := LoadRefs(c.Dir)
 	if err != nil {
 		return linkEntry{}, err
 	}

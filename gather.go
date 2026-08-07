@@ -21,7 +21,7 @@ func GatherTrace(ctx context.Context, openspecDir string, src CommitSource, scop
 
 	var in TraceInput
 	for _, c := range changes {
-		refs, err := loadRefs(c.Dir)
+		refs, err := LoadRefs(c.Dir)
 		if err != nil {
 			return TraceInput{}, err
 		}
@@ -60,7 +60,7 @@ func GatherTraceMulti(ctx context.Context, openspecDirs []string, src CommitSour
 		}
 
 		for _, c := range changes {
-			refs, err := loadRefs(c.Dir)
+			refs, err := LoadRefs(c.Dir)
 			if err != nil {
 				return TraceInput{}, err
 			}

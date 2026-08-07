@@ -198,7 +198,7 @@ func Pull(ctx context.Context, opts PullOptions) (PullResult, error) {
 	// reopen an item it closed itself. We deliberately do NOT seed it from
 	// item.Closed — adopting the observed remote state would license undoing a
 	// close specsync never made, which is the clobber the base exists to prevent.
-	if prior, err := loadRefs(res.Dir); err == nil {
+	if prior, err := LoadRefs(res.Dir); err == nil {
 		if p, ok := prior[opts.Provider.Name()]; ok {
 			ref.BaseClosed = p.BaseClosed
 			ref.Base, ref.BaseSHA = p.Base, p.BaseSHA

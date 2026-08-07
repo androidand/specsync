@@ -66,7 +66,7 @@ func TestSyncLegacyKeyUpdatesAndMigrates(t *testing.T) {
 		t.Fatalf("expected `issue edit 7`, calls: %v", calls)
 	}
 
-	refs, err := loadRefs(cdir)
+	refs, err := LoadRefs(cdir)
 	if err != nil {
 		t.Fatalf("loadRefs: %v", err)
 	}
@@ -119,7 +119,7 @@ func TestSyncLegacyKeyCrossRepoDoesNotClobber(t *testing.T) {
 		t.Fatalf("Created = %d, want 1", res.Created)
 	}
 
-	refs, err := loadRefs(cdir)
+	refs, err := LoadRefs(cdir)
 	if err != nil {
 		t.Fatalf("loadRefs: %v", err)
 	}
@@ -142,7 +142,7 @@ func TestSaveRefDropsUnparseableLegacyEntry(t *testing.T) {
 	if err := saveRef(cdir, "github:o/r", Ref{Provider: "github:o/r", ID: "9", URL: "https://github.com/o/r/issues/9"}); err != nil {
 		t.Fatalf("save canonical ref: %v", err)
 	}
-	refs, err := loadRefs(cdir)
+	refs, err := LoadRefs(cdir)
 	if err != nil {
 		t.Fatalf("loadRefs: %v", err)
 	}

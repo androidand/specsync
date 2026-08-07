@@ -17,7 +17,7 @@ func refCachePath(changeDir string) string {
 	return filepath.Join(changeDir, ".specsync", "refs.json")
 }
 
-func loadRefs(changeDir string) (map[string]Ref, error) {
+func LoadRefs(changeDir string) (map[string]Ref, error) {
 	b, err := os.ReadFile(refCachePath(changeDir))
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -33,7 +33,7 @@ func loadRefs(changeDir string) (map[string]Ref, error) {
 }
 
 func saveRef(changeDir, provider string, ref Ref) error {
-	refs, err := loadRefs(changeDir)
+	refs, err := LoadRefs(changeDir)
 	if err != nil {
 		return err
 	}

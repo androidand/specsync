@@ -55,7 +55,7 @@ func TestCloseStateBasePersistsAcrossSyncs(t *testing.T) {
 	if !closed {
 		t.Fatal("sync 1 should have closed the issue")
 	}
-	refs, err := loadRefs(cdir)
+	refs, err := LoadRefs(cdir)
 	if err != nil {
 		t.Fatalf("loadRefs: %v", err)
 	}
@@ -81,7 +81,7 @@ func TestCloseStateBasePersistsAcrossSyncs(t *testing.T) {
 	if findCall(calls, "issue", "reopen", "7") == nil {
 		t.Fatalf("sync 2 should reopen for new work; calls: %v", calls)
 	}
-	refs, _ = loadRefs(cdir)
+	refs, _ = LoadRefs(cdir)
 	_, ref = firstRef(refs)
 	if ref.BaseClosed == nil || *ref.BaseClosed {
 		t.Fatalf("sync 2 should persist base closed=false, got %v", ref.BaseClosed)
@@ -128,7 +128,7 @@ func TestSyncLeavesExternallyClosedIssueAlone(t *testing.T) {
 		t.Errorf("issue content should still be updated; calls: %v", calls)
 	}
 	// And the external close is not adopted as specsync's own base.
-	refs, _ := loadRefs(cdir)
+	refs, _ := LoadRefs(cdir)
 	_, ref := firstRef(refs)
 	if ref.BaseClosed == nil || *ref.BaseClosed {
 		t.Errorf("base should stay open=false, got %v", ref.BaseClosed)
@@ -197,7 +197,7 @@ func TestPullPreservesCloseStateBase(t *testing.T) {
 		t.Fatalf("Pull: %v", err)
 	}
 
-	refs, err := loadRefs(cdir)
+	refs, err := LoadRefs(cdir)
 	if err != nil {
 		t.Fatalf("loadRefs: %v", err)
 	}
@@ -235,7 +235,7 @@ func TestPullRecordsTaskBase(t *testing.T) {
 		t.Fatalf("Pull: %v", err)
 	}
 
-	refs, err := loadRefs(cdir)
+	refs, err := LoadRefs(cdir)
 	if err != nil {
 		t.Fatalf("loadRefs: %v", err)
 	}
@@ -281,7 +281,7 @@ func TestPullWithoutTasksKeepsPriorTaskBase(t *testing.T) {
 		t.Fatalf("Pull: %v", err)
 	}
 
-	refs, _ := loadRefs(cdir)
+	refs, _ := LoadRefs(cdir)
 	_, ref := firstRef(refs)
 	if ref.Base != priorBase {
 		t.Errorf("prior task base must survive a task-less pull:\nwant %q\ngot  %q", priorBase, ref.Base)

@@ -103,7 +103,7 @@ func Spinoff(ctx context.Context, opts SpinoffOptions) (SpinoffResult, error) {
 
 	// Build parent URL for provenance.
 	var parentURL string
-	if refs, err := loadRefs(parent.Dir); err == nil && len(refs) > 0 {
+	if refs, err := LoadRefs(parent.Dir); err == nil && len(refs) > 0 {
 		_, ref := firstRef(refs)
 		parentURL = ref.URL
 	}

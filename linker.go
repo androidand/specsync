@@ -185,7 +185,7 @@ func NewCacheResolver(providerName string) *CacheResolver {
 }
 
 func (c *CacheResolver) Resolve(_ context.Context, changeDir string) (*LinkerResult, error) {
-	refs, err := loadRefs(changeDir)
+	refs, err := LoadRefs(changeDir)
 	if err != nil {
 		return nil, fmt.Errorf("cache read: %w", err)
 	}

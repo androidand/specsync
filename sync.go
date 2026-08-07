@@ -166,7 +166,7 @@ func Sync(ctx context.Context, opts Options) (Result, error) {
 		providerResults := make([]ProviderResult, 0, len(providers))
 
 		for _, prov := range providers {
-			refs, err := loadRefs(c.Dir)
+			refs, err := LoadRefs(c.Dir)
 			if err != nil {
 				providerResults = append(providerResults, ProviderResult{
 					ProviderName: prov.Name(),

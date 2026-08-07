@@ -347,7 +347,7 @@ func resolveEntry(entry, openspecDir string) *Ref {
 		filepath.Join(openspecDir, "changes", slug),
 		filepath.Join(openspecDir, "changes", "archive", slug),
 	} {
-		refs, err := loadRefs(dir)
+		refs, err := LoadRefs(dir)
 		if err != nil || len(refs) == 0 {
 			continue
 		}
@@ -396,7 +396,7 @@ func CountCheckboxes(md string) (total, completed int) {
 	return c.LiveTotal(), c.Done
 }
 
-func tasksComplete(md string) bool {
+func TasksComplete(md string) bool {
 	return countTaskStates(md).IsComplete()
 }
 

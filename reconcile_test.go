@@ -329,7 +329,7 @@ func TestBaseStatePreservedAcrossSyncs(t *testing.T) {
 	}
 
 	// Verify base state is saved in ref cache.
-	refs, err := loadRefs(cdir)
+	refs, err := LoadRefs(cdir)
 	if err != nil {
 		t.Fatalf("loadRefs: %v", err)
 	}
@@ -338,7 +338,7 @@ func TestBaseStatePreservedAcrossSyncs(t *testing.T) {
 	}
 
 	// Second sync — base state should still be there.
-	refs2, err := loadRefs(cdir)
+	refs2, err := LoadRefs(cdir)
 	if err != nil {
 		t.Fatalf("loadRefs: %v", err)
 	}
@@ -510,7 +510,7 @@ func TestCountCheckboxes_ExcludesDroppedMoved(t *testing.T) {
 
 func TestTasksComplete_ExcludesDroppedMoved(t *testing.T) {
 	md := "- [x] done\n- [~] dropped\n- [>] moved\n"
-	if !tasksComplete(md) {
+	if !TasksComplete(md) {
 		t.Error("expected complete (only live tasks matter)")
 	}
 }

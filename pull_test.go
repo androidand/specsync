@@ -151,7 +151,7 @@ func TestPullLinksIssueForRoundTrip(t *testing.T) {
 	}
 
 	// The ref cache must now bind the change to issue 7 so a push updates it.
-	refs, err := loadRefs(res.Dir)
+	refs, err := LoadRefs(res.Dir)
 	if err != nil {
 		t.Fatalf("loadRefs: %v", err)
 	}

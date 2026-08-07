@@ -226,7 +226,7 @@ func taskSHA(tasksMarkdown string) string {
 
 // saveBaseState persists the base tasks.md content to the ref cache.
 func saveBaseState(changeDir string, ref *Ref) error {
-	refs, err := loadRefs(changeDir)
+	refs, err := LoadRefs(changeDir)
 	if err != nil {
 		return err
 	}
