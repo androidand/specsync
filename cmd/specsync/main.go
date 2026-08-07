@@ -29,7 +29,7 @@ var knownSubcommands = map[string]bool{
 	"release-plan": true, "changelog": true, "install-skill": true,
 	"changes": true, "set-stage": true, "set-priority": true, "note": true,
 	"sync": true, "audit": true, "audit-tasks": true, "validate": true,
-	"spinoff": true,
+	"spinoff": true, "relate": true,
 }
 
 // knownConfusions maps a word someone might reach for by habit (e.g. git's
@@ -90,7 +90,7 @@ func deprecatedSlugFlag(args []string) error {
 func main() {
 	cmd, rest, err := resolveSubcommand(os.Args[1:])
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "specsync: %v\n\nRun with no subcommand (optionally with flags) to sync, or use one of: pull, link, scan, trace, release-plan, changelog, install-skill, changes, set-stage, set-priority, note, audit, audit-tasks, validate, spinoff\n", err)
+		fmt.Fprintf(os.Stderr, "specsync: %v\n\nRun with no subcommand (optionally with flags) to sync, or use one of: pull, link, scan, trace, release-plan, changelog, install-skill, changes, set-stage, set-priority, note, audit, audit-tasks, validate, spinoff, relate\n", err)
 		os.Exit(2)
 	}
 	switch cmd {
@@ -128,6 +128,8 @@ func main() {
 		runValidate(rest)
 	case "spinoff":
 		runSpinoff(rest)
+	case "relate":
+		runRelate(rest)
 	default:
 		runSync(rest)
 	}
@@ -281,6 +283,9 @@ func runSync(args []string) {
 					verb = "created"
 				}
 				fmt.Printf("  %-8s %s  [%s] (%s)\n", verb, pr.URL, pr.ProviderName, pr.Slug)
+				if pr.ClosedDeferred != "" {
+					fmt.Printf("               • closed state left unchanged (%s)\n", pr.ClosedDeferred)
+				}
 			}
 			// Flips are from the combined reconcile pass.
 			for _, f := range it.Flips {
@@ -303,6 +308,9 @@ func runSync(args []string) {
 				}
 				fmt.Printf("           ↳ reconciled from issue: %s → %s\n", f.Text, state)
 			}
+			if it.ClosedDeferred != "" {
+				fmt.Printf("               • closed state left unchanged (%s)\n", it.ClosedDeferred)
+			}
 		}
 		if it.TitleSuggestion != "" {
 			fmt.Printf("           ↳ title could be tighter: %q — edit the proposal.md H1 if you agree\n", it.TitleSuggestion)
@@ -310,8 +318,8 @@ func runSync(args []string) {
 		if it.BoardConfigured {
 			printBoardPlan(it.Board, *dryRun)
 		}
-		if it.CloseSkipped != "" {
-			fmt.Printf("           ↳ issue left closed (%s)\n", it.CloseSkipped)
+		if it.ClosedDeferred != "" {
+			fmt.Printf("           ↳ closed state left unchanged (%s)\n", it.ClosedDeferred)
 		}
 	}
 	fmt.Printf("specsync: %d created, %d updated\n", res.Created, res.Updated)

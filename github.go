@@ -268,11 +268,11 @@ func (p *GitHubProvider) Push(ctx context.Context, item WorkItem, existing *Ref)
 		// reopen later. Whoever took over the state keeps it until specsync closes
 		// the item again on its own.
 		if existing.BaseClosed == nil || !*existing.BaseClosed {
-			reason := "issue closed outside specsync"
-			if existing.BaseClosed == nil {
-				reason = "no prior close recorded (first sync or discarded cache)"
+			reason := "never asserted"
+			if existing.BaseClosed != nil && !*existing.BaseClosed {
+				reason = "externally closed"
 			}
-			ref.CloseSkipped = reason
+			ref.ClosedDeferred = reason
 			return ref, nil
 		}
 		ref.BaseClosed = boolPtr(false)

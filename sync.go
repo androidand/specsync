@@ -28,12 +28,13 @@ type Result struct {
 
 // ProviderResult records the outcome for one provider on one change.
 type ProviderResult struct {
-	ProviderName string
-	Slug         string
-	URL          string
-	Created      bool
-	Flips        []TaskFlip
-	Error        error
+	ProviderName   string
+	Slug           string
+	URL            string
+	Created        bool
+	Flips          []TaskFlip
+	Error          error
+	ClosedDeferred string // reason specsync left the item's closed state alone
 }
 
 // ItemResult records the outcome for one change.
@@ -51,12 +52,10 @@ type ItemResult struct {
 	// project was configured (in which case Board is zero and no board calls ran).
 	BoardConfigured bool
 	Board           BoardPlan
-	// CloseSkipped is set when sync deferred to an external close — the issue
-	// was closed outside specsync (merged PR, human, reviewing agent) and
-	// specsync left it alone. It carries the reason so the CLI can surface it.
-	CloseSkipped string
 	// Providers holds per-provider results when fan-out is used.
 	Providers []ProviderResult
+	// ClosedDeferred carries the deferral reason when no provider fan-out is used.
+	ClosedDeferred string
 }
 
 // Sync projects every change into the provider(s), idempotently. When
@@ -103,7 +102,7 @@ func Sync(ctx context.Context, opts Options) (Result, error) {
 		var allFlips []TaskFlip
 		var firstRef Ref
 		var firstCreated bool
-		var firstCloseSkipped string
+		var firstClosedDeferred string
 		providerResults := make([]ProviderResult, 0, len(providers))
 
 		for _, prov := range providers {
@@ -184,7 +183,7 @@ func Sync(ctx context.Context, opts Options) (Result, error) {
 			if firstRef.URL == "" {
 				firstRef = ref
 				firstCreated = created
-				firstCloseSkipped = ref.CloseSkipped
+				firstClosedDeferred = ref.ClosedDeferred
 			}
 
 			if opts.DryRun {
@@ -213,10 +212,11 @@ func Sync(ctx context.Context, opts Options) (Result, error) {
 			}
 
 			providerResults = append(providerResults, ProviderResult{
-				ProviderName: prov.Name(),
-				Slug:         c.Slug,
-				URL:          ref.URL,
-				Created:      created,
+				ProviderName:   prov.Name(),
+				Slug:           c.Slug,
+				URL:            ref.URL,
+				Created:        created,
+				ClosedDeferred: ref.ClosedDeferred,
 			})
 
 			if created {
@@ -270,7 +270,7 @@ func Sync(ctx context.Context, opts Options) (Result, error) {
 			Flips:           allFlips,
 			TitleSuggestion: suggestion,
 			BoardConfigured: opts.Project.Configured(),
-			CloseSkipped:    firstCloseSkipped,
+			ClosedDeferred:  firstClosedDeferred,
 			Providers:       providerResults,
 		})
 	}
