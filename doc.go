@@ -1,6 +1,8 @@
 // Package specsync projects OpenSpec changes into external work trackers
 // (GitHub Issues today; other providers later).
 //
+// Import path: github.com/androidand/specsync
+//
 // It is a standalone, dependency-light tool. Its only inputs are OpenSpec
 // directory conventions and an optional per-change ".status" file; its only
 // outputs are work-tracker API calls (shelled out via the host CLI) and a

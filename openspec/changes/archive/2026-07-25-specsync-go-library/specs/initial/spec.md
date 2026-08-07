@@ -1,23 +1,24 @@
 # spec.md — specsync-go-library
 
+> **Note on layout:** This change originally specced a `pkg/specsync/` subdirectory.
+> The move was never executed — all `.go` files remain at the module root.
+> The entries below are corrected to describe what actually shipped.
+
 ## ADDED
 
-- `pkg/specsync/sync.go`: exported `SyncOptions` struct and `Sync` function returning `(*SyncResult, error)`
-- `pkg/specsync/worktree.go`: exported `BranchName` and `CreateWorktree` functions
-- `pkg/specsync/provider.go`: `WorkProvider` interface (consumed by pluggable-providers change)
+- `sync.go` (root): exported `SyncOptions` struct and `Sync` function returning `(*SyncResult, error)`
+- `worktree.go` (root): exported `BranchName` and `CreateWorktree` functions
+- `provider.go` (root): `WorkProvider` interface (consumed by pluggable-providers change)
 - `cmd/specsync/worktree.go`: CLI `worktree` subcommand implementation
-- `pkg/specsync/*.go`: migrated from root package (all current `package specsync` files)
-- `pkg/specsync/*_test.go`: migrated from root package (all current `package specsync` tests)
-- `cmd/specsync/main.go`: updated to import `pkg/specsync`; zero logic remains here
-- `pkg/specsync/sync_test.go`: tests for `Sync` and `SyncResult` (moved from root)
-- `pkg/specsync/worktree_test.go`: tests for `BranchName` and `CreateWorktree` (moved from root)
-- `pkg/specsync/provider_test.go`: tests for `WorkProvider` interface (moved from root)
+- `cmd/specsync/main.go`: delegates all functionality to root `specsync` package
+- `sync_test.go` (root): tests for `Sync` and `SyncResult`
+- `worktree_test.go` (root): tests for `BranchName` and `CreateWorktree`
+- `provider_test.go` (root): tests for `WorkProvider` interface
 
 ## MODIFIED
 
-- `cmd/specsync/main.go`: imports `pkg/specsync` instead of root; delegates all functionality
-- `pkg/specsync/*.go`: `package specsync` declarations remain unchanged; internal imports may need updating
+- `cmd/specsync/main.go`: imports root `specsync` package; delegates all functionality
 
 ## REMOVED
 
-- None from root: all `.go` files are moved into `pkg/specsync/`
+- None from root: all `.go` files remain at the module root
