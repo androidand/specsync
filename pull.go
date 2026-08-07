@@ -218,6 +218,17 @@ func Pull(ctx context.Context, opts PullOptions) (PullResult, error) {
 	if err := saveRef(res.Dir, opts.Provider.Name(), ref); err != nil {
 		return PullResult{}, err
 	}
+	// Transition stage:intake → stage:active when pulling an intake issue.
+	if la, ok := opts.Provider.(LabelApplier); ok {
+		for _, lbl := range item.Labels {
+			if lbl == "stage:intake" {
+				if err := la.ApplyLabelDelta(ctx, item.ID, []string{"stage:active"}, []string{"stage:intake"}); err != nil {
+					fmt.Fprintf(os.Stderr, "specsync: warning: could not transition intake → active: %v\n", err)
+				}
+				break
+			}
+		}
+	}
 	// Persist the identity marker into the source issue so the link is durable:
 	// even if the ref cache is deleted, a later sync rediscovers it via Find.
 	if mw, ok := opts.Provider.(IssueMarkerWriter); ok {

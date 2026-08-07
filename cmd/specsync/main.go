@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/androidand/specsync"
 )
@@ -30,7 +31,7 @@ var knownSubcommands = map[string]bool{
 	"changes": true, "set-stage": true, "set-priority": true, "note": true,
 	"sync": true, "audit": true, "audit-tasks": true, "validate": true,
 	"spinoff": true, "pr-body": true, "verify": true, "relate": true, "work-graph": true,
-	"agent-help": true, "doctor": true,
+	"agent-help": true, "doctor": true, "idea": true, "ideas": true,
 }
 
 // knownConfusions maps a word someone might reach for by habit (e.g. git's
@@ -91,7 +92,7 @@ func deprecatedSlugFlag(args []string) error {
 func main() {
 	cmd, rest, err := resolveSubcommand(os.Args[1:])
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "specsync: %v\n\nRun with no subcommand (optionally with flags) to sync, or use one of: pull, link, scan, trace, release-plan, changelog, install-skill, changes, set-stage, set-priority, note, audit, audit-tasks, validate, spinoff, pr-body, verify, relate, work-graph\n", err)
+		fmt.Fprintf(os.Stderr, "specsync: %v\n\nRun with no subcommand (optionally with flags) to sync, or use one of: pull, link, scan, trace, release-plan, changelog, install-skill, changes, set-stage, set-priority, note, audit, audit-tasks, validate, spinoff, pr-body, verify, relate, work-graph, idea, ideas, pr-body, verify, relate, work-graph\n", err)
 		os.Exit(2)
 	}
 
@@ -138,6 +139,10 @@ func main() {
 		runAgentHelp(rest)
 	case "doctor":
 		runDoctor(rest)
+	case "idea":
+		runIdea(rest)
+	case "ideas":
+		runIdeas(rest)
 	default:
 		runSync(rest)
 	}
@@ -1715,4 +1720,175 @@ func runValidate(args []string) {
 	if len(result.Issues) > 0 {
 		os.Exit(1)
 	}
+}
+
+// runIdea captures an idea as a GitHub issue labeled stage:intake.
+// Text is provided via argument or stdin. Title is derived mechanically
+// (first line or first sentence, truncated to 70 chars). Body is the
+// verbatim text plus a capture timestamp.
+func runIdea(args []string) {
+	fs := flag.NewFlagSet("idea", flag.ExitOnError)
+	repo := fs.String("repo", "", "repo as owner/name (default: $SPECSYNC_IDEAS_REPO or current repo)")
+	if err := fs.Parse(args); err != nil {
+		fail(err)
+	}
+
+	// Resolve repo: -repo flag → SPECSYNC_IDEAS_REPO env → auto-detect from git.
+	targetRepo := *repo
+	if targetRepo == "" {
+		targetRepo = os.Getenv("SPECSYNC_IDEAS_REPO")
+	}
+
+	// Read idea text from arg or stdin.
+	var ideaText string
+	if fs.NArg() > 0 {
+		ideaText = fs.Args()[0]
+	} else {
+		data, err := os.ReadFile("/dev/stdin")
+		if err != nil {
+			fail(fmt.Errorf("read stdin: %w", err))
+		}
+		ideaText = string(data)
+	}
+
+	ideaText = strings.TrimSpace(ideaText)
+	if ideaText == "" {
+		fail(fmt.Errorf("idea text is empty"))
+	}
+
+	// Derive title: first line or first sentence, truncated to 70 chars.
+	title := deriveIdeaTitle(ideaText)
+
+	// Build body: verbatim text + timestamp.
+	body := ideaText + "\n\n---\n*captured " + time.Now().UTC().Format(time.RFC3339) + "*"
+
+	// Create the GitHub issue.
+	provider := specsync.NewGitHubProviderWithRepo(targetRepo)
+
+	// Ensure stage:intake label exists.
+	if err := provider.EnsureLabels(context.Background(), []string{"stage:intake"}); err != nil {
+		fail(fmt.Errorf("create stage:intake label: %w", err))
+	}
+
+	// Create issue via gh CLI directly.
+	runGH := func(ctx context.Context, ghArgs ...string) (string, error) {
+		out, err := exec.CommandContext(ctx, "gh", ghArgs...).CombinedOutput()
+		if err != nil {
+			return "", fmt.Errorf("gh %s: %w\n%s", strings.Join(ghArgs, " "), err, out)
+		}
+		return strings.TrimSpace(string(out)), nil
+	}
+
+	var repoArgs []string
+	if targetRepo != "" {
+		repoArgs = append(repoArgs, "--repo", targetRepo)
+	}
+	ghArgs := append([]string{"issue", "create"}, repoArgs...)
+	ghArgs = append(ghArgs, "--title", title, "--body", body, "--label", "stage:intake")
+	url, err := runGH(context.Background(), ghArgs...)
+	if err != nil {
+		fail(err)
+	}
+
+	fmt.Println(url)
+}
+
+// runIdeas lists open stage:intake issues for the repo.
+func runIdeas(args []string) {
+	fs := flag.NewFlagSet("ideas", flag.ExitOnError)
+	repo := fs.String("repo", "", "repo as owner/name (default: $SPECSYNC_IDEAS_REPO or current repo)")
+	asJSON := fs.Bool("json", false, "output as JSON")
+	if err := fs.Parse(args); err != nil {
+		fail(err)
+	}
+
+	targetRepo := *repo
+	if targetRepo == "" {
+		targetRepo = os.Getenv("SPECSYNC_IDEAS_REPO")
+	}
+
+	// List open issues with stage:intake label.
+	runGH := func(ctx context.Context, ghArgs ...string) (string, error) {
+		out, err := exec.CommandContext(ctx, "gh", ghArgs...).CombinedOutput()
+		if err != nil {
+			return "", fmt.Errorf("gh %s: %w\n%s", strings.Join(ghArgs, " "), err, out)
+		}
+		return strings.TrimSpace(string(out)), nil
+	}
+
+	var repoArgs []string
+	if targetRepo != "" {
+		repoArgs = append(repoArgs, "--repo", targetRepo)
+	}
+	ghArgs := append([]string{"issue", "list"}, repoArgs...)
+	ghArgs = append(ghArgs, "--label", "stage:intake", "--state", "open", "--json", "number,title,url,createdAt")
+	out, err := runGH(context.Background(), ghArgs...)
+	if err != nil {
+		fail(err)
+	}
+
+	var issues []struct {
+		Number    int       `json:"number"`
+		Title     string    `json:"title"`
+		URL       string    `json:"url"`
+		CreatedAt time.Time `json:"createdAt"`
+	}
+	if err := json.Unmarshal([]byte(out), &issues); err != nil {
+		fail(fmt.Errorf("parse issues: %w", err))
+	}
+
+	// Sort by createdAt (oldest first).
+	sort.Slice(issues, func(i, j int) bool {
+		return issues[i].CreatedAt.Before(issues[j].CreatedAt)
+	})
+
+	if *asJSON {
+		data, err := json.MarshalIndent(issues, "", "  ")
+		if err != nil {
+			fail(fmt.Errorf("marshal JSON: %w", err))
+		}
+		fmt.Println(string(data))
+		return
+	}
+
+	if len(issues) == 0 {
+		fmt.Println("No open ideas.")
+		return
+	}
+
+	fmt.Printf("%-6s %-20s %s\n", "NUM", "TITLE", "CREATED")
+	fmt.Println("────── ──────────────────── ─────────────")
+	for _, issue := range issues {
+		title := issue.Title
+		if len(title) > 40 {
+			title = title[:37] + "..."
+		}
+		fmt.Printf("%-6d %-40s %s\n", issue.Number, title, issue.CreatedAt.Format("2006-01-02"))
+	}
+}
+
+// deriveIdeaTitle returns a title from the idea text: first line or first
+// sentence, truncated to 70 chars.
+func deriveIdeaTitle(text string) string {
+	// Try first line.
+	lines := strings.SplitN(text, "\n", 2)
+	title := strings.TrimSpace(lines[0])
+
+	// If the first line is very long, try to find a sentence boundary.
+	if len(title) > 70 {
+		// Look for a sentence ending between 40 and 70 chars.
+		for i := 40; i < 70 && i < len(title); i++ {
+			if title[i] == '.' || title[i] == '!' || title[i] == '?' {
+				title = strings.TrimSpace(title[:i+1])
+				break
+			}
+		}
+	}
+
+	// Truncate to 70 chars if still too long.
+	if len(title) > 70 {
+		title = strings.TrimSpace(title[:70])
+	}
+
+	return title
 }

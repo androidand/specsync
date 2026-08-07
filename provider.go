@@ -192,6 +192,11 @@ type BoardPlan struct {
 // curation. Providers that have no board concept simply don't implement it, and
 // sync/pull skip board work entirely. When target is unconfigured this MUST be a
 // no-op that issues no board calls.
+// LabelApplier can add and remove labels on an existing issue.
+type LabelApplier interface {
+	ApplyLabelDelta(ctx context.Context, issueNum string, add, remove []string) error
+}
+
 type BoardProjector interface {
 	// ProjectOntoBoard reconciles ref's issue with target. When dryRun is set it
 	// performs only read queries and returns the plan it would apply, making no

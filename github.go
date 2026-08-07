@@ -194,7 +194,7 @@ func (p *GitHubProvider) EnsureMarker(ctx context.Context, id, slug, body string
 
 func (p *GitHubProvider) Push(ctx context.Context, item WorkItem, existing *Ref) (Ref, error) {
 	labels := desiredLabels(item)
-	if err := p.ensureLabels(ctx, labels); err != nil {
+	if err := p.EnsureLabels(ctx, labels); err != nil {
 		return Ref{}, err
 	}
 	body := p.renderBody(item)
@@ -401,9 +401,9 @@ func (p *GitHubProvider) reopen(ctx context.Context, num string) error {
 	return err
 }
 
-// ensureLabels makes every desired label exist. --force is idempotent: it
+// EnsureLabels makes every desired label exist. --force is idempotent: it
 // creates the label or updates it if present.
-func (p *GitHubProvider) ensureLabels(ctx context.Context, labels []string) error {
+func (p *GitHubProvider) EnsureLabels(ctx context.Context, labels []string) error {
 	for _, l := range labels {
 		args := append([]string{"label", "create", l, "--force"}, p.repoFlag()...)
 		if _, err := p.run(ctx, args...); err != nil {
@@ -448,6 +448,25 @@ func (p *GitHubProvider) labelDelta(ctx context.Context, num string, desired []s
 		}
 	}
 	return add, remove, strings.EqualFold(v.State, "closed"), nil
+}
+
+// ApplyLabelDelta adds and removes labels on an existing issue using gh CLI.
+func (p *GitHubProvider) ApplyLabelDelta(ctx context.Context, num string, add, remove []string) error {
+	for _, l := range remove {
+		args := append([]string{"issue", "edit", num}, p.repoFlag()...)
+		args = append(args, "--remove-label", l)
+		if _, err := p.run(ctx, args...); err != nil {
+			return fmt.Errorf("remove label %s: %w", l, err)
+		}
+	}
+	for _, l := range add {
+		args := append([]string{"issue", "edit", num}, p.repoFlag()...)
+		args = append(args, "--add-label", l)
+		if _, err := p.run(ctx, args...); err != nil {
+			return fmt.Errorf("add label %s: %w", l, err)
+		}
+	}
+	return nil
 }
 
 func desiredLabels(item WorkItem) []string {

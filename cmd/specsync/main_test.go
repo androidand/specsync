@@ -11,6 +11,40 @@ import (
 	"github.com/androidand/specsync"
 )
 
+// TestValidateSlug verifies the slug validation rules.
+func TestValidateSlug(t *testing.T) {
+	tests := []struct {
+		name    string
+		slug    string
+		wantErr bool
+	}{
+		{"valid simple", "foo", false},
+		{"valid with hyphen", "foo-bar", false},
+		{"valid with underscore", "foo_bar", false},
+		{"valid with digits", "foo123", false},
+		{"valid starts with digit", "1foo", false},
+		{"valid long", "a-very-long-change-name", false},
+		{"invalid empty", "", true},
+		{"invalid slash", "foo/bar", true},
+		{"invalid backslash", `foo\bar`, true},
+		{"invalid dotdot", "foo..bar", true},
+		{"invalid uppercase", "FooBar", true},
+		{"invalid space", "foo bar", true},
+		{"invalid special", "foo@bar", true},
+		{"invalid dot", "foo.bar", true},
+		{"invalid starts with hyphen", "-foo", true},
+		{"invalid starts with underscore", "_foo", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateSlug(tt.slug)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("validateSlug(%q) error = %v, wantErr %v", tt.slug, err, tt.wantErr)
+			}
+		})
+	}
+}
+
 // TestDeprecatedSlugFlag pins the removed -slug flag's error path: every
 // spelling a user might type points at -change, and positional words that
 // merely contain "slug" are left for flag.Parse to handle.
@@ -447,6 +481,70 @@ func TestPhasedChangeRegression(t *testing.T) {
 
 	// A PR body generated for this change should say "Part of #N", not "Closes #N".
 	// This is the core invariant: phased changes must never close their issue.
+}
+
+// TestDeriveIdeaTitle verifies mechanical title derivation for specsync idea.
+func TestDeriveIdeaTitle(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "short single line",
+			in:   "Add dark mode",
+			want: "Add dark mode",
+		},
+		{
+			name: "first line is title",
+			in:   "Add dark mode\n\nDetailed description here.",
+			want: "Add dark mode",
+		},
+		{
+			name: "truncates at sentence boundary",
+			in:   "This is a really long idea that should be truncated at the sentence. The rest is detail that doesn't matter for the title.",
+			want: "This is a really long idea that should be truncated at the sentence.",
+		},
+		{
+			name: "truncates at 70 chars hard limit",
+			in:   "This is a really long idea with no sentence boundary that goes on forever and ever",
+			want: "This is a really long idea with no sentence boundary that goes on fore",
+		},
+		{
+			name: "unicode input",
+			in:   "Résumé de l'idée\n\nPlus de détails ici.",
+			want: "Résumé de l'idée",
+		},
+		{
+			name: "one word",
+			in:   "Dashboard",
+			want: "Dashboard",
+		},
+		{
+			name: "trailing whitespace trimmed",
+			in:   "  Add dark mode  \n\nDetails",
+			want: "Add dark mode",
+		},
+		{
+			name: "exclamation as sentence boundary",
+			in:   "We need dark mode!\n\nThis is a detailed description of why it matters.",
+			want: "We need dark mode!",
+		},
+		{
+			name: "question as sentence boundary",
+			in:   "Why not add dark mode?\n\nBecause it would be nice.",
+			want: "Why not add dark mode?",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := deriveIdeaTitle(tt.in)
+			if got != tt.want {
+				t.Errorf("deriveIdeaTitle(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
 }
 
 // TestMakeSpecSource verifies the spec source factory.
