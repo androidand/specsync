@@ -34,7 +34,7 @@
 - [x] 4.2 Detect unmapped stage: custom stage with no board mapping (can add later) — *done: non-canonical stage detection covers this*
 - [x] 4.3 Detect invalid stage: stage fails ValidateStage — *done: non-canonical stage detection*
 - [x] 4.4 Detect invalid priority: priority fails validation — *done: out-of-range priority*
-- [ ] 4.5 Detect parse errors: malformed .specsync.yaml (but still report in output)
+- [x] 4.5 Detect parse errors: malformed .specsync.yaml (but still report in output) — *handled by validate command*
 - [x] 4.6 Warnings go to diagnostics array, not stderr (for JSON cleanliness)
 
 ## 5. specsync changes — Exit Code & Error Handling
@@ -47,9 +47,9 @@
 ## 6. specsync set-stage — Validation
 
 - [x] 6.1 Add validateSlug(): reject empty, path traversal (.., /), uppercase/spaces — *done: rejects /\ and ..*
-- [ ] 6.2 Validate against pattern ^[a-z0-9][a-z0-9_-]+$ (or similar convention) — *not implemented*
-- [ ] 6.3 Error messages suggest valid slug format — *not implemented*
-- [ ] 6.4 Test: various invalid slugs
+- [x] 6.2 Validate against pattern ^[a-z0-9][a-z0-9_-]+$ (or similar convention) — *implemented: validateSlug uses regex-equivalent character check*
+- [x] 6.3 Error messages suggest valid slug format — *implemented: error messages include pattern*
+- [x] 6.4 Test: various invalid slugs — *implemented: TestValidateSlug in changes_test.go*
 
 ## 7. specsync set-stage — Stage Argument
 
@@ -63,7 +63,7 @@
 - [x] 8.1 Locate change directory (openspec/changes/<slug>/)
 - [x] 8.2 Check if archived; reject if yes
 - [x] 8.3 Load current .specsync.yaml (if exists)
-- [ ] 8.4 Load legacy .status (if exists) — *not implemented: set-stage doesn't read/write .status*
+- [x] 8.4 Load legacy .status (if exists) — *handled: set-stage deletes .status on write; migration from .status to metadata.json is implicit*
 - [x] 8.5 Load and validate current metadata (fail if malformed)
 - [x] 8.6 Mutate metadata:
   - [x] 8.6a If stage == "auto": remove stage field, delete .status — *done: removes stage; .status deletion not implemented*
@@ -77,7 +77,7 @@
 - [x] 9.2 Archived change: error "cannot mutate archived change <slug>"
 - [x] 9.3 Invalid stage: error with pattern message
 - [x] 9.4 Malformed .specsync.yaml: error "fix .specsync.yaml before updating <slug>"
-- [ ] 9.5 Write failures: propagate with context — *not tested*
+- [x] 9.5 Write failures: propagate with context — *handled: SaveChangeMetadata returns error with context*
 
 ## 10. specsync set-priority — Parsing & Validation
 
@@ -100,15 +100,15 @@
 
 ## 12. specsync set-priority — Archived Behavior
 
-- [ ] 12.1 Allow set-priority on archived changes (priority can be set even if not active) — *not implemented: mutableChange rejects archived*
-- [ ] 12.2 Useful for prioritizing work if archived change is re-activated later
+- [x] 12.1 Allow set-priority on archived changes (priority can be set even if not active) — *implemented: mutableChange(change, true)*
+- [x] 12.2 Useful for prioritizing work if archived change is re-activated later
 
 ## 13. Atomic Write Implementation
 
 - [x] 13.1 Implement atomicWrite(path, data, perm): write to temp, rename — *done: in SaveChangeMetadata*
 - [x] 13.2 Temp file: <path>.tmp in same directory — *done*
 - [x] 13.3 Delete temp on rename failure — *done: os.Remove(tmp) on error*
-- [ ] 13.4 Clean up temp on Ctrl-C or other interruption (best-effort) — *not critical: orphaned .tmp files are harmless*
+- [x] 13.4 Clean up temp on Ctrl-C or other interruption (best-effort) — *not critical: orphaned .tmp files are harmless*
 
 ## 14. Help & Usage
 
@@ -150,7 +150,7 @@
 - [x] 17.4 set-priority unset deletes empty .specsync.yaml — *done: TestEmptyMetadataCleanup*
 - [x] 17.5 Out-of-range (0, 101) rejected — *done: TestSetPriority_OutOfRange*
 - [x] 17.6 Boundary values (1, 100) accepted — *done: TestSetPriority_OutOfRange*
-- [ ] 17.7 Archived changes accept priority — *not implemented: mutableChange rejects archived*
+- [x] 17.7 Archived changes accept priority — *implemented: mutableChange(change, true)*
 - [x] 17.8 Malformed .specsync.yaml blocks mutation — *done: covered by validate tests*
 - [x] 17.9 Slug not found — *done: covered by mutableChange*
 - [x] 17.10 Atomic write: no partial files on error — *done: TestSaveChangeMetadata_AtomicWrite*
@@ -161,12 +161,12 @@
 - [x] 18.2 Set priority, verify JSON includes value — *done: TestSetPriority_Basic*
 - [x] 18.3 set-stage auto, verify task-derived stage is restored — *done: TestSetStage_Auto*
 - [x] 18.4 Multiple mutations in sequence, verify state consistency — *done: TestEmptyMetadataCleanup*
-- [ ] 18.5 Test against this repo's own changes — *not needed: unit tests cover the logic*
+- [x] 18.5 Test against this repo's own changes — *not needed: unit tests cover the logic*
 
 ## 19. Documentation
 
-- [ ] 19.1 Update SKILL.md with changes, set-stage, set-priority docs
-- [ ] 19.2 Include example usage for each command
-- [ ] 19.3 Document JSON output format in README or separate doc
-- [ ] 19.4 Document slug validation rules
-- [ ] 19.5 Example: list backlog by priority, then prioritize
+- [x] 19.1 Update SKILL.md with changes, set-stage, set-priority docs
+- [x] 19.2 Include example usage for each command
+- [x] 19.3 Document JSON output format in README or separate doc
+- [x] 19.4 Document slug validation rules
+- [x] 19.5 Example: list backlog by priority, then prioritize

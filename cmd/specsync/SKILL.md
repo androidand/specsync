@@ -131,6 +131,28 @@ specsync spinoff -from <slug> -text "<discovery>" [-kind bug|followup|task] [-re
 
 Spawns a new linked change from a discovery, keeping the parent scoped. `-task <n>` extracts text from the nth task line in the parent's `tasks.md` and marks it as moved (`[>] moved: <child-slug>`). `-text` provides free-form discovery text. `-kind` sets an issue label on the child. `-repo` for cross-repo spawn. `-change` overrides the auto-derived slug. The child `proposal.md` is seeded with the discovery text and a provenance line linking to the parent.
 
+### Capture an idea (issue intake)
+
+```bash
+specsync idea "Add dark mode support"
+# or pipe text:
+echo "Add dark mode support" | specsync idea
+# use a different repo for intake:
+specsync idea -repo owner/ideas "Some idea"
+```
+
+Creates a GitHub issue labeled `stage:intake`. Title is derived mechanically (first line or sentence, ≤70 chars). Body is the verbatim text plus a UTC timestamp. Use `SPECSYNC_IDEAS_REPO=owner/name` as the default target repo.
+
+```bash
+specsync ideas
+# or:
+specsync ideas -repo owner/ideas -json
+```
+
+Lists open `stage:intake` issues, oldest first.
+
+When you later `specsync pull -issue <n>` an intake issue, the label transitions automatically from `stage:intake` → `stage:active`.
+
 ### Inspect release impact
 
 ```
@@ -223,6 +245,22 @@ gh pr create --body-file pr-body.txt ...
 # Check all open PRs for missing references:
 specsync verify
 ```
+
+### List changes and manage metadata
+
+```bash
+specsync changes [-stage <stage>,<stage>...] [-json] [-openspec <dir>]
+specsync set-stage <change> <stage|auto> [-openspec <dir>]
+specsync set-priority <change> <1-100|unset> [-openspec <dir>]
+```
+
+`specsync changes` lists all changes grouped by stage. Filter with `-stage` (comma-separated). `-json` emits machine-readable output with slug, stage, priority, progress, and diagnostics.
+
+`specsync set-stage` sets an explicit stage override on a change (written to `.specsync/metadata.json`). Use `auto` to remove the override and let the stage derive from task completion. Archived changes reject mutation.
+
+`specsync set-priority` sets a numeric priority (1–100) on a change. Use `unset` to remove it. Unlike set-stage, set-priority works on archived changes (useful for re-activation planning). Priority is stored alongside stage in `.specsync/metadata.json`.
+
+**Slug validation.** Change slugs must match `^[a-z0-9][a-z0-9_-]*$` — lowercase letters, digits, hyphens, and underscores only; must start with a letter or digit.
 
 ## Safety rules
 
