@@ -32,6 +32,11 @@ type Ref struct {
 	// left this open" and "specsync has no claim here". Only a base of true
 	// licenses a reopen; see the reopen gate in the GitHub provider's Push.
 	BaseClosed *bool `json:"base_closed,omitempty"`
+
+	// CloseSkipped is set when Push defers to an external close (the item was
+	// closed outside specsync and specsync leaves it alone). It carries the
+	// reason so the CLI can surface it to the user.
+	CloseSkipped string `json:"close_skipped,omitempty"`
 }
 
 // WorkProvider projects WorkItems outward. Implementations must be idempotent:

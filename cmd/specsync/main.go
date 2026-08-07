@@ -310,6 +310,9 @@ func runSync(args []string) {
 		if it.BoardConfigured {
 			printBoardPlan(it.Board, *dryRun)
 		}
+		if it.CloseSkipped != "" {
+			fmt.Printf("           ↳ issue left closed (%s)\n", it.CloseSkipped)
+		}
 	}
 	fmt.Printf("specsync: %d created, %d updated\n", res.Created, res.Updated)
 }
@@ -1161,10 +1164,10 @@ func mutableChange(openspecDir, slug string, allowArchived bool) *specsync.Chang
 // digits, hyphens, and underscores only; must start with a letter or digit.
 func validateSlug(slug string) error {
 	if strings.ContainsAny(slug, `/\`) || strings.Contains(slug, "..") {
-		return fmt.Errorf("invalid slug %q: must be a plain change directory name (no slashes or path traversal)", slug)
+		return fmt.Errorf("invalid slug %q: must be a plain directory name (no slashes or ..); use ^[a-z0-9][a-z0-9_-]*$", slug)
 	}
 	if len(slug) == 0 {
-		return fmt.Errorf("invalid slug: cannot be empty")
+		return fmt.Errorf("invalid slug: cannot be empty; use ^[a-z0-9][a-z0-9_-]*$ (lowercase letters, digits, hyphens, underscores)")
 	}
 	// Match ^[a-z0-9][a-z0-9_-]*$
 	valid := func(s string) bool {
@@ -1229,6 +1232,9 @@ func runSetStage(args []string) {
 	if err := specsync.SaveChangeMetadata(change.Dir, meta); err != nil {
 		fail(err)
 	}
+	// Migrate: delete legacy .status file once metadata.json exists.
+	statusPath := filepath.Join(change.Dir, ".status")
+	_ = os.Remove(statusPath) // best-effort; absence is fine
 	fmt.Printf("set-stage: %s → %s\n", changeName, stage)
 }
 
