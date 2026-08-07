@@ -32,5 +32,4 @@
 - [x] Full suite green
 
 ## Deferred (see proposal Non-Goals)
-- [ ] Surface the deferral in run output — needs the board's plan-shaped reporting
-- [ ] Reconcile an external close back into local stage (new inbound path)
+- [x] Surface the deferral in run output — needs the board's plan-shaped reporting — *done: added Ref.CloseSkipped to carry the reason from Push, ItemResult.CloseSkipped to surface it, and printBoardPlan renders "issue left closed (<reason>)"*
