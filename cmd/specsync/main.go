@@ -128,8 +128,6 @@ func main() {
 		runValidate(rest)
 	case "spinoff":
 		runSpinoff(rest)
-	case "relate":
-		runRelate(rest)
 	default:
 		runSync(rest)
 	}
