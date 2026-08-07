@@ -464,3 +464,257 @@ func archiveCompletedChanges(openspecDir string, candidates []string) ([]string,
 	}
 	return archived, nil
 }
+
+// runPRBody emits a PR-body fragment for a change: the provider-specific
+// reference line (Part of #N / Closes #N), optionally merged with a user-supplied
+// body file. Idempotent — re-running does not stack duplicate lines.
+func runPRBody(args []string) {
+	fs := flag.NewFlagSet("pr-body", flag.ExitOnError)
+	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	change := fs.String("change", "", "change slug (required)")
+	bodyFile := fs.String("body-file", "", "file whose contents are merged after the reference line")
+	repo := fs.String("repo", "", "target repo as owner/name (default: auto-detect from git remote)")
+	_ = fs.Parse(args)
+
+	if *change == "" {
+		fail(fmt.Errorf("pr-body: -change <slug> is required"))
+	}
+
+	abs, err := filepath.Abs(*openspec)
+	if err != nil {
+		fail(err)
+	}
+
+	c, err := specsync.LoadChangeBySlug(abs, *change)
+	if err != nil {
+		fail(err)
+	}
+
+	// Build a GitHub provider to resolve the repo and read the ref.
+	var prov specsync.WorkProvider = specsync.NewGitHubProvider()
+	if *repo != "" {
+		prov = specsync.NewGitHubProviderWithRepo(*repo)
+	}
+
+	// Resolve the synced ref for this change.
+	ctx := context.Background()
+	ref, err := resolvePRBodyRef(ctx, prov, c)
+	if err != nil {
+		fail(err)
+	}
+	if ref == nil {
+		fail(fmt.Errorf("pr-body: change %s has no synced tracker item — run `specsync sync -change %s` first", *change, *change))
+	}
+
+	// Determine whether all tasks are complete (same predicate as -close-completed).
+	allComplete := specsync.TasksComplete(c.TasksMarkdown)
+
+	// Get the reference line from the provider.
+	if tp, ok := prov.(specsync.TraceabilityProvider); ok {
+		line := tp.ReferenceLine(*ref, allComplete)
+		if line == "" {
+			fail(fmt.Errorf("pr-body: %s has no tracker id — cannot emit a reference line", *change))
+		}
+		fmt.Println(line)
+	} else {
+		// Fallback: GitHub-style default.
+		if ref.ID != "" {
+			keyword := "Part of"
+			if allComplete {
+				keyword = "Closes"
+			}
+			fmt.Printf("%s #%s\n", keyword, ref.ID)
+		}
+	}
+
+	// Merge with user body if provided.
+	if *bodyFile != "" {
+		bodyBytes, err := os.ReadFile(*bodyFile)
+		if err != nil {
+			fail(err)
+		}
+		userBody := strings.TrimSpace(string(bodyBytes))
+		if userBody != "" {
+			fmt.Println()
+			fmt.Println(ensureNoDuplicateReference(userBody, allComplete, ref.ID))
+		}
+	}
+}
+
+// resolvePRBodyRef finds the synced ref for a change. It checks the ref cache
+// first, then falls back to the provider's Find.
+func resolvePRBodyRef(ctx context.Context, prov specsync.WorkProvider, c *specsync.Change) (*specsync.Ref, error) {
+	// Try ref cache first.
+	refs, err := specsync.LoadRefs(c.Dir)
+	if err == nil && len(refs) > 0 {
+		key := prov.Name()
+		if ref, ok := refs[key]; ok {
+			return &ref, nil
+		}
+		// Legacy bare-"github" key.
+		if ref, ok := refs["github"]; ok {
+			return &ref, nil
+		}
+	}
+
+	// Fall back to provider Find.
+	found, err := prov.Find(ctx, c.Slug)
+	if err != nil {
+		return nil, err
+	}
+	return found, nil
+}
+
+// ensureNoDuplicateReference strips any existing Part of / Closes line from body
+// so that running pr-body twice never stacks duplicates. It returns the cleaned
+// body ready for the reference line to be prepended.
+func ensureNoDuplicateReference(body string, allComplete bool, issueID string) string {
+	lines := strings.Split(body, "\n")
+	var cleaned []string
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if allComplete {
+			// Skip existing "Closes #N" for the same issue.
+			if strings.HasPrefix(trimmed, "Closes #"+issueID) ||
+				strings.HasPrefix(trimmed, "- [x] Closes #"+issueID) {
+				continue
+			}
+		} else {
+			// Skip existing "Part of #N" for the same issue.
+			if strings.HasPrefix(trimmed, "Part of #"+issueID) ||
+				strings.HasPrefix(trimmed, "- [x] Part of #"+issueID) {
+				continue
+			}
+		}
+		cleaned = append(cleaned, line)
+	}
+	return strings.Join(cleaned, "\n")
+}
+
+// runVerify checks open PRs for traceability gaps: a PR whose head branch
+// matches a change slug but whose body has no reference to that change's issue.
+func runVerify(args []string) {
+	fs := flag.NewFlagSet("verify", flag.ExitOnError)
+	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	repo := fs.String("repo", "", "target repo as owner/name (default: auto-detect from git remote)")
+	_ = fs.Parse(args)
+
+	abs, err := filepath.Abs(*openspec)
+	if err != nil {
+		fail(err)
+	}
+
+	// Load all changes.
+	changes, err := specsync.LoadChanges(abs)
+	if err != nil {
+		fail(err)
+	}
+
+	// Build a map: change slug -> synced issue number.
+	type changeIssue struct {
+		slug string
+		issueNum string
+		url  string
+	}
+	var changeIssues []changeIssue
+	for _, c := range changes {
+		// Skip archived changes — they don't need PR traceability.
+		if c.Archived {
+			continue
+		}
+		refs, err := specsync.LoadRefs(c.Dir)
+		if err != nil {
+			continue
+		}
+		// Find the first github ref.
+		var ref *specsync.Ref
+		for key, r := range refs {
+			if strings.HasPrefix(key, "github") || key == "github" {
+				ref = &r
+				break
+			}
+		}
+		if ref == nil || ref.ID == "" {
+			continue
+		}
+		changeIssues = append(changeIssues, changeIssue{slug: c.Slug, issueNum: ref.ID, url: ref.URL})
+	}
+
+	if len(changeIssues) == 0 {
+		fmt.Println("verify: no synced changes found — nothing to verify")
+		return
+	}
+
+	// List open PRs.
+	var prov specsync.WorkProvider = specsync.NewGitHubProvider()
+	if *repo != "" {
+		prov = specsync.NewGitHubProviderWithRepo(*repo)
+	}
+
+	gp, ok := prov.(*specsync.GitHubProvider)
+	if !ok {
+		fail(fmt.Errorf("verify: only GitHub provider is supported"))
+	}
+
+	prs, err := gp.ListOpenPRs(context.Background())
+	if err != nil {
+		fail(err)
+	}
+
+	if len(prs) == 0 {
+		fmt.Println("verify: no open PRs found")
+		return
+	}
+
+	warnings := 0
+	for _, pr := range prs {
+		// Check if the PR's head branch matches any change slug.
+		// Branch naming convention: feat/<issue>-<change-slug> or just <change-slug>.
+		branch := pr.HeadRefName
+		for _, ci := range changeIssues {
+			if branchMatchesChange(branch, ci.slug) {
+				// This PR belongs to this change. Check if the body references the issue.
+				if !prBodyReferencesIssue(pr.Body, ci.issueNum) {
+					fmt.Printf("  WARNING: %s (branch %s) — no reference to #%s in PR body\n", pr.URL, branch, ci.issueNum)
+					warnings++
+				}
+			}
+		}
+	}
+
+	if warnings == 0 {
+		fmt.Println("verify: all open PRs on change branches have issue references")
+	} else {
+		fmt.Printf("\nverify: %d warning(s) found\n", warnings)
+	}
+}
+
+// branchMatchesChange reports whether a PR head branch name belongs to a change.
+// Matches exact slug or common prefixes like "feat/<slug>", "feature/<slug>".
+func branchMatchesChange(branch, slug string) bool {
+	if branch == slug {
+		return true
+	}
+	// Strip common prefixes.
+	for _, prefix := range []string{"feat/", "feature/", "fix/", "chore/", "refactor/"} {
+		if strings.HasPrefix(branch, prefix) {
+			rest := strings.TrimPrefix(branch, prefix)
+			// Slug might be the first component before a slash.
+			if idx := strings.Index(rest, "/"); idx >= 0 {
+				rest = rest[:idx]
+			}
+			if rest == slug {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// prBodyReferencesIssue reports whether body contains a reference to issue number.
+// Matches patterns like "#42", "Closes #42", "Part of #42", "Refs #42", etc.
+func prBodyReferencesIssue(body, issueNum string) bool {
+	// Look for #N pattern where N matches the issue number.
+	refPattern := "#" + issueNum
+	return strings.Contains(body, refPattern)
+}

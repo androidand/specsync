@@ -199,6 +199,24 @@ Board bindings are stored in `.specsync/board.json` (gitignored, disposable):
 3. **On conflicts**: Log the human-move reason and skip; don't retry
 4. **Persist metadata**: Commit `.specsync/metadata.json` to track decisions over time
 
+### PR Traceability (PRs reference, completion closes)
+
+One OpenSpec change = one issue = many PRs. **PR bodies must reference the
+change's issue** so the issue learns which PRs landed. Completion closes — never
+a PR merge.
+
+```bash
+# Before creating a PR, get the reference line:
+specsync pr-body -change <slug>
+# → Part of #42   (while tasks remain)
+# → Closes #42    (only when every task is checked)
+
+# Verify all open PRs have references:
+specsync verify
+```
+
+If `specsync verify` warns about a PR missing a reference, add one before merging.
+
 ## Troubleshooting
 
 ### "I moved a card on the board but specsync keeps changing it back"

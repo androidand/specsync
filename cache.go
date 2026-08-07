@@ -17,6 +17,12 @@ func refCachePath(changeDir string) string {
 	return filepath.Join(changeDir, ".specsync", "refs.json")
 }
 
+// LoadRefs reads the ref cache for a change directory. Returns an empty map
+// when the cache file does not exist.
+func LoadRefs(changeDir string) (map[string]Ref, error) {
+	return loadRefs(changeDir)
+}
+
 func loadRefs(changeDir string) (map[string]Ref, error) {
 	b, err := os.ReadFile(refCachePath(changeDir))
 	if err != nil {

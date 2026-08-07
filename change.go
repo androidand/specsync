@@ -396,8 +396,15 @@ func CountCheckboxes(md string) (total, completed int) {
 	return c.LiveTotal(), c.Done
 }
 
-func tasksComplete(md string) bool {
+// TasksComplete reports whether the tasks markdown has at least one task line
+// and every task line is checked. It is the same predicate used by -close-completed
+// to decide whether a PR body should say "Closes" instead of "Part of".
+func TasksComplete(md string) bool {
 	return countTaskStates(md).IsComplete()
+}
+
+func tasksComplete(md string) bool {
+	return TasksComplete(md)
 }
 
 // refreshStage derives lifecycle from the change's current task state, then

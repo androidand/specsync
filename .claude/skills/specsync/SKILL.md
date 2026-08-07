@@ -180,6 +180,36 @@ specsync trace [-change <change>] [-since <ref>] [-until <ref>] [-json] [-opensp
 2. `specsync -change <change>` — final sync.
 3. `openspec archive <change> -y` — move to completed.
 
+## PR ↔ issue traceability
+
+**PRs reference, completion closes.** This is the single invariant that keeps
+multi-PR changes from silently closing their tracker issues.
+
+One OpenSpec change = one issue = many PRs (phased implementation). If a PR body
+says `Closes #N` and the change has only shipped Phase 0 of 4, merging closes an
+issue whose remaining work is still open. That is wrong.
+
+- `specsync pr-body -change <slug>` prints the correct reference line:
+  `Part of #N` while work remains, `Closes #N` only when every task is checked.
+  Merge the output into your PR body with `gh pr create --body-file -`.
+- `specsync verify` scans open PRs and warns when a PR on a change branch has no
+  reference to that change's issue. Run this before reviewing or merging.
+- The invariant is enforced by the `-close-completed` flag on sync: only when
+  all tasks are checked does specsync close the issue. PRs never close it.
+
+```
+# Emit a PR body fragment for a phased change (Phase 0 of 4):
+specsync pr-body -change scale-step-planning
+# → Part of #387
+
+# Merge into a PR:
+specsync pr-body -change scale-step-planning | cat - user-pr-body.md > pr-body.txt
+gh pr create --body-file pr-body.txt ...
+
+# Check all open PRs for missing references:
+specsync verify
+```
+
 ## Safety rules
 
 - **Always dry-run before any GitHub write.**
@@ -187,3 +217,6 @@ specsync trace [-change <change>] [-since <ref>] [-until <ref>] [-json] [-opensp
 - Confirm `git remote` resolves to the right repo, or pass `-repo owner/name` explicitly.
 - Do not commit `.specsync/` cache directories.
 - Never put credentials or sensitive data in issue bodies.
+- **Always include a reference to the change's issue in PR bodies.** Use
+  `specsync pr-body -change <slug>` — forgetting produces the exact gap this
+  feature was built to prevent.

@@ -126,6 +126,22 @@ type OpenSpecChange struct {
 	Deltas         []OpenSpecDelta
 }
 
+// TraceabilityProvider is an optional, type-asserted provider capability:
+// generating the reference line that goes into a PR body to link back to the
+// change's tracker issue. The line is "Part of #N" by default and upgrades to
+// "Closes #N" only when every task in the change is complete (the same
+// predicate -close-completed uses). Multi-provider implementations differ in
+// syntax (GitLab uses "Related to #N" instead of "Part of #N"); the core
+// detects the interface via type assertion so the minimal WorkProvider contract
+// stays small.
+type TraceabilityProvider interface {
+	// ReferenceLine returns the PR-body reference line for ref, using the
+	// provider's syntax (e.g. "Part of #42" for GitHub, "Related to #42" for
+	// GitLab). When allTasksComplete is true the line upgrades to a closing
+	// keyword ("Closes #42"); otherwise it stays non-closing ("Part of #42").
+	ReferenceLine(ref Ref, allTasksComplete bool) string
+}
+
 // BoardTarget names an opt-in GitHub ProjectV2 board to project a synced change
 // onto, plus the knobs for that projection. A zero BoardTarget (empty Owner)
 // means "no board" and MUST result in no board operations at all.

@@ -471,6 +471,19 @@ func numberFromURL(url string) string {
 	return url
 }
 
+// ReferenceLine returns the PR-body reference line for the change's tracker item.
+// When allTasksComplete is true the line upgrades to "Closes #N"; otherwise it
+// stays "Part of #N". The number comes from ref.ID (the issue/PR number).
+func (p *GitHubProvider) ReferenceLine(ref Ref, allTasksComplete bool) string {
+	if ref.ID == "" {
+		return ""
+	}
+	if allTasksComplete {
+		return fmt.Sprintf("Closes #%s", ref.ID)
+	}
+	return fmt.Sprintf("Part of #%s", ref.ID)
+}
+
 // ReadDependencies queries GitHub for the blockedBy and blocking edges on the
 // issue identified by ref. It returns the list of edges. This is the source of
 // truth for dependency reconciliation on GitHub.
