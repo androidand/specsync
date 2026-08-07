@@ -111,12 +111,13 @@ func TestSyncLeavesExternallyClosedIssueAlone(t *testing.T) {
 		return "", nil
 	}
 
-	if _, err := Sync(context.Background(), Options{
+	res, err := Sync(context.Background(), Options{
 		OpenSpecDir:    root,
 		Provider:       NewGitHubProviderFuncWithRepo("o/r", run),
 		Slug:           "shipped-change",
 		CloseCompleted: true,
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("Sync: %v", err)
 	}
 
@@ -132,6 +133,13 @@ func TestSyncLeavesExternallyClosedIssueAlone(t *testing.T) {
 	_, ref := firstRef(refs)
 	if ref.BaseClosed == nil || *ref.BaseClosed {
 		t.Errorf("base should stay open=false, got %v", ref.BaseClosed)
+	}
+	// The deferral reason is surfaced in the result for run output.
+	if len(res.Items) != 1 || len(res.Items[0].Providers) != 1 {
+		t.Fatalf("expected 1 item with 1 provider, got %d items", len(res.Items))
+	}
+	if res.Items[0].Providers[0].ClosedDeferred != "externally closed" {
+		t.Errorf("expected ClosedDeferred='externally closed', got %q", res.Items[0].Providers[0].ClosedDeferred)
 	}
 }
 
@@ -166,6 +174,43 @@ func TestDefaultSyncNeverTouchesClosedState(t *testing.T) {
 		if call := findCall(calls, "issue", verb, "7"); call != nil {
 			t.Errorf("default sync must not %s: %v", verb, call)
 		}
+	}
+}
+
+// TestSyncSurfacesDeferralReason: when specsync defers to an external close,
+// the reason is surfaced in the sync result so the run output can report it.
+func TestSyncSurfacesDeferralReason(t *testing.T) {
+	root := t.TempDir()
+	cdir := filepath.Join(root, "changes", "deferred-change")
+	mustWrite(t, filepath.Join(cdir, "proposal.md"), "# Deferred\n\nbody\n")
+	mustWrite(t, filepath.Join(cdir, "tasks.md"), "- [x] done\n- [ ] still open\n")
+
+	// No base_closed in the cache — specsync has never asserted anything.
+	mustWrite(t, filepath.Join(cdir, ".specsync", "refs.json"),
+		`{"github:o/r":{"provider":"github:o/r","id":"7","url":"https://github.com/o/r/issues/7"}}`)
+
+	run := func(_ context.Context, args ...string) (string, error) {
+		if args[0] == "issue" && args[1] == "view" {
+			return `{"state":"CLOSED","labels":[{"name":"stage:active"}]}`, nil
+		}
+		return "", nil
+	}
+
+	res, err := Sync(context.Background(), Options{
+		OpenSpecDir:    root,
+		Provider:       NewGitHubProviderFuncWithRepo("o/r", run),
+		Slug:           "deferred-change",
+		CloseCompleted: true,
+	})
+	if err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+
+	if len(res.Items) != 1 || len(res.Items[0].Providers) != 1 {
+		t.Fatalf("expected 1 item with 1 provider, got %d items", len(res.Items))
+	}
+	if res.Items[0].Providers[0].ClosedDeferred != "never asserted" {
+		t.Errorf("ClosedDeferred = %q, want %q", res.Items[0].Providers[0].ClosedDeferred, "never asserted")
 	}
 }
 

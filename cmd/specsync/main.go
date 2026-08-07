@@ -29,7 +29,7 @@ var knownSubcommands = map[string]bool{
 	"release-plan": true, "changelog": true, "install-skill": true,
 	"changes": true, "set-stage": true, "set-priority": true, "note": true,
 	"sync": true, "audit": true, "audit-tasks": true, "validate": true,
-	"spinoff": true, "pr-body": true,
+	"spinoff": true, "pr-body": true, "relate": true, "work-graph": true,
 }
 
 // knownConfusions maps a word someone might reach for by habit (e.g. git's
@@ -90,7 +90,7 @@ func deprecatedSlugFlag(args []string) error {
 func main() {
 	cmd, rest, err := resolveSubcommand(os.Args[1:])
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "specsync: %v\n\nRun with no subcommand (optionally with flags) to sync, or use one of: pull, link, scan, trace, release-plan, changelog, install-skill, changes, set-stage, set-priority, note, audit, audit-tasks, validate, spinoff\n", err)
+		fmt.Fprintf(os.Stderr, "specsync: %v\n\nRun with no subcommand (optionally with flags) to sync, or use one of: pull, link, scan, trace, release-plan, changelog, install-skill, changes, set-stage, set-priority, note, audit, audit-tasks, validate, spinoff, relate\n", err)
 		os.Exit(2)
 	}
 	switch cmd {
@@ -289,6 +289,9 @@ func runSync(args []string) {
 					verb = "created"
 				}
 				fmt.Printf("  %-8s %s  [%s] (%s)\n", verb, pr.URL, pr.ProviderName, pr.Slug)
+				if pr.ClosedDeferred != "" {
+					fmt.Printf("               • closed state left unchanged (%s)\n", pr.ClosedDeferred)
+				}
 			}
 			// Flips are from the combined reconcile pass.
 			for _, f := range it.Flips {
@@ -311,12 +314,18 @@ func runSync(args []string) {
 				}
 				fmt.Printf("           ↳ reconciled from issue: %s → %s\n", f.Text, state)
 			}
+			if it.ClosedDeferred != "" {
+				fmt.Printf("               • closed state left unchanged (%s)\n", it.ClosedDeferred)
+			}
 		}
 		if it.TitleSuggestion != "" {
 			fmt.Printf("           ↳ title could be tighter: %q — edit the proposal.md H1 if you agree\n", it.TitleSuggestion)
 		}
 		if it.BoardConfigured {
 			printBoardPlan(it.Board, *dryRun)
+		}
+		if it.ClosedDeferred != "" {
+			fmt.Printf("           ↳ closed state left unchanged (%s)\n", it.ClosedDeferred)
 		}
 	}
 	fmt.Printf("specsync: %d created, %d updated\n", res.Created, res.Updated)
@@ -1182,10 +1191,10 @@ func mutableChange(openspecDir, slug string, allowArchived bool) *specsync.Chang
 // digits, hyphens, and underscores only; must start with a letter or digit.
 func validateSlug(slug string) error {
 	if strings.ContainsAny(slug, `/\`) || strings.Contains(slug, "..") {
-		return fmt.Errorf("invalid slug %q: must be a plain change directory name (no slashes or path traversal)", slug)
+		return fmt.Errorf("invalid slug %q: must be a plain directory name (no slashes or ..); use ^[a-z0-9][a-z0-9_-]*$", slug)
 	}
 	if len(slug) == 0 {
-		return fmt.Errorf("invalid slug: cannot be empty")
+		return fmt.Errorf("invalid slug: cannot be empty; use ^[a-z0-9][a-z0-9_-]*$ (lowercase letters, digits, hyphens, underscores)")
 	}
 	// Match ^[a-z0-9][a-z0-9_-]*$
 	valid := func(s string) bool {
@@ -1250,6 +1259,9 @@ func runSetStage(args []string) {
 	if err := specsync.SaveChangeMetadata(change.Dir, meta); err != nil {
 		fail(err)
 	}
+	// Migrate: delete legacy .status file once metadata.json exists.
+	statusPath := filepath.Join(change.Dir, ".status")
+	_ = os.Remove(statusPath) // best-effort; absence is fine
 	fmt.Printf("set-stage: %s → %s\n", changeName, stage)
 }
 

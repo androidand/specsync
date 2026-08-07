@@ -32,6 +32,11 @@ type Ref struct {
 	// left this open" and "specsync has no claim here". Only a base of true
 	// licenses a reopen; see the reopen gate in the GitHub provider's Push.
 	BaseClosed *bool `json:"base_closed,omitempty"`
+
+	// ClosedDeferred carries a human-readable reason when specsync deferred to an
+	// external close (e.g., "externally closed by merged PR", "never asserted").
+	// It is not persisted to the ref cache — only a transient notification.
+	ClosedDeferred string `json:"-"`
 }
 
 // WorkProvider projects WorkItems outward. Implementations must be idempotent:

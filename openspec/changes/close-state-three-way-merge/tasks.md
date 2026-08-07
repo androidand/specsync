@@ -32,4 +32,4 @@
 - [x] Full suite green
 
 ## Deferred (see proposal Non-Goals)
-- [x] Surface the deferral in run output — needs the board's plan-shaped reporting — *done: added Ref.CloseSkipped to carry the reason from Push, ItemResult.CloseSkipped to surface it, and printBoardPlan renders "issue left closed (<reason>)"*
+- [x] Surface the deferral in run output — added `Ref.ClosedDeferred` (transient, not persisted), `ProviderResult.ClosedDeferred`, and `ItemResult.ClosedDeferred`; `github.go:Push` sets reason ("externally closed" or "never asserted") when deferring; `main.go` prints `closed state left unchanged (<reason>)` after each provider's line, matching the board's `StatusSkipped` pattern; verified with `TestSyncSurfacesDeferralReason` (never asserted) and `TestSyncLeavesExternallyClosedIssueAlone` (externally closed); 553 tests pass
