@@ -3,7 +3,6 @@ package specsync
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 )
 
@@ -68,7 +67,7 @@ var _ SpecSource = BeadsSource{}
 // Options configures a sync run.
 type Options struct {
 	OpenSpecDir    string        // path to the spec root (openspec/, beads/, etc.)
-	SpecSource     SpecSource    // spec loader; defaults to OpenSpecSource when nil
+	SpecSource     SpecSource    // spec loader; defaults to FileSpecSource when nil
 	Provider       WorkProvider  // target tracker (deprecated: use Providers)
 	Providers      []WorkProvider // set of providers to fan-out to; Provider is used when Providers is nil
 	Slug           string        // if set, only this change is synced
@@ -312,60 +311,6 @@ func Sync(ctx context.Context, opts Options) (Result, error) {
 				}); err != nil {
 					// Dependency sync errors are non-fatal — the issue was
 					// already pushed successfully. Log and continue.
-					fmt.Fprintf(os.Stderr, "specsync: %s: dependency sync failed: %v\n", c.Slug, err)
-				}
-			}
-
-			// Reconcile parent edge with GitHub.
-			if gp, ok := prov.(*GitHubProvider); ok {
-				psResult, psErr := ParentSync(ctx, ParentSyncOptions{
-					ChangeDir: c.Dir,
-					Provider:  gp,
-					Ref:       ref,
-					Parent:    c.Parent,
-					DryRun:    opts.DryRun,
-				})
-				if psErr != nil {
-					// Parent sync errors are non-fatal — the issue was
-					// already pushed successfully. Log and continue.
-					fmt.Fprintf(os.Stderr, "specsync: %s: parent sync failed: %v\n", c.Slug, psErr)
-				}
-				// Update links.md for pull-in and removal cases.
-				if psResult != nil && psResult.PulledIn != "" {
-					if !opts.DryRun {
-						parentRef := Ref{
-							Provider: gp.Name(),
-							ID:       psResult.PulledIn[strings.LastIndex(psResult.PulledIn, ":")+1:],
-							URL:      psResult.PulledInURL,
-						}
-						if err := WriteParentLinkMD(c.Dir, parentRef, false); err != nil {
-							// Non-fatal — links.md update failed but the edge is synced on GitHub.
-							fmt.Fprintf(os.Stderr, "specsync: %s: failed to update parent link: %v\n", c.Slug, err)
-						}
-					}
-				}
-				if psResult != nil && psResult.Removed != "" {
-					if !opts.DryRun {
-						if err := RemoveParentLinkMD(c.Dir); err != nil {
-							// Non-fatal — links.md removal failed but the edge is synced on GitHub.
-							fmt.Fprintf(os.Stderr, "specsync: %s: failed to remove parent link: %v\n", c.Slug, err)
-						}
-					}
-				}
-
-				// Roll up epic body from sub-issue summary.
-				if c.Parent.ID != "" {
-					if isEpic, _ := gp.IsEpic(ctx, c.Parent.URL); isEpic {
-						if _, err := EpicSync(ctx, EpicSyncOptions{
-							Provider: gp,
-							URL:      c.Parent.URL,
-							DryRun:   opts.DryRun,
-						}); err != nil {
-							// Epic sync errors are non-fatal — the issue was
-							// already pushed successfully. Log and continue.
-							fmt.Fprintf(os.Stderr, "specsync: %s: epic sync failed: %v\n", c.Slug, err)
-						}
-					}
 				}
 			}
 		}
@@ -427,8 +372,8 @@ func WorkItemFor(c Change, closeCompleted bool) WorkItem {
 			}
 		}
 	}
-	if len(c.Links) > 0 || len(c.BlockedBy) > 0 || len(c.Blocks) > 0 || c.Parent.ID != "" {
-		body = UpsertDependencySections(body, c.Links, c.BlockedBy, c.Blocks, c.Parent)
+	if len(c.Links) > 0 || len(c.BlockedBy) > 0 || len(c.Blocks) > 0 {
+		body = UpsertDependencySections(body, c.Links, c.BlockedBy, c.Blocks)
 	}
 	priority := 0
 	if c.Priority != nil {
