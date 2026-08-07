@@ -13,7 +13,7 @@ import (
 // for the Links, BlockedBy, and Blocks fields). Each entry becomes a directed
 // EdgeSpecSpec edge from this change to the linked change slug.
 //
-// Spec↔issue edges come from the ref cache (loadRefs). Each ref becomes an
+// Spec↔issue edges come from the ref cache (LoadRefs). Each ref becomes an
 // EdgeSpecIssue edge from the change to the issue node.
 //
 // The change's slug is used as the spec node ID; issue nodes are keyed by
@@ -50,7 +50,7 @@ func (g *Graph) BuildCore(c Change, openspecDir string) error {
 	}
 
 	// Spec↔issue edges from ref cache.
-	refs, err := loadRefs(c.Dir)
+	refs, err := LoadRefs(c.Dir)
 	if err != nil {
 		return fmt.Errorf("load refs for %s: %w", c.Slug, err)
 	}
@@ -85,7 +85,7 @@ func resolveSlugFromRef(ref Ref, openspecDir string) string {
 		entries, err := readDirNames(filepath.Join(openspecDir, "changes"))
 		if err == nil {
 			for _, slug := range entries {
-				siblingRefs, err := loadRefs(filepath.Join(openspecDir, "changes", slug))
+				siblingRefs, err := LoadRefs(filepath.Join(openspecDir, "changes", slug))
 				if err != nil {
 					continue
 				}
@@ -100,7 +100,7 @@ func resolveSlugFromRef(ref Ref, openspecDir string) string {
 		entries, err = readDirNames(filepath.Join(openspecDir, "changes", "archive"))
 		if err == nil {
 			for _, slug := range entries {
-				siblingRefs, err := loadRefs(filepath.Join(openspecDir, "changes", "archive", slug))
+				siblingRefs, err := LoadRefs(filepath.Join(openspecDir, "changes", "archive", slug))
 				if err != nil {
 					continue
 				}

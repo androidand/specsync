@@ -509,13 +509,23 @@ func runPRBody(args []string) {
 	// Determine whether all tasks are complete (same predicate as -close-completed).
 	allComplete := specsync.TasksComplete(c.TasksMarkdown)
 
-	// Emit the reference line.
-	if ref.ID != "" {
-		keyword := "Part of"
-		if allComplete {
-			keyword = "Closes"
+	// Get the reference line from the provider.
+	if tp, ok := prov.(specsync.TraceabilityProvider); ok {
+		line := tp.ReferenceLine(*ref, allComplete)
+		if line == "" {
+			fail(fmt.Errorf("pr-body: %s has no tracker id — cannot emit a reference line", *change))
 		}
-		fmt.Printf("%s #%s\n", keyword, ref.ID)
+		fmt.Println(line)
+	} else {
+		// Fallback: GitHub-style default.
+		if ref.ID != "" {
+			keyword := "Part of"
+			if allComplete {
+				keyword = "Closes"
+			}
+
+			fmt.Printf("%s #%s\n", keyword, ref.ID)
+		}
 	}
 
 	// Merge with user body if provided.
