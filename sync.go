@@ -3,12 +3,72 @@ package specsync
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 )
+
+// SpecSource is the interface for loading and saving spec changes from disk.
+// Implementations include FileSpecSource (default, reads OpenSpec directory)
+// and BeadsSource (placeholder). The spec package (pkg/spec) provides
+// concrete implementations for external use.
+//
+// To add a new spec format, implement this interface. The core logic (Sync,
+// Pull, Board, etc.) operates on []Change regardless of the source, so adding
+// a new format requires only implementing SpecSource — no changes to core logic.
+type SpecSource interface {
+	// Name returns the spec source identifier (e.g., "openspec", "beads").
+	Name() string
+
+	// LoadChanges loads all changes from the spec directory.
+	// Returns empty slice if no changes found (not an error).
+	LoadChanges(specDir string) ([]Change, error)
+
+	// SaveChange persists a change to disk (for future: metadata updates, etc.).
+	SaveChange(change Change) error
+}
+
+// FileSpecSource is the default SpecSource implementation for the OpenSpec
+// directory format. It delegates to LoadChanges/LoadChange from the root package.
+type FileSpecSource struct{}
+
+// Name returns "openspec".
+func (s FileSpecSource) Name() string { return "openspec" }
+
+// LoadChanges loads all changes from the OpenSpec directory.
+func (s FileSpecSource) LoadChanges(specDir string) ([]Change, error) {
+	return LoadChanges(specDir)
+}
+
+// SaveChange is a no-op; future implementations may write back to .specsync/metadata.json.
+func (s FileSpecSource) SaveChange(_ Change) error { return nil }
+
+// Ensure FileSpecSource implements SpecSource.
+var _ SpecSource = FileSpecSource{}
+
+// BeadsSource is a placeholder for Beads spec format support.
+// It implements SpecSource but returns "not implemented" for all operations.
+type BeadsSource struct{}
+
+// Name returns "beads".
+func (s BeadsSource) Name() string { return "beads" }
+
+// LoadChanges returns an error indicating Beads support is not yet implemented.
+func (s BeadsSource) LoadChanges(_ string) ([]Change, error) {
+	return nil, fmt.Errorf("beads support not yet implemented")
+}
+
+// SaveChange returns an error indicating Beads support is not yet implemented.
+func (s BeadsSource) SaveChange(_ Change) error {
+	return fmt.Errorf("beads support not yet implemented")
+}
+
+// Ensure BeadsSource implements SpecSource.
+var _ SpecSource = BeadsSource{}
 
 // Options configures a sync run.
 type Options struct {
 	OpenSpecDir    string        // path to the spec root (openspec/, beads/, etc.)
+	SpecSource     SpecSource    // spec loader; defaults to OpenSpecSource when nil
 	Provider       WorkProvider  // target tracker (deprecated: use Providers)
 	Providers      []WorkProvider // set of providers to fan-out to; Provider is used when Providers is nil
 	Slug           string        // if set, only this change is synced
@@ -72,7 +132,12 @@ func Sync(ctx context.Context, opts Options) (Result, error) {
 		return res, fmt.Errorf("provider is required")
 	}
 
-	changes, err := LoadChanges(opts.OpenSpecDir)
+	// Default to FileSpecSource when no spec source is configured.
+	if opts.SpecSource == nil {
+		opts.SpecSource = FileSpecSource{}
+	}
+
+	changes, err := opts.SpecSource.LoadChanges(opts.OpenSpecDir)
 	if err != nil {
 		return res, err
 	}
@@ -247,6 +312,60 @@ func Sync(ctx context.Context, opts Options) (Result, error) {
 				}); err != nil {
 					// Dependency sync errors are non-fatal — the issue was
 					// already pushed successfully. Log and continue.
+					fmt.Fprintf(os.Stderr, "specsync: %s: dependency sync failed: %v\n", c.Slug, err)
+				}
+			}
+
+			// Reconcile parent edge with GitHub.
+			if gp, ok := prov.(*GitHubProvider); ok {
+				psResult, psErr := ParentSync(ctx, ParentSyncOptions{
+					ChangeDir: c.Dir,
+					Provider:  gp,
+					Ref:       ref,
+					Parent:    c.Parent,
+					DryRun:    opts.DryRun,
+				})
+				if psErr != nil {
+					// Parent sync errors are non-fatal — the issue was
+					// already pushed successfully. Log and continue.
+					fmt.Fprintf(os.Stderr, "specsync: %s: parent sync failed: %v\n", c.Slug, psErr)
+				}
+				// Update links.md for pull-in and removal cases.
+				if psResult != nil && psResult.PulledIn != "" {
+					if !opts.DryRun {
+						parentRef := Ref{
+							Provider: gp.Name(),
+							ID:       psResult.PulledIn[strings.LastIndex(psResult.PulledIn, ":")+1:],
+							URL:      psResult.PulledInURL,
+						}
+						if err := WriteParentLinkMD(c.Dir, parentRef, false); err != nil {
+							// Non-fatal — links.md update failed but the edge is synced on GitHub.
+							fmt.Fprintf(os.Stderr, "specsync: %s: failed to update parent link: %v\n", c.Slug, err)
+						}
+					}
+				}
+				if psResult != nil && psResult.Removed != "" {
+					if !opts.DryRun {
+						if err := RemoveParentLinkMD(c.Dir); err != nil {
+							// Non-fatal — links.md removal failed but the edge is synced on GitHub.
+							fmt.Fprintf(os.Stderr, "specsync: %s: failed to remove parent link: %v\n", c.Slug, err)
+						}
+					}
+				}
+
+				// Roll up epic body from sub-issue summary.
+				if c.Parent.ID != "" {
+					if isEpic, _ := gp.IsEpic(ctx, c.Parent.URL); isEpic {
+						if _, err := EpicSync(ctx, EpicSyncOptions{
+							Provider: gp,
+							URL:      c.Parent.URL,
+							DryRun:   opts.DryRun,
+						}); err != nil {
+							// Epic sync errors are non-fatal — the issue was
+							// already pushed successfully. Log and continue.
+							fmt.Fprintf(os.Stderr, "specsync: %s: epic sync failed: %v\n", c.Slug, err)
+						}
+					}
 				}
 			}
 		}
@@ -308,8 +427,8 @@ func WorkItemFor(c Change, closeCompleted bool) WorkItem {
 			}
 		}
 	}
-	if len(c.Links) > 0 || len(c.BlockedBy) > 0 || len(c.Blocks) > 0 {
-		body = UpsertDependencySections(body, c.Links, c.BlockedBy, c.Blocks)
+	if len(c.Links) > 0 || len(c.BlockedBy) > 0 || len(c.Blocks) > 0 || c.Parent.ID != "" {
+		body = UpsertDependencySections(body, c.Links, c.BlockedBy, c.Blocks, c.Parent)
 	}
 	priority := 0
 	if c.Priority != nil {
@@ -324,6 +443,15 @@ func WorkItemFor(c Change, closeCompleted bool) WorkItem {
 		Closed:       c.Archived || (closeCompleted && c.Stage == StageComplete),
 		ManageClosed: c.Archived || closeCompleted,
 	}
+}
+
+// IsChangeComplete reports whether a change is eligible for closing: the
+// change is archived or every task in its checklist is checked. This mirrors
+// the predicate that -close-completed uses to set WorkItem.Closed, but it
+// operates on the Change directly (without a WorkItem) so callers like
+// pr-body can decide whether to emit "Closes #N" versus "Part of #N".
+func IsChangeComplete(c Change) bool {
+	return c.Archived || c.Progress == TaskProgressComplete
 }
 
 // legacyRefMatchesRepo reports whether a legacy bare-"github" cache entry

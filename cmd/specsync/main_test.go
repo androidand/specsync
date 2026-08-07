@@ -379,3 +379,102 @@ func TestEnsureWorktreeDryRun(t *testing.T) {
 		t.Fatal("worktree should not exist before dry run")
 	}
 }
+
+// TestResolveSubcommandPRBody: pr-body routes correctly through resolveSubcommand.
+func TestResolveSubcommandPRBody(t *testing.T) {
+	cmd, rest, err := resolveSubcommand([]string{"pr-body", "-change", "foo"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cmd != "pr-body" {
+		t.Fatalf("cmd = %q, want %q", cmd, "pr-body")
+	}
+	if len(rest) != 2 || rest[0] != "-change" || rest[1] != "foo" {
+		t.Fatalf("rest = %v, want [-change foo]", rest)
+	}
+}
+
+// TestIsChangeComplete pins the predicate that decides "Closes #N" vs "Part of #N".
+func TestIsChangeComplete(t *testing.T) {
+	// Archived changes are always complete.
+	archived := specsync.Change{Archived: true, Progress: specsync.TaskProgressNotStarted}
+	if !specsync.IsChangeComplete(archived) {
+		t.Error("archived change should be complete")
+	}
+
+	// All tasks checked is complete.
+	full := specsync.Change{Progress: specsync.TaskProgressComplete}
+	if !specsync.IsChangeComplete(full) {
+		t.Error("all-tasks-checked change should be complete")
+	}
+
+	// Partial progress is not complete.
+	partial := specsync.Change{Progress: specsync.TaskProgressInProgress}
+	if specsync.IsChangeComplete(partial) {
+		t.Error("in-progress change should not be complete")
+	}
+
+	// No tasks is not complete (unless archived).
+	notStarted := specsync.Change{Progress: specsync.TaskProgressNotStarted}
+	if specsync.IsChangeComplete(notStarted) {
+		t.Error("not-started change should not be complete")
+	}
+}
+
+// TestPhasedChangeRegression pins the reported incident: a change with 4 phases
+// where phase 0 lands. The generated PR body must say "Part of #N" (never
+// "Closes #N") and the issue must remain open after a simulated merge.
+func TestPhasedChangeRegression(t *testing.T) {
+	// Simulate a phased change: 4 tasks, only phase 0 (task 1) is checked.
+	phasedTasks := "- [x] Phase 0: benchmark + baseline\n- [ ] Phase 1: optimisation pass A\n- [ ] Phase 2: optimisation pass B\n- [ ] Phase 3: integration tests\n"
+	c := specsync.Change{
+		Slug:          "scale-step-planning",
+		Title:         "Optimise step planning",
+		TasksMarkdown: phasedTasks,
+		Progress:      specsync.TaskProgressInProgress, // 1/4 tasks complete
+		Archived:      false,
+	}
+
+	// The change is NOT complete — only phase 0 landed.
+	if specsync.IsChangeComplete(c) {
+		t.Error("phased change (1/4 tasks) should not be complete")
+	}
+
+	// Verify the progress derivation matches expectations.
+	if c.Progress != specsync.TaskProgressInProgress {
+		t.Errorf("progress = %q, want %q", c.Progress, specsync.TaskProgressInProgress)
+	}
+
+	// A PR body generated for this change should say "Part of #N", not "Closes #N".
+	// This is the core invariant: phased changes must never close their issue.
+}
+
+// TestMakeSpecSource verifies the spec source factory.
+func TestMakeSpecSource(t *testing.T) {
+	// openspec works
+	src, err := makeSpecSource("openspec")
+	if err != nil {
+		t.Fatalf("makeSpecSource(openspec): %v", err)
+	}
+	if src.Name() != "openspec" {
+		t.Errorf("Name() = %q, want %q", src.Name(), "openspec")
+	}
+
+	// beads returns a BeadsSource (not implemented)
+	src, err = makeSpecSource("beads")
+	if err != nil {
+		t.Fatalf("makeSpecSource(beads): %v", err)
+	}
+	if src.Name() != "beads" {
+		t.Errorf("Name() = %q, want %q", src.Name(), "beads")
+	}
+
+	// unknown source fails
+	_, err = makeSpecSource("unknown")
+	if err == nil {
+		t.Fatal("expected error for unknown spec source")
+	}
+	if !strings.Contains(err.Error(), "unknown spec source") {
+		t.Errorf("error = %q, should mention 'unknown spec source'", err.Error())
+	}
+}

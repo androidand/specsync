@@ -106,6 +106,7 @@ specsync scan            # what already exists in an area?
 specsync trace           # print the raw spec<->commit<->issue link graph
 specsync link            # cross-link two or more changes
 specsync spinoff         # spawn emergent work as a linked sibling
+specsync epic            # create a coordination issue and wire children
 specsync release-plan    # shipped changes + advisory semver bump
 specsync changelog       # Keep a Changelog section from shipped changes
 specsync audit           # archived changes vs. merged PRs
@@ -133,6 +134,31 @@ specsync -dry-run -provider beads    # preview the bd commands
 specsync -provider beads -change X     # project one change into the beads graph
 ```
 
+### Pluggable spec sources
+
+specsync supports multiple spec formats through the `SpecSource` interface.
+The default is `openspec` (reads `openspec/changes/`), but the architecture
+allows future formats like Beads or custom loaders.
+
+```bash
+specsync sync --spec openspec    # default: OpenSpec format
+specsync sync --spec beads       # placeholder: Beads (not yet implemented)
+```
+
+To add a new spec format, implement the `SpecSource` interface:
+
+```go
+type SpecSource interface {
+    Name() string
+    LoadChanges(specDir string) ([]Change, error)
+    SaveChange(change Change) error
+}
+```
+
+The interface is source-agnostic — `Sync`, `Pull`, `Board`, and other logic
+operate on `[]Change` regardless of where the data comes from. Adding a new
+format requires only implementing the interface; no changes to core logic.
+
 ### Multi-provider sync (fan-out)
 
 `-provider` is repeatable. When you pass multiple providers, specsync projects
@@ -159,6 +185,44 @@ aborting the entire run.
 
 **Ref coexistence**: each provider's ref is stored under its own key in
 `refs.json` (e.g., `"github"` and `"beads"`), so they never collide.
+
+### Provider contract
+
+specsync uses a `WorkProvider` interface so the core engine is provider-agnostic.
+Implementations must be **idempotent**: `Push` with an existing ref updates;
+without one it creates (and should defend against duplicates via `Find`).
+
+```go
+type WorkProvider interface {
+    Name() string                         // ref-cache key, e.g. "github"
+    Push(ctx, item WorkItem, existing *Ref) (Ref, error)
+    Find(ctx, slug string) (*Ref, error)  // locate existing projection by slug
+}
+```
+
+**Optional capabilities** are detected via type assertion so a minimal provider
+need not implement everything:
+
+| Interface | Purpose | Used by |
+|-----------|---------|---------|
+| `IssueReader` | Read an existing item by ID | `pull`, reconcile |
+| `IssueMarkerWriter` | Persist identity marker into item body | `pull` (rediscoverability) |
+| `TaskStateReader` | Report external task done-state | reconcile |
+| `BoardProjector` | Project onto a GitHub Projects board | sync |
+| `IssueSearcher` | Find open issues by free-text query | `scan` |
+| `CommentCapable` | Post comments on items | future |
+| `SubItemCapable` | Create sub-items under a parent | future |
+| `CustomFieldCapable` | Read/write custom fields on items | future |
+| `OpenSpecSource` | Read OpenSpec change metadata/deltas | `release-plan` |
+
+**Available providers**:
+
+- `github` — default, shells out to `gh` CLI (human-facing issues)
+- `beads` — local agent graph via `bd` CLI (agent-facing)
+- `mcp` — Model Context Protocol server (stdio transport, delegates issue operations)
+
+To add a new provider, implement `WorkProvider` and register it in `makeProvider`
+in `cmd/specsync/main.go`.
 
 ### Issue-first: pull an issue into a change
 
@@ -211,6 +275,66 @@ specsync spinoff -from my-change -text "fix X" -dry-run  # free text
 Extracts text from the parent's task (or uses `-text`), scaffolds a new change
 with a seeded `proposal.md`, marks the parent task as moved (`[>] moved: <child>`),
 and links the two.
+
+### `epic` — create a coordination issue and wire children
+
+Mints a `type:epic` coordination issue and attaches all children as `## Related`
+cross-references. Idempotent — re-running with the same title finds the existing
+epic instead of duplicating. Children can be local change slugs (synced first if
+needed), issue refs (`#N`, `owner/repo#N`), or full URLs.
+
+```bash
+specsync epic "Feature X: cross-repo widgets" \
+  --repo androidand/planning \
+  --child androidand/backend#12 \
+  --child frontend-widget-view
+```
+
+Until `epic-and-subissue-projection` lands, children are wired as Related links
+in both directions. Once that lands, children are attached as native GitHub
+sub-issues and the epic body rolls up from `subIssuesSummary`.
+
+### `idea` — capture an idea as a GitHub issue
+
+Drop any thought, vague or elaborate, into a durable inbox. An idea is just a
+GitHub issue labeled `stage:intake` — ordinary enough that teammates and
+managers can see it, no spec workflow required to use it.
+
+```bash
+specsync idea "Use WebAssembly for the renderer"
+echo "Long-form idea text that spans multiple paragraphs..." | specsync idea
+specsync idea "Quick thought" --repo my-personal-ideas
+```
+
+Title is derived mechanically (first line / first sentence, truncated to 70
+chars). Body is the verbatim text plus a capture timestamp. No AI in the capture
+path — capture never waits, never fails on model errors.
+
+Configure a default ideas repo for cwd-independent capture:
+
+```yaml
+# openspec/specsync.yml
+ideas_repo: my-org/ideas
+```
+
+Or use the `SPECSYNC_IDEAS_REPO` environment variable.
+
+### `ideas` — list open intake issues
+
+See what you've captured that nobody has triaged yet:
+
+```bash
+specsync ideas                    # table output, oldest first
+specsync ideas --json             # JSON for scripting
+```
+
+### Triage: pull → triage → act
+
+An idea graduates by being pulled into a change (`specsync pull -issue <n>`),
+which creates a local spec and flips the issue label from `stage:intake` to
+`stage:active` on the next sync. Closing with a reason is a legitimate
+disposition — a written "why not" closes the loop on an idea rather than
+losing it.
 
 ### `trace` — the raw link graph
 

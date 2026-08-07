@@ -14,8 +14,10 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/androidand/specsync"
+	"github.com/androidand/specsync/provider/mcp"
 )
 
 // version is the binary version, stamped at release time via -ldflags "-X main.version=...".
@@ -29,7 +31,10 @@ var knownSubcommands = map[string]bool{
 	"release-plan": true, "changelog": true, "install-skill": true,
 	"changes": true, "set-stage": true, "set-priority": true, "note": true,
 	"sync": true, "audit": true, "audit-tasks": true, "validate": true,
-	"spinoff": true,
+	"spinoff": true, "epic": true, "idea": true, "ideas": true,
+	"claim": true, "claims": true, "release": true,
+	"verify": true, "stale": true, "admin-merge": true, "references": true,
+	"pr-body": true,
 }
 
 // knownConfusions maps a word someone might reach for by habit (e.g. git's
@@ -90,12 +95,22 @@ func deprecatedSlugFlag(args []string) error {
 func main() {
 	cmd, rest, err := resolveSubcommand(os.Args[1:])
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "specsync: %v\n\nRun with no subcommand (optionally with flags) to sync, or use one of: pull, link, scan, trace, release-plan, changelog, install-skill, changes, set-stage, set-priority, note, audit, audit-tasks, validate, spinoff\n", err)
+		fmt.Fprintf(os.Stderr, "specsync: %v\n\nRun with no subcommand (optionally with flags) to sync, or use one of: pull, link, scan, trace, release-plan, changelog, install-skill, changes, set-stage, set-priority, note, audit, audit-tasks, validate, spinoff, epic, idea, ideas, claim, claims, release\n", err)
 		os.Exit(2)
 	}
 	switch cmd {
 	case "version":
-		fmt.Println("specsync " + version)
+		fmt.Printf("specsync %s", version)
+		if version == "dev" {
+			// Try to get git describe for dev builds so users can tell
+			// if their installed copy lags behind the repo.
+			if out, err := exec.Command("git", "describe", "--tags", "--always").Output(); err == nil {
+				fmt.Printf(" (%s)", strings.TrimSpace(string(out)))
+			}
+			fmt.Println(" — this is a dev build; run `specsync changelog` to see what's in git but not yet published")
+		} else {
+			fmt.Println()
+		}
 	case "pull":
 		runPull(rest)
 	case "link":
@@ -128,6 +143,28 @@ func main() {
 		runValidate(rest)
 	case "spinoff":
 		runSpinoff(rest)
+	case "epic":
+		runEpic(rest)
+	case "idea":
+		runIdea(rest)
+	case "ideas":
+		runIdeas(rest)
+	case "claim":
+		runClaim(rest)
+	case "claims":
+		runClaims(rest)
+	case "release":
+		runRelease(rest)
+	case "verify":
+		runVerify(rest)
+	case "stale":
+		runStale(rest)
+	case "admin-merge":
+		runAdminMerge(rest)
+	case "references":
+		runReferences(rest)
+	case "pr-body":
+		runPRBody(rest)
 	default:
 		runSync(rest)
 	}
@@ -156,6 +193,7 @@ func runSync(args []string) {
 	repo := fs.String("repo", "", "target repo as owner/name (default: auto-detect from git remote)")
 	var providerNames stringSlice
 	fs.Var(&providerNames, "provider", "work provider: github, beads (repeatable; auto-detect when absent)")
+	specSource := fs.String("spec", "openspec", "spec source: openspec (default) or beads")
 	dryRun := fs.Bool("dry-run", false, "print the provider commands and rendered body without executing")
 	reconcile := fs.Bool("reconcile", true, "merge external task state back into tasks.md before pushing")
 	closeCompleted := fs.Bool("close-completed", false, "close the tracker item once every task in a change is checked")
@@ -252,8 +290,15 @@ func runSync(args []string) {
 		}
 	}
 
+	// Resolve spec source.
+	specSrc, err := makeSpecSource(*specSource)
+	if err != nil {
+		fail(err)
+	}
+
 	res, err := specsync.Sync(context.Background(), specsync.Options{
 		OpenSpecDir:    abs,
+		SpecSource:     specSrc,
 		Providers:      providers,
 		Slug:           *change,
 		DryRun:         *dryRun,
@@ -322,6 +367,7 @@ func runPull(args []string) {
 	issue := fs.String("issue", "", "issue number to pull into a local change (auto-resolved from branch name like feat/42-change when omitted)")
 	change := fs.String("change", "", "change name (default: derived from the issue title)")
 	repo := fs.String("repo", "", "source repo as owner/name (default: auto-detect from git remote)")
+	provider := fs.String("provider", "github", "work provider: github (default) or beads")
 	dryRun := fs.Bool("dry-run", false, "show what would be written without touching disk")
 	project := fs.String("project", "", "target GitHub Projects board as owner/number (default: openspec/specsync.yml board; unset = no board)")
 	assignee := fs.String("assignee", "", "board assignee login (default: the acting viewer, \"me\")")
@@ -357,13 +403,13 @@ func runPull(args []string) {
 	}
 
 	if *worktree {
-		runPullWithWorktree(*issue, *change, *repo, *dryRun, target, *worktreeDir)
+		runPullWithWorktree(*issue, *change, *repo, *dryRun, target, *worktreeDir, *provider)
 		return
 	}
 
 	res, err := specsync.Pull(context.Background(), specsync.PullOptions{
 		OpenSpecDir: abs,
-		Provider:    makeProvider(*repo, false, "github"),
+		Provider:    makeProvider(*repo, false, *provider),
 		IssueID:     *issue,
 		Slug:        *change,
 		DryRun:      *dryRun,
@@ -408,7 +454,7 @@ func runPull(args []string) {
 
 // runPullWithWorktree creates or reuses a git worktree, checks out a feature
 // branch, and runs the pull operation inside it.
-func runPullWithWorktree(issue, change, repo string, dryRun bool, project specsync.BoardTarget, worktreeDir string) {
+func runPullWithWorktree(issue, change, repo string, dryRun bool, project specsync.BoardTarget, worktreeDir, provider string) {
 	ctx := context.Background()
 
 	if worktreeDir == "" {
@@ -462,7 +508,7 @@ func runPullWithWorktree(issue, change, repo string, dryRun bool, project specsy
 
 	res, err := specsync.Pull(ctx, specsync.PullOptions{
 		OpenSpecDir: abs,
-		Provider:    makeProvider(repo, false, "github"),
+		Provider:    makeProvider(repo, false, provider),
 		IssueID:     issue,
 		Slug:        change,
 		DryRun:      dryRun,
@@ -545,6 +591,7 @@ func runLink(args []string) {
 	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
 	dryRun := fs.Bool("dry-run", false, "show what would change without writing files or calling GitHub")
 	repo := fs.String("repo", "", "repo (owner/name) for bare issue refs")
+	providerName := fs.String("provider", "github", "work provider for -resolve-refs: github (default) or beads")
 	_ = fs.Parse(args)
 
 	args = fs.Args()
@@ -631,10 +678,10 @@ func runLink(args []string) {
 
 	// Real run: sync each spec with the provider matching its repo.
 	for _, p := range result.Pairs {
-		provider := makeProvider(p.Repo, false, "github")
+		prov := makeProvider(p.Repo, false, *providerName)
 		_, err := specsync.Sync(context.Background(), specsync.Options{
 			OpenSpecDir: abs,
-			Provider:    provider,
+			Provider:    prov,
 			Slug:        p.Slug,
 		})
 		if err != nil {
@@ -656,11 +703,11 @@ func runLink(args []string) {
 			}
 		}
 
-		provider := makeProvider(lr.Repo, false, "github")
+		prov := makeProvider(lr.Repo, false, *providerName)
 		// Fetch the issue to get existing title, body, and labels.
-		reader, ok := provider.(specsync.IssueReader)
+		reader, ok := prov.(specsync.IssueReader)
 		if !ok {
-			fail(fmt.Errorf("provider %T does not support reading issues", provider))
+			fail(fmt.Errorf("provider %T does not support reading issues", prov))
 		}
 		item, err := reader.Get(context.Background(), lr.ID)
 		if err != nil {
@@ -678,7 +725,7 @@ func runLink(args []string) {
 			Labels:       item.Labels,
 			ManageClosed: false,
 		}
-		_, err = provider.Push(context.Background(), workItem, &lr.Ref)
+		_, err = prov.Push(context.Background(), workItem, &lr.Ref)
 		if err != nil {
 			fail(fmt.Errorf("push edited body for %s: %w", lr.Ref.URL, err))
 		}
@@ -737,7 +784,7 @@ func buildSyncLinker(repo string, providers []specsync.WorkProvider) specsync.Li
 // makeProvider builds the selected work provider, substituting a dry-runner that
 // prints commands instead of executing them when dryRun is set. github
 // (default) targets repo (auto-detect when empty); beads drives the local `bd`
-// graph and ignores repo.
+// graph and ignores repo; mcp delegates to an MCP server.
 func makeProvider(repo string, dryRun bool, provider string) specsync.WorkProvider {
 	switch provider {
 	case "beads":
@@ -745,6 +792,8 @@ func makeProvider(repo string, dryRun bool, provider string) specsync.WorkProvid
 			return specsync.NewBeadsProviderFunc(beadsDryRunner)
 		}
 		return specsync.NewBeadsProvider()
+	case "mcp":
+		return mcp.NewProvider("mcp-server") // command resolved from env or config
 	default: // github
 		if dryRun {
 			return specsync.NewGitHubProviderFuncWithRepo(repo, dryRunner)
@@ -753,6 +802,19 @@ func makeProvider(repo string, dryRun bool, provider string) specsync.WorkProvid
 			return specsync.NewGitHubProviderWithRepo(repo)
 		}
 		return specsync.NewGitHubProvider()
+	}
+}
+
+// makeSpecSource returns a SpecSource for the given name.
+// Supported values: "openspec" (default), "beads" (placeholder).
+func makeSpecSource(name string) (specsync.SpecSource, error) {
+	switch name {
+	case "openspec":
+		return specsync.FileSpecSource{}, nil
+	case "beads":
+		return specsync.BeadsSource{}, nil
+	default:
+		return nil, fmt.Errorf("unknown spec source %q: use openspec or beads", name)
 	}
 }
 
@@ -1519,6 +1581,76 @@ func countStatus(findings []specsync.AuditFinding, status string) int {
 	return n
 }
 
+// runEpic creates or finds an epic issue and wires children.
+func runEpic(args []string) {
+	fs := flag.NewFlagSet("epic", flag.ExitOnError)
+	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	repo := fs.String("repo", "", "target repo as owner/name for the epic issue")
+	dryRun := fs.Bool("dry-run", false, "print the provider commands and rendered body without executing")
+	if err := fs.Parse(args); err != nil {
+		fail(err)
+	}
+
+	// Collect --child flags from args.
+	var children []string
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--child" && i+1 < len(args) {
+			children = append(children, args[i+1])
+			i++
+		}
+	}
+
+	title := fs.Arg(0)
+	if title == "" {
+		fail(fmt.Errorf("epic: title is required\nusage: specsync epic <title> --child <slug|#N|owner/repo#N|url>..."))
+	}
+	if len(children) == 0 {
+		fail(fmt.Errorf("epic: at least one --child is required"))
+	}
+
+	abs, err := filepath.Abs(*openspec)
+	if err != nil {
+		fail(err)
+	}
+
+	ctx := context.Background()
+	result, err := specsync.EpicMint(ctx, specsync.EpicOptions{
+		Title:       title,
+		Repo:        *repo,
+		Children:    children,
+		OpenSpecDir: abs,
+		DryRun:      *dryRun,
+	})
+	if err != nil {
+		fail(err)
+	}
+
+	if *dryRun {
+		fmt.Println("DRY RUN — no files or GitHub calls will be modified")
+		fmt.Println()
+		fmt.Printf("  epic: %s\n", result.EpicURL)
+		for _, c := range result.Children {
+			if c.URL != "" {
+				fmt.Printf("  child: %s\n", c.URL)
+			} else {
+				fmt.Printf("  child (slug): %s\n", c.Slug)
+			}
+		}
+		fmt.Println()
+		fmt.Printf("specsync epic: would create/find epic with %d children\n", len(result.Children))
+		return
+	}
+
+	fmt.Printf("specsync epic: %s\n", result.EpicURL)
+	for _, c := range result.Children {
+		if c.URL != "" {
+			fmt.Printf("  child: %s\n", c.URL)
+		} else {
+			fmt.Printf("  child (slug): %s\n", c.Slug)
+		}
+	}
+}
+
 func fail(err error) {
 	fmt.Fprintln(os.Stderr, "specsync:", err)
 	os.Exit(1)
@@ -1651,5 +1783,497 @@ func runValidate(args []string) {
 
 	if len(result.Issues) > 0 {
 		os.Exit(1)
+	}
+}
+
+// runIdea creates a GitHub issue for an idea (capture path).
+func runIdea(args []string) {
+	fs := flag.NewFlagSet("idea", flag.ExitOnError)
+	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	repo := fs.String("repo", "", "target repo as owner/name for the idea issue")
+	dryRun := fs.Bool("dry-run", false, "print what would be created without writing files or calling GitHub")
+	if err := fs.Parse(args); err != nil {
+		fail(err)
+	}
+
+	// Collect remaining args as idea text.
+	text := strings.Join(fs.Args(), " ")
+	if text == "" {
+		// Try stdin.
+		stat, _ := os.Stdin.Stat()
+		if (stat.Mode() & os.ModeCharDevice) == 0 {
+			data, err := os.ReadFile("/dev/stdin")
+			if err != nil {
+				fail(fmt.Errorf("idea: read stdin: %w", err))
+			}
+			text = string(data)
+		}
+	}
+	if text == "" {
+		fail(fmt.Errorf("idea: text is required (pass as argument or pipe via stdin)"))
+	}
+
+	abs, err := filepath.Abs(*openspec)
+	if err != nil {
+		fail(err)
+	}
+
+	ctx := context.Background()
+	result, err := specsync.Idea(ctx, specsync.IdeaOptions{
+		Text:        text,
+		Repo:        *repo,
+		OpenSpecDir: abs,
+		DryRun:      *dryRun,
+	})
+	if err != nil {
+		fail(err)
+	}
+
+	if *dryRun {
+		fmt.Println("DRY RUN — no files or GitHub calls will be modified")
+		fmt.Println()
+		fmt.Printf("  idea: %s\n", result.URL)
+		return
+	}
+
+	fmt.Println(result.URL)
+}
+
+// runIdeas lists open stage:intake issues.
+func runIdeas(args []string) {
+	fs := flag.NewFlagSet("ideas", flag.ExitOnError)
+	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	repo := fs.String("repo", "", "target repo as owner/name for the query")
+	asJSON := fs.Bool("json", false, "output as JSON")
+	if err := fs.Parse(args); err != nil {
+		fail(err)
+	}
+
+	abs, err := filepath.Abs(*openspec)
+	if err != nil {
+		fail(err)
+	}
+
+	ctx := context.Background()
+	items, err := specsync.Ideas(ctx, specsync.IdeasOptions{
+		Repo:        *repo,
+		OpenSpecDir: abs,
+	})
+	if err != nil {
+		fail(err)
+	}
+
+	if len(items) == 0 {
+		if *asJSON {
+			fmt.Println("[]")
+		} else {
+			fmt.Println("specsync ideas: no open intake issues")
+		}
+		return
+	}
+
+	if *asJSON {
+		type ideaJSON struct {
+			Number  int    `json:"number"`
+			Title   string `json:"title"`
+			URL     string `json:"url"`
+			Created string `json:"created_at"`
+		}
+		var out []ideaJSON
+		for _, it := range items {
+			out = append(out, ideaJSON{
+				Number:  atoi(it.ID),
+				Title:   it.Title,
+				URL:     it.URL,
+				Created: specsync.ExtractCreated(it.Body),
+			})
+		}
+		data, err := json.MarshalIndent(out, "", "  ")
+		if err != nil {
+			fail(fmt.Errorf("marshal JSON: %w", err))
+		}
+		fmt.Println(string(data))
+	} else {
+		fmt.Printf("Open ideas (%d):\n\n", len(items))
+		for _, it := range items {
+			fmt.Printf("  %-6s %-30s %s\n", "#"+it.ID, truncate(it.Title, 30), it.URL)
+		}
+		fmt.Printf("\nspecsync ideas: %d open idea(s)\n", len(items))
+	}
+}
+
+func atoi(s string) int {
+	n, _ := strconv.Atoi(s)
+	return n
+}
+
+// runClaim records an in-flight work claim.
+func runClaim(args []string) {
+	fs := flag.NewFlagSet("claim", flag.ExitOnError)
+	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	change := fs.String("change", "", "change to claim (required)")
+	worktree := fs.String("worktree", "", "worktree path (default: cwd)")
+	branch := fs.String("branch", "", "branch name (default: git rev-parse HEAD)")
+	agent := fs.String("agent", "", "agent identifier (default: $SPECSYNC_AGENT or hostname+pid)")
+	globs := fs.String("globs", "", "file globs this agent expects to touch (comma-separated)")
+	ttl := fs.String("ttl", "24h", "claim TTL duration (e.g. 24h, 2h30m)")
+	force := fs.Bool("force", false, "override overlap detection")
+	if err := fs.Parse(args); err != nil {
+		fail(err)
+	}
+
+	if *change == "" {
+		fail(fmt.Errorf("claim: -change is required"))
+	}
+
+	abs, err := filepath.Abs(*openspec)
+	if err != nil {
+		fail(err)
+	}
+
+	// Parse globs.
+	var globList []string
+	if *globs != "" {
+		for _, g := range strings.Split(*globs, ",") {
+			g = strings.TrimSpace(g)
+			if g != "" {
+				globList = append(globList, g)
+			}
+		}
+	}
+
+	// Parse TTL.
+	ttlDur, err := time.ParseDuration(*ttl)
+	if err != nil {
+		fail(fmt.Errorf("claim: invalid TTL %q: %w", *ttl, err))
+	}
+
+	ctx := context.Background()
+	result, err := specsync.ClaimWork(ctx, specsync.ClaimOptions{
+		Change:      *change,
+		Worktree:    *worktree,
+		Branch:      *branch,
+		Agent:       *agent,
+		Globs:       globList,
+		TTL:         ttlDur,
+		Force:       *force,
+		OpenSpecDir: abs,
+	})
+	if err != nil {
+		fail(err)
+	}
+
+	// Print overlaps if any.
+	if len(result.Overlaps) > 0 {
+		fmt.Fprintln(os.Stderr, "Overlap warnings:")
+		for _, o := range result.Overlaps {
+			fmt.Fprintf(os.Stderr, "  ⚠ %s claimed by %s (worktree: %s, globs: %v)\n",
+				o.HolderChange, o.HolderAgent, o.HolderWorktree, o.IntersectingGlobs)
+		}
+	}
+
+	// Print warnings.
+	for _, w := range result.Warnings {
+		fmt.Fprintln(os.Stderr, w)
+	}
+
+	fmt.Printf("claimed: %s (agent: %s, branch: %s, expires: %s)\n",
+		result.Claim.Change, result.Claim.Agent, result.Claim.Branch,
+		result.Claim.ExpiresAt.Format("15:04:05"))
+}
+
+// runClaims lists active claims.
+func runClaims(args []string) {
+	fs := flag.NewFlagSet("claims", flag.ExitOnError)
+	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	asJSON := fs.Bool("json", false, "output as JSON")
+	if err := fs.Parse(args); err != nil {
+		fail(err)
+	}
+
+	abs, err := filepath.Abs(*openspec)
+	if err != nil {
+		fail(err)
+	}
+
+	infos, err := specsync.ListClaimInfos(abs)
+	if err != nil {
+		fail(err)
+	}
+
+	if len(infos) == 0 {
+		if *asJSON {
+			fmt.Println("[]")
+		} else {
+			fmt.Println("specsync claims: no active claims")
+		}
+		return
+	}
+
+	if *asJSON {
+		fmt.Println(specsync.FormatClaimJSON(infos))
+	} else {
+		fmt.Print(specsync.FormatClaimTable(infos))
+	}
+}
+
+// runRelease removes a claim for a change.
+func runRelease(args []string) {
+	fs := flag.NewFlagSet("release", flag.ExitOnError)
+	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	change := fs.String("change", "", "change to release (required)")
+	if err := fs.Parse(args); err != nil {
+		fail(err)
+	}
+
+	if *change == "" {
+		fail(fmt.Errorf("release: -change is required"))
+	}
+
+	abs, err := filepath.Abs(*openspec)
+	if err != nil {
+		fail(err)
+	}
+
+	if err := specsync.ReleaseClaim(abs, *change); err != nil {
+		if os.IsNotExist(err) {
+			fail(fmt.Errorf("release: no active claim for %s", *change))
+		}
+		fail(err)
+	}
+
+	fmt.Printf("released: %s\n", *change)
+}
+
+// runVerify records a verification note with optional SHA provenance.
+// When -check-pr is set, it also warns on open PRs whose head branch matches
+// a change id but whose body has no reference to that change's issue.
+func runVerify(args []string) {
+	fs := flag.NewFlagSet("verify", flag.ExitOnError)
+	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	change := fs.String("change", "", "change to record verification for (required)")
+	note := fs.String("note", "", "verification note (required)")
+	atSHA := fs.String("at-sha", "", "commit SHA the verification was measured at")
+	repo := fs.String("repo", "", "target repo as owner/name (default: auto-detect)")
+	checkPR := fs.Bool("check-pr", false, "warn on open PRs whose head branch matches a change id but lacks a reference to its issue")
+	if err := fs.Parse(args); err != nil {
+		fail(err)
+	}
+
+	abs, err := filepath.Abs(*openspec)
+	if err != nil {
+		fail(err)
+	}
+
+	// If -check-pr is set, run the PR reference check.
+	if *checkPR {
+		runVerifyCheckPR(abs, *repo)
+		return
+	}
+
+	if *change == "" {
+		fail(fmt.Errorf("verify: -change is required"))
+	}
+	if *note == "" {
+		fail(fmt.Errorf("verify: -note is required"))
+	}
+
+	result, err := specsync.RecordVerification(specsync.VerifyOptions{
+		Change:      *change,
+		Note:        *note,
+		AtSHA:       *atSHA,
+		OpenSpecDir: abs,
+	})
+	if err != nil {
+		fail(err)
+	}
+
+	for _, w := range result.Warnings {
+		fmt.Fprintln(os.Stderr, w)
+	}
+
+	fmt.Printf("verified: %s — %s", *change, *note)
+	if result.Record.AtSHA != "" {
+		fmt.Printf(" (SHA: %s)", specsync.ShortSHA(result.Record.AtSHA))
+	}
+	fmt.Println()
+}
+
+// runVerifyCheckPR warns on open PRs whose head branch matches a change id
+// but whose body has no reference to that change's issue.
+func runVerifyCheckPR(openspecDir, repo string) {
+	changes, err := specsync.LoadChanges(openspecDir)
+	if err != nil {
+		fail(fmt.Errorf("load changes: %w", err))
+	}
+
+	// Build provider.
+	prov := makeProvider(repo, false, "github")
+	gp, ok := prov.(*specsync.GitHubProvider)
+	if !ok {
+		fail(fmt.Errorf("verify -check-pr: expected GitHub provider"))
+	}
+
+	ctx := context.Background()
+
+	// List open PRs.
+	prs, err := gp.ListOpenPRs(ctx)
+	if err != nil {
+		fail(fmt.Errorf("list PRs: %w", err))
+	}
+
+	if len(prs) == 0 {
+		fmt.Println("no open PRs")
+		return
+	}
+
+	var warnings []string
+	for _, pr := range prs {
+		// Check if the head branch matches any change id (slug).
+		for _, c := range changes {
+			// The branch name might be "feat/<issue>-<slug>" or just "<slug>".
+			// Check if the branch contains the slug.
+			if !strings.Contains(pr.HeadRefName, c.Slug) {
+				continue
+			}
+
+			// Find the change's synced ref.
+			ref, err := prov.Find(ctx, c.Slug)
+			if err != nil || ref == nil {
+				continue
+			}
+
+			// Check if the PR body references the change's issue.
+			issueRef := fmt.Sprintf("#%s", ref.ID)
+			if strings.Contains(pr.Body, issueRef) || strings.Contains(pr.Body, ref.URL) {
+				continue // PR body references the issue — OK
+			}
+
+			warnings = append(warnings,
+				fmt.Sprintf("⚠ PR #%d (%s) head branch %q matches change %q but body has no reference to issue #%s",
+					pr.Number, pr.URL, pr.HeadRefName, c.Slug, ref.ID))
+		}
+	}
+
+	if len(warnings) == 0 {
+		fmt.Println("all open PRs reference their changes")
+		return
+	}
+
+	fmt.Println("PR reference warnings:")
+	for _, w := range warnings {
+		fmt.Println(w)
+	}
+}
+
+// runStale checks for stale verification records.
+func runStale(args []string) {
+	fs := flag.NewFlagSet("stale", flag.ExitOnError)
+	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	change := fs.String("change", "", "change to check (required)")
+	branch := fs.String("branch", "", "branch name (default: git rev-parse HEAD)")
+	repoRoot := fs.String("repo-root", "", "repository root (default: parent of openspec/)")
+	if err := fs.Parse(args); err != nil {
+		fail(err)
+	}
+
+	if *change == "" {
+		fail(fmt.Errorf("stale: -change is required"))
+	}
+
+	abs, err := filepath.Abs(*openspec)
+	if err != nil {
+		fail(err)
+	}
+
+	if *repoRoot == "" {
+		*repoRoot = filepath.Dir(abs)
+	}
+
+	if *branch == "" {
+		*branch, _ = specsync.CurrentBranch(*repoRoot)
+	}
+
+	ctx := context.Background()
+	stale, err := specsync.CheckStaleVerifications(ctx, abs, *change, *repoRoot, *branch)
+	if err != nil {
+		fail(err)
+	}
+
+	if len(stale) == 0 {
+		fmt.Println("no stale verifications")
+		return
+	}
+
+	fmt.Printf("stale verifications (%d):\n", len(stale))
+	for _, s := range stale {
+		fmt.Printf("  ⚠ %s: %q was measured at %s, branch tip is now %s (stale %s)\n",
+			s.Record.Change, s.Record.Note,
+			specsync.ShortSHA(s.StaleAtSHA),
+			specsync.ShortSHA(s.CurrentSHA),
+			truncateDuration(s.Age))
+	}
+}
+
+// truncateDuration formats a duration, truncating to hours.
+func truncateDuration(d time.Duration) string {
+	if d > time.Hour {
+		return d.Round(time.Hour).String()
+	}
+	return d.Round(time.Minute).String()
+}
+
+// runAdminMerge checks if a change's PR was merged with --admin (checks bypassed).
+func runAdminMerge(args []string) {
+	fs := flag.NewFlagSet("admin-merge", flag.ExitOnError)
+	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	change := fs.String("change", "", "change to check (required)")
+	repo := fs.String("repo", "", "target repo as owner/name (default: auto-detect)")
+	provider := fs.String("provider", "github", "work provider: github (default) or beads")
+	note := fs.Bool("note", false, "add a note to the issue body if admin merge detected")
+	if err := fs.Parse(args); err != nil {
+		fail(err)
+	}
+
+	if *change == "" {
+		fail(fmt.Errorf("admin-merge: -change is required"))
+	}
+
+	abs, err := filepath.Abs(*openspec)
+	if err != nil {
+		fail(err)
+	}
+
+	repoRoot := filepath.Dir(abs)
+
+	// Build provider.
+	prov := makeProvider(*repo, false, *provider)
+	gp, ok := prov.(*specsync.GitHubProvider)
+	if !ok {
+		fail(fmt.Errorf("admin-merge: expected GitHub provider"))
+	}
+
+	ctx := context.Background()
+	merges, err := specsync.DetectAdminMergesForChange(ctx, repoRoot, *change, gp)
+	if err != nil {
+		fail(err)
+	}
+
+	if len(merges) == 0 {
+		fmt.Printf("no admin merge detected for %s\n", *change)
+		return
+	}
+
+	fmt.Printf("admin merge detected for %s:\n", *change)
+	for _, m := range merges {
+		fmt.Printf("  PR #%s merged with checks bypassed (SHA: %s)\n",
+			m.PRNumber, specsync.ShortSHA(m.MergeSHA))
+	}
+
+	if *note {
+		if err := specsync.NoteAdminMergeOnIssue(ctx, repoRoot, *change, gp); err != nil {
+			fail(err)
+		}
+		fmt.Println("note added to issue body")
 	}
 }
