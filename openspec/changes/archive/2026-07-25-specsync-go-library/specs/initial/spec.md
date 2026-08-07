@@ -1,24 +1,20 @@
 # spec.md — specsync-go-library
 
-> **Note on layout:** This change originally specced a `pkg/specsync/` subdirectory.
-> The move was never executed — all `.go` files remain at the module root.
-> The entries below are corrected to describe what actually shipped.
-
 ## ADDED
 
-- `sync.go` (root): exported `SyncOptions` struct and `Sync` function returning `(*SyncResult, error)`
-- `worktree.go` (root): exported `BranchName` and `CreateWorktree` functions
-- `provider.go` (root): `WorkProvider` interface (consumed by pluggable-providers change)
-- `cmd/specsync/worktree.go`: CLI `worktree` subcommand implementation
-- `cmd/specsync/main.go`: delegates all functionality to root `specsync` package
-- `sync_test.go` (root): tests for `Sync` and `SyncResult`
-- `worktree_test.go` (root): tests for `BranchName` and `CreateWorktree`
-- `provider_test.go` (root): tests for `WorkProvider` interface
+- `sync.go`: exported `Options` struct and `Sync` function returning `(Result, error)`
+- `repo.go`: exported `BranchName` and `CreateWorktree` functions
+- `provider.go`: `WorkProvider` interface (consumed by pluggable-providers change)
+- `cmd/specsync/main.go`: CLI `worktree` subcommand implementation
+- `*.go` at module root: all current `package specsync` files remain at root
+- `*_test.go` at module root: all current `package specsync` tests remain at root
+- `cmd/specsync/main.go`: imports root package; delegates all functionality
 
 ## MODIFIED
 
-- `cmd/specsync/main.go`: imports root `specsync` package; delegates all functionality
+- `cmd/specsync/main.go`: imports root package (no `pkg/` prefix); delegates all functionality
+- `*.go` at module root: `package specsync` declarations unchanged
 
 ## REMOVED
 
-- None from root: all `.go` files remain at the module root
+- None: the package has always lived at the module root

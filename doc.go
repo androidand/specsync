@@ -10,6 +10,13 @@
 // depends only on the Go standard library, an invariant enforced by
 // TestStdlibOnly in boundary_test.go.
 //
+// Import path:
+//
+//	import "github.com/androidand/specsync"
+//
+// That is the only import path specsync provides. The package lives at the
+// module root, not under pkg/.
+//
 // Layering:
 //
 //	OpenSpec change folder  ->  Change   (change.go)
