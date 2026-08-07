@@ -43,6 +43,7 @@ func runScan(args []string) {
 	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
 	openspecs := fs.String("openspecs", "", "comma-separated list of openspec directories for cross-repo scanning")
 	asJSON := fs.Bool("json", false, "emit JSON for a planning agent")
+	references := fs.Bool("references", false, "also show OpenSpec references and worksets")
 	_ = fs.Parse(args)
 
 	paths, topic := splitArea(fs.Args())
@@ -100,8 +101,23 @@ func runScan(args []string) {
 		crossRepo = specsync.CrossRepoCorrelation(in.Changes, scope)
 	}
 
+	// Read OpenSpec coordination data if requested.
+	var coordination *specsync.Coordination
+	var worksets *specsync.Workset
+	if *references {
+		coordination, _ = specsync.ReadCoordination(ctx) // degrade on error
+		worksets, _ = specsync.ReadWorksets(ctx)         // degrade on error
+	}
+
 	if *asJSON {
-		emitJSON(map[string]any{"trace": tr, "openIssuesNoChange": looseIssues, "crossRepo": crossRepo})
+		out := map[string]any{"trace": tr, "openIssuesNoChange": looseIssues, "crossRepo": crossRepo}
+		if coordination != nil {
+			out["coordination"] = coordination
+		}
+		if worksets != nil {
+			out["worksets"] = worksets
+		}
+		emitJSON(out)
 		return
 	}
 	label := strings.Join(append(append([]string{}, paths...), quoteIf(topic)...), "  +  ")
@@ -141,6 +157,23 @@ func runScan(args []string) {
 		fmt.Println("\nRecent commits here")
 		for _, n := range commits {
 			fmt.Printf("  %s\n", n.Label)
+		}
+	}
+
+	// Print OpenSpec coordination data if requested.
+	if coordination != nil {
+		siblings := coordination.ReferencedSiblings()
+		if len(siblings) > 0 {
+			fmt.Println("\nReferenced sibling repos")
+			for _, s := range siblings {
+				fmt.Printf("  %-12s %s  (source: %s)\n", s.Role, s.Path, s.Source)
+			}
+		}
+	}
+	if worksets != nil && len(worksets.Worksets) > 0 {
+		fmt.Println("\nWorkset folders")
+		for _, w := range worksets.Worksets {
+			fmt.Printf("  %-12s %s\n", w.Name, w.Path)
 		}
 	}
 }
