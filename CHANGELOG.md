@@ -4,6 +4,21 @@ All notable changes to this project are documented here. One entry per shipped
 OpenSpec change — see the linked issues for the full spec and discussion.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.11.0] - 2026-08-10
+
+### Added
+
+- add OpenSpec coordination support (references, worksets) (03a0dc5d)
+- add archive lifecycle, board two-way merge, and MCP provider type (24dcc5a7)
+- add LabelApplier interface and idea/ideas commands (520087f3)
+
+### Fixed
+
+- resync derived SKILL.md copies with the canonical minimal version (7a4ae8e5)
+- set GH_TOKEN so gh-calling CI steps can authenticate (b40fad91)
+
+<!-- 3 internal commit(s) omitted (chore/docs/ci/...) -->
+
 ## [0.10.1] - 2026-08-10
 
 ### Added
