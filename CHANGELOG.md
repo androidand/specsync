@@ -4,6 +4,14 @@ All notable changes to this project are documented here. One entry per shipped
 OpenSpec change — see the linked issues for the full spec and discussion.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.10.1] - 2026-08-10
+
+### Added
+
+- auto-update skills on binary upgrade (#120) (#121) (08801273)
+
+<!-- 2 internal commit(s) omitted (chore/docs/ci/...) -->
+
 ## [0.10.0] - 2026-08-10
 
 ### Added
