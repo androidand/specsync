@@ -59,6 +59,8 @@ func runInstallSkill(args []string) {
 		os.Exit(1)
 	}
 
+	installedVersion := extractSkillVersion(skillContent)
+
 	for i, t := range skillTargets {
 		if !*all && !*flags[i] {
 			continue
@@ -74,5 +76,9 @@ func runInstallSkill(args []string) {
 			continue
 		}
 		fmt.Printf("  wrote    %-20s %s\n", t.label, dest)
+	}
+
+	if installedVersion != "" && installedVersion != "dev" {
+		fmt.Printf("\n✓ Installed specsync skill version %s\n", installedVersion)
 	}
 }

@@ -94,6 +94,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "specsync: %v\n\nRun with no subcommand (optionally with flags) to sync, or use one of: pull, link, scan, trace, release-plan, changelog, install-skill, changes, set-stage, set-priority, note, audit, audit-tasks, validate, spinoff, pr-body, verify, relate, work-graph\n", err)
 		os.Exit(2)
 	}
+
 	switch cmd {
 	case "version":
 		fmt.Println("specsync " + version)
@@ -145,6 +146,26 @@ func main() {
 // isVersionArg reports whether the first CLI arg requests the binary version.
 func isVersionArg(arg string) bool {
 	return arg == "version" || arg == "-version" || arg == "--version"
+}
+
+// containsFlag checks if args contain a specific flag (with or without value).
+// Checks both -flag and --flag forms, and -flag=value.
+func containsFlag(args []string, name string) bool {
+	for _, arg := range args {
+		if !strings.HasPrefix(arg, "-") {
+			continue
+		}
+		// Remove leading dashes
+		flagName := strings.TrimLeft(arg, "-")
+		// Handle -flag=value by splitting on =
+		if idx := strings.Index(flagName, "="); idx != -1 {
+			flagName = flagName[:idx]
+		}
+		if flagName == name {
+			return true
+		}
+	}
+	return false
 }
 
 // stringSlice implements flag.Value for repeatable -provider flags.

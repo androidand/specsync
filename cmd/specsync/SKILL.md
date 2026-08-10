@@ -1,3 +1,4 @@
+<!-- specsync-skill-version: 0.10.0 -->
 ---
 name: specsync
 description: Plan and synchronize OpenSpec changes with GitHub Issues using the specsync CLI. Use when asked to create, update, or reconcile an OpenSpec change with a tracker issue, pull an issue into a local change, scan for related work, cross-link changes, or inspect release impact.
@@ -144,7 +145,20 @@ Read-only follow-up report: shipped changes, gaps, advisory semver bump. `-apply
 specsync install-skill [--all] [--claude-code] [--codex] [--opencode] [--copilot]
 ```
 
-Writes this skill file into the known global agent dirs. `--all` covers every supported platform. Skips dirs that don't exist on the machine.
+Writes this skill file into the known global agent dirs. `--all` covers every supported platform. Skips dirs that don't exist on the machine. When you upgrade specsync via npm, the next `install-skill` run installs the updated skill version automatically.
+
+### Doctor
+
+```
+specsync doctor [claude|install|context|skill] [--skip-skill-update]
+```
+
+Diagnose and fix agent skill health. Auto-updates stale skill files to match the binary version (pass `--skip-skill-update` for read-only diagnostics). Subcommands:
+
+- `claude` (default) — Claude Code skill diagnostics
+- `install` — show all 5 installed skill locations and versions
+- `context` — token impact analysis by profile  
+- `skill` — detailed installed vs. binary version comparison
 
 ### Raw trace graph (debugging)
 

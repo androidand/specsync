@@ -19,12 +19,15 @@ type DoctorResult struct {
 
 // InstallationInfo describes skill installation status.
 type InstallationInfo struct {
-	Primary    string `json:"primary"`
-	Installed  bool   `json:"installed"`
-	SizeBytes  int64  `json:"size_bytes"`
-	SizeKB     float64 `json:"size_kb"`
-	Lines      int    `json:"lines"`
-	Profile    string `json:"profile"`
+	Primary         string `json:"primary"`
+	Installed       bool   `json:"installed"`
+	Version         string `json:"version,omitempty"`
+	BinaryVersion   string `json:"binary_version,omitempty"`
+	NeedsUpdate     bool   `json:"needs_update,omitempty"`
+	SizeBytes       int64  `json:"size_bytes"`
+	SizeKB          float64 `json:"size_kb"`
+	Lines           int    `json:"lines"`
+	Profile         string `json:"profile"`
 }
 
 // TokenAnalysisInfo describes token usage.
@@ -38,8 +41,16 @@ type TokenAnalysisInfo struct {
 func runDoctor(args []string) {
 	fs := flag.NewFlagSet("doctor", flag.ExitOnError)
 	jsonFlag := fs.Bool("json", false, "emit machine-readable JSON output")
+	skipUpdate := fs.Bool("skip-skill-update", false, "skip auto-updating skill files")
 	if err := fs.Parse(args); err != nil {
 		fail(err)
+	}
+
+	// Auto-update skills unless --skip-skill-update is set
+	if !*skipUpdate && version != "" && version != "dev" {
+		if updateSkillsIfNeeded(version) {
+			fmt.Fprintf(os.Stderr, "\n")
+		}
 	}
 
 	remaining := fs.Args()
@@ -85,11 +96,18 @@ func doctorClaude(asJSON bool) {
 			"Install with: specsync install-skill --claude-code",
 		}
 	} else {
+		// Read skill version
+		content, _ := os.ReadFile(skillPath)
+		installedVersion := extractSkillVersion(content)
+
 		result.Installation = InstallationInfo{
-			Primary:   skillPath,
-			Installed: true,
-			SizeBytes: info.Size(),
-			SizeKB:    float64(info.Size()) / 1024,
+			Primary:       skillPath,
+			Installed:     true,
+			Version:       installedVersion,
+			BinaryVersion: version,
+			NeedsUpdate:   installedVersion != "" && versionCompare(version, installedVersion),
+			SizeBytes:     info.Size(),
+			SizeKB:        float64(info.Size()) / 1024,
 		}
 
 		// Token estimation (rough)
@@ -123,6 +141,15 @@ func doctorClaude(asJSON bool) {
 		if result.Installation.Installed {
 			fmt.Printf("Location: %s\n", result.Installation.Primary)
 			fmt.Printf("Size: %.1f KB (~%d tokens)\n", result.Installation.SizeKB, result.TokenAnalysis.DefaultLoaded)
+			if result.Installation.Version != "" {
+				fmt.Printf("Installed Version: %s\n", result.Installation.Version)
+			}
+			if result.Installation.BinaryVersion != "" {
+				fmt.Printf("Binary Version: %s\n", result.Installation.BinaryVersion)
+			}
+			if result.Installation.NeedsUpdate {
+				fmt.Printf("Status: ⚠ Update available\n")
+			}
 		}
 		if len(result.Recommendations) > 0 {
 			fmt.Println("\nRecommendations:")
@@ -153,7 +180,16 @@ func doctorInstall(asJSON bool) {
 	for _, loc := range locations {
 		skillFile := filepath.Join(loc.path, "SKILL.md")
 		if info, err := os.Stat(skillFile); err == nil {
-			fmt.Printf("%s: %s (%.1f KB)\n", loc.name, "✓ Installed", float64(info.Size())/1024)
+			content, _ := os.ReadFile(skillFile)
+			installedVersion := extractSkillVersion(content)
+			versionStr := ""
+			if installedVersion != "" {
+				versionStr = fmt.Sprintf(" (v%s)", installedVersion)
+				if versionCompare(version, installedVersion) {
+					versionStr += " ⚠ outdated"
+				}
+			}
+			fmt.Printf("%s: %s (%.1f KB)%s\n", loc.name, "✓ Installed", float64(info.Size())/1024, versionStr)
 		} else {
 			fmt.Printf("%s: (not installed)\n", loc.name)
 		}
@@ -195,6 +231,18 @@ func doctorSkill(asJSON bool) {
 	fmt.Printf("Location: %s\n", skillPath)
 	fmt.Printf("Size: %.1f KB\n", float64(info.Size())/1024)
 	fmt.Printf("Estimated Tokens: ~%d\n", estimateTokens(int(info.Size())))
+
+	content, _ := os.ReadFile(skillPath)
+	installedVersion := extractSkillVersion(content)
+	if installedVersion != "" {
+		fmt.Printf("Installed Version: %s\n", installedVersion)
+		fmt.Printf("Binary Version: %s\n", version)
+		if versionCompare(version, installedVersion) {
+			fmt.Printf("Status: Update available (run: specsync install-skill --all)\n")
+		} else {
+			fmt.Printf("Status: Up to date\n")
+		}
+	}
 }
 
 // estimateTokens estimates tokens from file size.
