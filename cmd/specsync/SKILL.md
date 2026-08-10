@@ -147,6 +147,8 @@ specsync install-skill [--all] [--claude-code] [--codex] [--opencode] [--copilot
 
 Writes this skill file into the known global agent dirs. `--all` covers every supported platform. Skips dirs that don't exist on the machine.
 
+**Auto-update on upgrade.** When specsync is upgraded, installed skill files are automatically refreshed on the next run. This ensures your agents always have the latest skill documentation without manual intervention. Pass `--skip-skill-update` to disable auto-updates in CI/automation workflows. Use `specsync doctor install` to check installed versions and see if an update is needed.
+
 ### Raw trace graph (debugging)
 
 ```
