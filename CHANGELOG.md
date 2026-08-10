@@ -4,6 +4,15 @@ All notable changes to this project are documented here. One entry per shipped
 OpenSpec change — see the linked issues for the full spec and discussion.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.11.1] - 2026-08-10
+
+### Fixed
+
+- archive closeAndLabel pushed a blank-title WorkItem and never attached the label (1462356e)
+- retry Find before create to close a duplicate-issue race (7cd024dd)
+
+<!-- 1 internal commit(s) omitted (chore/docs/ci/...) -->
+
 ## [0.11.0] - 2026-08-10
 
 ### Added
