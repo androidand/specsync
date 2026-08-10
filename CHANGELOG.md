@@ -4,6 +4,54 @@ All notable changes to this project are documented here. One entry per shipped
 OpenSpec change — see the linked issues for the full spec and discussion.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.10.0] - 2026-08-10
+
+### Added
+
+- Added `specsync doctor` command for diagnosing and optimizing Claude Code token usage. Run `specsync doctor` to see installation status, detect duplicate skills, and get personalized recommendations. Use `specsync doctor --json` for automation and scripting. (#114)
+- Advisory title suggestions: warn on unwieldy titles, never rewrite them (#52)
+- Beads auto-detection requires a Beads database (#103)
+- Board state reconciliation: three-way merge for shared workflow (#42)
+- Add `specsync validate` CI gate (#64)
+- directed dependency links (BlockedBy/Blocks) with GitHub dependency projection (2847f7be)
+- add idea-intake-command spec; ignore .status files (2d46a1b0)
+- PR-issue traceability with pr-body and verify subcommands (#??) (2e676aa7)
+- correct archived import path record and add guard test (47b9dcf4)
+- add audit-archived-not-merged change (5ba49132)
+- add set-stage/set-priority tests and atomic write verification (#58) (6664afd9)
+- add sorting, TASKS/TITLE columns, stage grouping to specsync changes (71225035)
+- pluggable SpecSource interface with FileSpecSource and BeadsSource (844f7fee)
+- reduce SKILL.md token cost to 60% (#12) (a4213098)
+- add specsync audit command and shipped stage (#58) (d815df3d)
+- pluggable SpecSource interface with FileSpecSource and BeadsSource (ecaf195e)
+- surface external-close deferral in run output (f311c359)
+
+### Changed
+
+- Consolidated agent documentation to reduce duplication. AGENTS.md is now the authoritative agent guide; CLAUDE.md and .claude/CLAUDE.md are lightweight entry points that reference it. No content lost; improved organization and maintainability. (#117)
+- Epic & sub-issue projection (#2)
+- Linker resolves issue refs with source visibility (branch, cache) and slug-aware branch matching to prevent cross-change resolution. (#96)
+
+### Fixed
+
+- correct archived record, document import path, add guard test (correct-library-import-path) (000ece41)
+- record the task merge base, don't drop it (0251e239)
+- sync .claude SKILL.md with canonical (037202f5)
+- require a .beads/ database to auto-select the Beads provider (09f1d6e4)
+- require a project Beads database for auto-detection (#102) (0c9a635e)
+- restore AuditTasks to audit.go; fix parseLinksMD 3-return-value call (4c4dd691)
+- audit command syntax error, branch matching, archived immutability (5330792a)
+- make links.md append-only, never rewritten (575f7dfe)
+- build errors in traceability.go and make loadRefs/TasksComplete public (5a134148)
+- remove merge conflict markers from changes_test.go (8ad300dc)
+- only reverse a close specsync made itself (c5969271)
+- two defects found reviewing the preceding three commits (c9e92751)
+- remove relate case from main.go (belongs to work-graph change) (d07979d0)
+- require a .beads/ database to auto-select the Beads provider (e5a0c9ca)
+- repair CI workflow YAML indentation bug (f267b725)
+
+<!-- 16 internal commit(s) omitted (chore/docs/ci/...) -->
+
 ## [0.9.1] - 2026-07-27
 
 ### Added
