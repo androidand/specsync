@@ -46,7 +46,7 @@ func runChangelog(args []string) {
 		fail(err)
 	}
 	if *resolveRefs {
-		provider := makeProvider(*repo, false, *providerName)
+		provider := makeProvider(*repo, false, *providerName, "")
 		if err := specsync.ResolveLiveRefs(ctx, &in, provider); err != nil {
 			fail(fmt.Errorf("resolve-refs: %w", err))
 		}

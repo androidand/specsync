@@ -88,5 +88,13 @@
     "icon": "state",
     "title": "Agent skill diagnostics",
     "body": "<code>specsync doctor</code> detects and diagnoses AI agent skill installations (Claude Code, OpenCode, Copilot, etc.), analyzes token usage, and recommends optimizations."
+  },
+  {
+    "group": "collaborate",
+    "icon": "flow",
+    "title": "Any MCP-connected tracker",
+    "body": "<code>-provider mcp</code> projects changes through any external MCP server instead of <code>gh</code> — Linear, Jira, GitHub, or in-house. Speaks the current MCP spec with automatic fallback to legacy handshake-based servers.",
+    "status": "soon",
+    "issue": 4
   }
 ]

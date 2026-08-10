@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -192,7 +193,8 @@ func runSync(args []string) {
 	change := fs.String("change", "", "sync only this change (default: all changes)")
 	repo := fs.String("repo", "", "target repo as owner/name (default: auto-detect from git remote)")
 	var providerNames stringSlice
-	fs.Var(&providerNames, "provider", "work provider: github, beads (repeatable; auto-detect when absent)")
+	fs.Var(&providerNames, "provider", "work provider: github, beads, mcp (repeatable; auto-detect when absent)")
+	mcpConfig := fs.String("mcp-config", ".specsync-mcp.json", "path to the MCP provider's config (used only with -provider mcp)")
 	dryRun := fs.Bool("dry-run", false, "print the provider commands and rendered body without executing")
 	reconcile := fs.Bool("reconcile", true, "merge external task state back into tasks.md before pushing")
 	closeCompleted := fs.Bool("close-completed", false, "close the tracker item once every task in a change is checked")
@@ -234,7 +236,7 @@ func runSync(args []string) {
 	var providers []specsync.WorkProvider
 	if len(providerNames) == 0 {
 		provider, providerReason := detectProvider("", repoRoot)
-		prov := makeProvider(*repo, *dryRun, provider)
+		prov := makeProvider(*repo, *dryRun, provider, *mcpConfig)
 		providers = []specsync.WorkProvider{prov}
 		if *dryRun {
 			fmt.Printf("DRY RUN — no %s calls are made\n", provider)
@@ -252,7 +254,7 @@ func runSync(args []string) {
 		}
 	} else {
 		for _, pn := range providerNames {
-			prov := makeProvider(*repo, *dryRun, pn)
+			prov := makeProvider(*repo, *dryRun, pn, *mcpConfig)
 			providers = append(providers, prov)
 		}
 		if *dryRun {
@@ -262,6 +264,11 @@ func runSync(args []string) {
 				printTarget(providers[0], *repo)
 			}
 			fmt.Println()
+		}
+	}
+	for _, prov := range providers {
+		if c, ok := prov.(io.Closer); ok {
+			defer c.Close()
 		}
 	}
 
@@ -417,7 +424,7 @@ func runPull(args []string) {
 
 	res, err := specsync.Pull(context.Background(), specsync.PullOptions{
 		OpenSpecDir: abs,
-		Provider:    makeProvider(*repo, false, "github"),
+		Provider:    makeProvider(*repo, false, "github", ""),
 		IssueID:     *issue,
 		Slug:        *change,
 		DryRun:      *dryRun,
@@ -516,7 +523,7 @@ func runPullWithWorktree(issue, change, repo string, dryRun bool, project specsy
 
 	res, err := specsync.Pull(ctx, specsync.PullOptions{
 		OpenSpecDir: abs,
-		Provider:    makeProvider(repo, false, "github"),
+		Provider:    makeProvider(repo, false, "github", ""),
 		IssueID:     issue,
 		Slug:        change,
 		DryRun:      dryRun,
@@ -685,7 +692,7 @@ func runLink(args []string) {
 
 	// Real run: sync each spec with the provider matching its repo.
 	for _, p := range result.Pairs {
-		provider := makeProvider(p.Repo, false, "github")
+		provider := makeProvider(p.Repo, false, "github", "")
 		_, err := specsync.Sync(context.Background(), specsync.Options{
 			OpenSpecDir: abs,
 			Provider:    provider,
@@ -710,7 +717,7 @@ func runLink(args []string) {
 			}
 		}
 
-		provider := makeProvider(lr.Repo, false, "github")
+		provider := makeProvider(lr.Repo, false, "github", "")
 		// Fetch the issue to get existing title, body, and labels.
 		reader, ok := provider.(specsync.IssueReader)
 		if !ok {
@@ -791,14 +798,24 @@ func buildSyncLinker(repo string, providers []specsync.WorkProvider) specsync.Li
 // makeProvider builds the selected work provider, substituting a dry-runner that
 // prints commands instead of executing them when dryRun is set. github
 // (default) targets repo (auto-detect when empty); beads drives the local `bd`
-// graph and ignores repo.
-func makeProvider(repo string, dryRun bool, provider string) specsync.WorkProvider {
+// graph and ignores repo; mcp delegates to an external MCP server configured
+// via mcpConfigPath (only consulted when provider is "mcp").
+func makeProvider(repo string, dryRun bool, provider string, mcpConfigPath string) specsync.WorkProvider {
 	switch provider {
 	case "beads":
 		if dryRun {
 			return specsync.NewBeadsProviderFunc(beadsDryRunner)
 		}
 		return specsync.NewBeadsProvider()
+	case "mcp":
+		cfg, err := specsync.LoadMCPConfig(mcpConfigPath)
+		if err != nil {
+			fail(fmt.Errorf("-provider mcp: %w", err))
+		}
+		if dryRun {
+			return specsync.NewMCPProviderDryRun(cfg)
+		}
+		return specsync.NewMCPProvider(cfg)
 	case "", "github":
 		if dryRun {
 			return specsync.NewGitHubProviderFuncWithRepo(repo, dryRunner)
@@ -808,7 +825,7 @@ func makeProvider(repo string, dryRun bool, provider string) specsync.WorkProvid
 		}
 		return specsync.NewGitHubProvider()
 	default:
-		fail(fmt.Errorf("unknown provider %q: use github or beads", provider))
+		fail(fmt.Errorf("unknown provider %q: use github, beads, or mcp", provider))
 		return nil // unreachable: fail exits
 	}
 }

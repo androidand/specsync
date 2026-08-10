@@ -199,9 +199,12 @@ func (p *GitHubProvider) Push(ctx context.Context, item WorkItem, existing *Ref)
 	}
 	body := p.renderBody(item)
 
-	// Defend against duplicates: if we have no cached ref, look one up by marker.
+	// Defend against duplicates: if we have no cached ref, look one up by
+	// marker, retrying briefly in case a very-recently-created issue (by
+	// another cache-less run, e.g. a prior CI run for the same push burst)
+	// hasn't reached GitHub's search index yet.
 	if existing == nil {
-		found, err := p.Find(ctx, item.Slug)
+		found, err := findWithRetry(ctx, func(ctx context.Context) (*Ref, error) { return p.Find(ctx, item.Slug) })
 		if err != nil {
 			return Ref{}, err
 		}
@@ -557,18 +560,18 @@ func (p *GitHubProvider) ReadDependencies(ctx context.Context, ref Ref) ([]Depen
 					BlockedBy struct {
 						Edges []struct {
 							Node struct {
-								ID        string `json:"id"`
+								ID         string `json:"id"`
 								DatabaseID int    `json:"databaseId"`
-								URL       string `json:"url"`
+								URL        string `json:"url"`
 							} `json:"node"`
 						} `json:"edges"`
 					} `json:"blockedBy"`
 					Blocking struct {
 						Edges []struct {
 							Node struct {
-								ID        string `json:"id"`
+								ID         string `json:"id"`
 								DatabaseID int    `json:"databaseId"`
-								URL       string `json:"url"`
+								URL        string `json:"url"`
 							} `json:"node"`
 						} `json:"edges"`
 					} `json:"blocking"`

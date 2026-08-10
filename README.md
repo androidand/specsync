@@ -206,28 +206,169 @@ need not implement everything:
 
 | Interface | Purpose | Used by |
 |-----------|---------|---------|
-| `IssueReader` | Read an existing item by ID | `pull`, reconcile |
-| `IssueMarkerWriter` | Persist identity marker into item body | `pull` (rediscoverability) |
+| `IssueReader` | Read an existing item by ID | `pull`, reconcile, `mcp` |
+| `IssueMarkerWriter` | Persist identity marker into item body | `pull` (rediscoverability), `mcp` |
 | `TaskStateReader` | Report external task done-state | reconcile |
 | `BoardProjector` | Project onto a GitHub Projects board | `pull` |
 | `IssueSearcher` | Find open issues by free-text query | `scan` |
-| `CommentCapable` | Post comments on items | future |
-| `SubItemCapable` | Create sub-items under a parent | future |
-| `CustomFieldCapable` | Read/write custom fields on items | future |
+| `CommentCapable` | Post comments on items | `mcp` |
+| `SubItemCapable` | Create sub-items under a parent | `mcp` |
+| `CustomFieldCapable` | Read/write custom fields on items | `mcp` |
 | `OpenSpecSource` | Read OpenSpec change metadata/deltas | `release-plan` |
 
 **Available providers** (selectable via `-provider`):
 
 - `github` — default, shells out to `gh` CLI (human-facing issues)
 - `beads` — local agent graph via `bd` CLI (agent-facing)
-
-An `MCPProvider` (stdio and HTTP transports) also exists in the Go package for
-delegating issue operations to an external MCP server, but it isn't yet wired
-to a `-provider` value or CLI flags for its endpoint config — construct it
-directly (`specsync.NewMCPProvider`) if you need it today.
+- `mcp` — delegates to an external MCP server (see below)
 
 To add a new provider, implement `WorkProvider` and register it in `makeProvider`
 in `cmd/specsync/main.go`.
+
+### The `mcp` provider
+
+`-provider mcp` projects changes through an external
+[MCP](https://modelcontextprotocol.io) server instead of `gh` — a Linear, Jira,
+GitHub, or in-house work-management server, whatever your project already
+talks to. It speaks the current protocol
+([2026-07-28](https://modelcontextprotocol.io/specification/2026-07-28),
+stateless, per-request `_meta`) and falls back automatically to a legacy
+(pre-2026-07-28, `initialize`-handshake) server when the modern probe fails,
+per the spec's own backward-compatibility algorithm — you don't have to know
+which era a given server speaks.
+
+```bash
+specsync -dry-run -provider mcp -change my-feature
+specsync -provider mcp -change my-feature
+specsync -provider mcp -mcp-config custom-path.json -change my-feature
+```
+
+Configure it via a committed `.specsync-mcp.json` at the repo root (default
+path; override with `-mcp-config`). It is deliberately **not** under
+`.specsync/`, which is entirely gitignored — this file has no secrets in it
+and is meant to be shared:
+
+```json
+{
+  "server": "linear",
+  "tools": {
+    "createIssue": "create_issue",
+    "updateIssue": "update_issue",
+    "find": "search_issues",
+    "comment": "add_comment",
+    "addSubItem": "add_sub_issue",
+    "removeSubItem": "remove_sub_issue",
+    "setCustomField": "set_field"
+  }
+}
+```
+
+- **`server`** (optional) names an entry in the project's own `.mcp.json` — the
+  file Claude Code and other agent harnesses already use to declare MCP
+  servers — and reuses its `command`/`args`/`env` (stdio) or `url`/`headers`
+  (HTTP) instead of duplicating them. If the project already has a
+  work-tracker MCP server configured for agent use, specsync piggybacks on it.
+  Without `server`, set `transport` (`"stdio"` or `"http"`) plus
+  `command`/`args` or `url` directly. `tokenEnv` names an environment variable
+  holding a bearer token (never a literal secret in the committed file); any
+  string field pulled from a `.mcp.json` entry also honors `${VAR}`
+  expansion, matching that format's own convention.
+- **`tools`** maps specsync's operations to the server's actual tool names.
+  specsync discovers the server's tools (`tools/list`) and, for any operation
+  without an explicit mapping, tries a conservative set of common naming
+  variants (`create_issue`, `new_issue`, ...); if nothing matches confidently
+  it fails loudly and lists every tool the server actually advertises —
+  it never guesses silently.
+
+**How specsync picks GitHub-via-`gh` vs. GitHub-via-MCP vs. GitLab-via-MCP vs.
+anything else**: it doesn't — you do, entirely through config. `-provider
+github` vs. `-provider mcp` is your choice of transport (the `gh` CLI vs. a
+generic MCP client). *Within* `-provider mcp`, which actual tracker you're
+talking to is 100% determined by what `.specsync-mcp.json`'s `command`/`args`
+(stdio) or `url` (HTTP) point at — specsync has no built-in notion of "this is
+GitHub" or "this is GitLab." Every server names its tools, arguments, and
+result shapes differently, which is why the rest of this config exists:
+
+- **`context`** — static arguments merged into every call. MCP is stateless
+  (no "current repo" implied by the connection), so any repo/project-scoping
+  the server's tools require has to come from here, e.g. `{"owner":"...",
+  "repo":"..."}` for GitHub's tools.
+- **`toolArgs`** — static, per-operation arguments merged in last (highest
+  precedence). For servers that fold several specsync operations into one
+  tool selected by a fixed parameter, e.g. GitHub's `issue_write` handles both
+  create and update via `{"method":"create"}` / `{"method":"update"}`.
+- **`findQuery`** — templates the query text sent to the `find` tool
+  (`{marker}` = the literal identity comment, `{slug}` = the bare change
+  slug). Defaults to the literal marker text; some search tools need the
+  tracker's own query syntax instead (GitHub's wants
+  `"specsync:change={slug} in:body"`, not a literal string match).
+- **`idField`** / **`idFieldNumeric`** — the argument key (and, if needed,
+  JSON-number typing) an existing item's identifier is sent under for
+  updates/comments/etc. Defaults to a plain string `"id"`; GitHub wants a
+  numeric `"issue_number"`.
+- **`findIdField`** — the field read *from* a found item as its identifier,
+  tried before the "id"/"number" default. Needed when a server's result
+  shape carries more than one id-shaped field and the generic default picks
+  the wrong one — GitHub's search results carry both an internal database
+  `id` and the repo-scoped `number` actually used elsewhere; `id` is wrong.
+
+**Tool contract.** Beyond the above, specsync can't infer argument/result
+shapes from an arbitrary server's schema, so the mapped tools must follow
+this convention: `createIssue`/`updateIssue` take `{title, body, stage,
+priority?, labels?, closed?}` plus your `context`/`toolArgs`/`idField`
+additions, and return `structuredContent` (or JSON in the first text content
+block, or an object wrapping the item under a common key like `items`) with
+at least an id and a url; `find` takes `{query}` and returns a list in the
+same tolerant shapes, first match whose body (when returned) contains the
+identity marker wins; `comment`/`setCustomField`/`addSubItem`/`removeSubItem`
+take the obvious `{id, body}` / `{id, field, value}` / `{parentId, childId}`
+shapes.
+
+**Verified against a real server.** `-provider mcp` has been validated
+end-to-end against the official [`github-mcp-server`](https://github.com/github/github-mcp-server)
+(PAT auth, no OAuth needed for local/stdio use) — create, rediscover via
+search, and update, compared directly against `-provider github` on the same
+repo. Here's the config that worked:
+
+```json
+{
+  "transport": "stdio",
+  "command": "github-mcp-server",
+  "args": ["stdio", "--toolsets", "issues"],
+  "env": {"GITHUB_PERSONAL_ACCESS_TOKEN": "${GH_TOKEN}"},
+  "context": {"owner": "your-org", "repo": "your-repo"},
+  "findQuery": "specsync:change={slug} in:body",
+  "findIdField": "number",
+  "idField": "issue_number",
+  "idFieldNumeric": true,
+  "tools": {
+    "createIssue": "issue_write",
+    "updateIssue": "issue_write",
+    "find": "search_issues"
+  },
+  "toolArgs": {
+    "createIssue": {"method": "create"},
+    "updateIssue": {"method": "update"}
+  }
+}
+```
+
+That validation pass also found a real, shared bug: `Find`-based duplicate
+defense (both this provider and `GitHubProvider` look up an existing item by
+marker before creating, since the local ref cache is deliberately never
+committed — see [Lifecycle discipline](#lifecycle-discipline)) can race a
+tracker's search-index propagation lag moments after a different,
+cache-less run (e.g. a prior CI run) just created the same item. A short
+bounded retry (~1.2s worst case, nothing on a cache hit or a genuine find)
+now backs off before concluding "doesn't exist yet."
+
+**Scope cuts** (revisit if they bite you): no renegotiation against a modern
+server that rejects protocol version 2026-07-28 — it errors out naming what
+the server supports instead. No support for Multi Round-Trip Requests /
+elicitation (`resultType: "input_required"` surfaces as a clear error) — a
+non-interactive CLI has no human to elicit input from. No legacy HTTP+SSE
+transport (deprecated upstream); legacy fallback covers stdio's `initialize`
+handshake and legacy-era plain-JSON-RPC-over-POST HTTP servers.
 
 ### Issue-first: pull an issue into a change
 

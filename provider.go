@@ -1,6 +1,39 @@
 package specsync
 
-import "context"
+import (
+	"context"
+	"time"
+)
+
+// findRetryDelays bounds the total added latency of findWithRetry: two
+// short retries, ~1.2s worst case. It only costs anything when Find
+// genuinely returns "not found" — a cache hit skips Find entirely, and a
+// real hit returns on the first attempt.
+var findRetryDelays = []time.Duration{400 * time.Millisecond, 800 * time.Millisecond}
+
+// findWithRetry calls find, retrying after each delay in findRetryDelays
+// when it reports "not found" (nil, nil) — a short backoff against tracker
+// search-index propagation lag right after a different process (or a
+// different CI run, since the local ref cache is never committed) just
+// created the same item moments ago. Returns immediately on a real hit or a
+// real error; only a genuine "not found" pays the retry cost, and even then
+// only up to the bound above.
+func findWithRetry(ctx context.Context, find func(ctx context.Context) (*Ref, error)) (*Ref, error) {
+	for i := 0; ; i++ {
+		ref, err := find(ctx)
+		if err != nil || ref != nil {
+			return ref, err
+		}
+		if i >= len(findRetryDelays) {
+			return nil, nil
+		}
+		select {
+		case <-time.After(findRetryDelays[i]):
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+}
 
 // WorkItem is the provider-agnostic projection of a Change. Providers render it
 // into their own issue/card shape.
