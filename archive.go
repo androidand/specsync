@@ -112,7 +112,7 @@ func Archive(ctx context.Context, opts ArchiveOptions) (*ArchiveResult, error) {
 		if opts.DryRun {
 			plan = append(plan, "  (dry-run: no file changes)")
 		} else {
-			if err := confirmClosedAndPrune(ctx, opts.Provider, c.Slug, ref); err != nil {
+			if err := confirmClosedAndPrune(ctx, opts.Provider, ref); err != nil {
 				return nil, fmt.Errorf("prune: %w", err)
 			}
 			if err := os.RemoveAll(c.Dir); err != nil {
@@ -175,16 +175,22 @@ func readConfigRetain(changeDir string) RetentionPolicy {
 	return ""
 }
 
-// closeAndLabel closes the issue for the change and ensures the spec:archived
-// label exists. It pushes a WorkItem with Closed=true and ManageClosed=true
-// which triggers the close path in the provider; it also ensures the label
-// is created idempotently.
+// closeAndLabel ensures the spec:archived label exists, attaches it to the
+// change's issue, and resolves the ref. The close itself already happened
+// via the "final push" step in Archive (Sync with CloseCompleted: true,
+// which renders a real WorkItem via WorkItemFor) — a second push here must
+// not reconstruct one from scratch: a bare WorkItem{Slug, Closed,
+// ManageClosed} has no Title, and GitHubProvider.Push has no "partial
+// update" mode — it always edits the full issue, so an empty title is
+// rejected by the tracker outright. EnsureLabels only makes the label
+// *definition* exist in the repo (`gh label create`); actually attaching it
+// to the issue needs the separate LabelApplier capability.
 func closeAndLabel(ctx context.Context, provider WorkProvider, slug string, dryRun bool) (Ref, error) {
 	if dryRun {
 		return Ref{}, nil
 	}
 
-	// Ensure spec:archived label exists (idempotent).
+	// Ensure spec:archived exists as a usable label in the repo (idempotent).
 	if la, ok := provider.(interface {
 		EnsureLabels(context.Context, []string) error
 	}); ok {
@@ -193,48 +199,27 @@ func closeAndLabel(ctx context.Context, provider WorkProvider, slug string, dryR
 		}
 	}
 
-	// Push a close request. We need the existing ref to know which issue to close.
-	// Find the existing ref first.
-	var ref Ref
-	if finder, ok := provider.(interface {
+	finder, ok := provider.(interface {
 		Find(context.Context, string) (*Ref, error)
-	}); ok {
-		r, err := finder.Find(ctx, slug)
-		if err != nil {
-			return Ref{}, fmt.Errorf("find existing ref: %w", err)
-		}
-		if r != nil {
-			ref = *r
-		}
+	})
+	if !ok {
+		return Ref{}, fmt.Errorf("provider does not support Find")
+	}
+	ref, err := finder.Find(ctx, slug)
+	if err != nil {
+		return Ref{}, fmt.Errorf("find existing ref: %w", err)
+	}
+	if ref == nil {
+		return Ref{}, fmt.Errorf("no existing issue found for %s — the final push should have created one", slug)
 	}
 
-	// Push with Closed=true to trigger the close path.
-	// We use a minimal WorkItem: the slug is empty (no sync needed),
-	// but we set ManageClosed=true so the provider enforces the close.
-	item := WorkItem{
-		Slug:         slug,
-		ManageClosed: true,
-		Closed:       true,
-	}
-
-	// If we have an existing ref, push through it so the provider's
-	// close logic runs correctly.
-	if ref.URL != "" {
-		if pusher, ok := provider.(interface {
-			Push(context.Context, WorkItem, *Ref) (Ref, error)
-		}); ok {
-			return pusher.Push(ctx, item, &ref)
+	if la, ok := provider.(LabelApplier); ok {
+		if err := la.ApplyLabelDelta(ctx, ref.ID, []string{"spec:archived"}, nil); err != nil {
+			return Ref{}, fmt.Errorf("apply spec:archived label: %w", err)
 		}
 	}
 
-	// Fallback: if we can't find the ref, try pushing without one.
-	if pusher, ok := provider.(interface {
-		Push(context.Context, WorkItem, *Ref) (Ref, error)
-	}); ok {
-		return pusher.Push(ctx, item, nil)
-	}
-
-	return ref, fmt.Errorf("provider does not support Push")
+	return *ref, nil
 }
 
 // moveChange relocates a change folder to archiveDir, preserving .specsync/refs.json
@@ -287,32 +272,23 @@ func copyDir(src, dst string) error {
 	return nil
 }
 
-// confirmClosedAndPrune verifies the issue is closed and current before pruning.
-func confirmClosedAndPrune(ctx context.Context, provider WorkProvider, slug string, ref Ref) error {
-	// Verify the issue is closed by reading it back.
-	if reader, ok := provider.(interface {
+// confirmClosedAndPrune verifies the issue is closed before pruning. The
+// issue body/title were already made current by the "final push" step in
+// Archive (a real Sync, before this ever runs); there is nothing to verify
+// beyond closed state, and no reason to push again (see closeAndLabel).
+func confirmClosedAndPrune(ctx context.Context, provider WorkProvider, ref Ref) error {
+	reader, ok := provider.(interface {
 		Get(context.Context, string) (FetchedItem, error)
-	}); ok {
-		item, err := reader.Get(ctx, ref.ID)
-		if err != nil {
-			return fmt.Errorf("verify issue state: %w", err)
-		}
-		if !item.Closed {
-			return fmt.Errorf("issue #%s is not closed; cannot prune", ref.ID)
-		}
+	})
+	if !ok {
+		return nil
 	}
-
-	// Also verify the issue body is current by pushing a no-op.
-	if pusher, ok := provider.(interface {
-		Push(context.Context, WorkItem, *Ref) (Ref, error)
-	}); ok {
-		_, err := pusher.Push(ctx, WorkItem{
-			Slug: slug, Body: "spec:archived",
-		}, &ref)
-		if err != nil {
-			return fmt.Errorf("verify issue is current: %w", err)
-		}
+	item, err := reader.Get(ctx, ref.ID)
+	if err != nil {
+		return fmt.Errorf("verify issue state: %w", err)
 	}
-
+	if !item.Closed {
+		return fmt.Errorf("issue #%s is not closed; cannot prune", ref.ID)
+	}
 	return nil
 }

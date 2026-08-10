@@ -2,6 +2,7 @@ package specsync
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -80,7 +81,7 @@ func TestArchiveRetentionMove(t *testing.T) {
 	mustWrite(t, filepath.Join(cdir, "tasks.md"), "- [x] done\n")
 	mustWrite(t, filepath.Join(cdir, ".specsync", "refs.json"), `{"github":{"provider":"github","id":"42","url":"https://github.com/o/r/issues/42"}}`)
 
-	prov := stubProvider{ref: Ref{Provider: "github", ID: "42"}}
+	prov := &pruneStubProvider{ref: Ref{Provider: "github", ID: "42", URL: "https://github.com/o/r/issues/42"}, closed: true}
 	_, err := Archive(context.Background(), ArchiveOptions{
 		OpenSpecDir: openspecDir,
 		Slug:        "move-test",
@@ -157,7 +158,14 @@ type pruneStubProvider struct {
 }
 
 func (p *pruneStubProvider) Name() string { return "github" }
-func (p *pruneStubProvider) Push(_ context.Context, _ WorkItem, existing *Ref) (Ref, error) {
+func (p *pruneStubProvider) Push(_ context.Context, item WorkItem, existing *Ref) (Ref, error) {
+	// Mirror the real GitHub API constraint that caught the closeAndLabel /
+	// confirmClosedAndPrune bug: an edit with a blank title is rejected.
+	// Guards against those two functions ever again reconstructing a
+	// WorkItem from scratch instead of relying on the final push's real one.
+	if item.Title == "" {
+		return Ref{}, fmt.Errorf("stub: title can't be blank (item: %+v)", item)
+	}
 	if existing != nil {
 		return *existing, nil
 	}
