@@ -11,16 +11,17 @@ When `specsync` is upgraded (via npm or any package manager), installed skill fi
 
 ## What
 
-On first run after upgrade, detect if installed skill versions are stale and refresh them:
+Auto-update skills during explicit maintenance operations:
 
-1. Compare installed skill timestamps/versions against specsync binary version
-2. If mismatch detected, offer to auto-update (or run silently in CI/automation)
-3. Store metadata so each subsequent run knows it's up-to-date
-4. Log a one-time notice that skills were refreshed
+1. **`specsync install-skill`** — installing/upgrading skills automatically uses the new binary version
+2. **`specsync doctor`** — diagnoses skill health and auto-fixes stale versions (pass `--skip-skill-update` to skip)
+3. **Version detection** — embed semantic version in SKILL.md marker (`<!-- specsync-skill-version: X.Y.Z -->`)
+4. **Comparison** — compare installed versions against binary version and update if stale
 
 ## Scope
 
 - Detect stale skills in all 5 agent directories (.claude, .codex, .config/opencode, .copilot, .agents)
-- Refresh on first post-upgrade run
-- Make it silent or offer choice (TBD via implementation)
-- No breaking changes to manual `install-skill` command
+- Update only on explicit commands: `install-skill` and `doctor`
+- Clear messaging: show what was updated and to which version
+- No hidden mutations: work commands (sync, pull, scan) unchanged
+- Doctor includes `--skip-skill-update` flag for read-only diagnostics in CI

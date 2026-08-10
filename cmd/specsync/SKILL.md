@@ -145,9 +145,20 @@ Read-only follow-up report: shipped changes, gaps, advisory semver bump. `-apply
 specsync install-skill [--all] [--claude-code] [--codex] [--opencode] [--copilot]
 ```
 
-Writes this skill file into the known global agent dirs. `--all` covers every supported platform. Skips dirs that don't exist on the machine.
+Writes this skill file into the known global agent dirs. `--all` covers every supported platform. Skips dirs that don't exist on the machine. When you upgrade specsync via npm, the next `install-skill` run installs the updated skill version automatically.
 
-**Auto-update on upgrade.** When specsync is upgraded, installed skill files are automatically refreshed on the next run. This ensures your agents always have the latest skill documentation without manual intervention. Pass `--skip-skill-update` to disable auto-updates in CI/automation workflows. Use `specsync doctor install` to check installed versions and see if an update is needed.
+### Doctor
+
+```
+specsync doctor [claude|install|context|skill] [--skip-skill-update]
+```
+
+Diagnose and fix agent skill health. Auto-updates stale skill files to match the binary version (pass `--skip-skill-update` for read-only diagnostics). Subcommands:
+
+- `claude` (default) — Claude Code skill diagnostics
+- `install` — show all 5 installed skill locations and versions
+- `context` — token impact analysis by profile  
+- `skill` — detailed installed vs. binary version comparison
 
 ### Raw trace graph (debugging)
 
