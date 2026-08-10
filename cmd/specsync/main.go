@@ -31,7 +31,7 @@ var knownSubcommands = map[string]bool{
 	"changes": true, "set-stage": true, "set-priority": true, "note": true,
 	"sync": true, "audit": true, "audit-tasks": true, "validate": true,
 	"spinoff": true, "pr-body": true, "verify": true, "relate": true, "work-graph": true,
-	"agent-help": true, "doctor": true, "idea": true, "ideas": true,
+	"agent-help": true, "doctor": true, "idea": true, "ideas": true, "archive": true,
 }
 
 // knownConfusions maps a word someone might reach for by habit (e.g. git's
@@ -92,7 +92,7 @@ func deprecatedSlugFlag(args []string) error {
 func main() {
 	cmd, rest, err := resolveSubcommand(os.Args[1:])
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "specsync: %v\n\nRun with no subcommand (optionally with flags) to sync, or use one of: pull, link, scan, trace, release-plan, changelog, install-skill, changes, set-stage, set-priority, note, audit, audit-tasks, validate, spinoff, pr-body, verify, relate, work-graph, idea, ideas, pr-body, verify, relate, work-graph\n", err)
+		fmt.Fprintf(os.Stderr, "specsync: %v\n\nRun with no subcommand (optionally with flags) to sync, or use one of: pull, link, scan, trace, release-plan, changelog, install-skill, changes, set-stage, set-priority, note, audit, audit-tasks, validate, spinoff, pr-body, verify, relate, work-graph, idea, ideas, archive\n", err)
 		os.Exit(2)
 	}
 
@@ -143,6 +143,8 @@ func main() {
 		runIdea(rest)
 	case "ideas":
 		runIdeas(rest)
+	case "archive":
+		runArchive(rest)
 	default:
 		runSync(rest)
 	}
@@ -797,7 +799,7 @@ func makeProvider(repo string, dryRun bool, provider string) specsync.WorkProvid
 			return specsync.NewBeadsProviderFunc(beadsDryRunner)
 		}
 		return specsync.NewBeadsProvider()
-	default: // github
+	case "", "github":
 		if dryRun {
 			return specsync.NewGitHubProviderFuncWithRepo(repo, dryRunner)
 		}
@@ -805,6 +807,9 @@ func makeProvider(repo string, dryRun bool, provider string) specsync.WorkProvid
 			return specsync.NewGitHubProviderWithRepo(repo)
 		}
 		return specsync.NewGitHubProvider()
+	default:
+		fail(fmt.Errorf("unknown provider %q: use github or beads", provider))
+		return nil // unreachable: fail exits
 	}
 }
 
@@ -886,6 +891,12 @@ func printBoardPlan(plan specsync.BoardPlan, dryRun bool) {
 		fmt.Printf("               • assigned → %s\n", plan.AssigneeLogin)
 	} else if plan.AssignSkipped != "" {
 		fmt.Printf("               • assignee left unchanged (%s)\n", plan.AssignSkipped)
+	}
+	if plan.HumanMovedToDone != "" {
+		fmt.Printf("               • ⚠ %s — specsync won't drag it back\n", plan.HumanMovedToDone)
+	}
+	if plan.HumanMovedToActive != "" {
+		fmt.Printf("               • ⚠ %s\n", plan.HumanMovedToActive)
 	}
 }
 
@@ -1864,6 +1875,70 @@ func runIdeas(args []string) {
 			title = title[:37] + "..."
 		}
 		fmt.Printf("%-6d %-40s %s\n", issue.Number, title, issue.CreatedAt.Format("2006-01-02"))
+	}
+}
+
+// runArchive archives a completed change: final push, close + spec:archived
+// label, then retention (move or prune). Refuses without -force when tasks
+// are unchecked.
+func runArchive(args []string) {
+	fs := flag.NewFlagSet("archive", flag.ExitOnError)
+	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	change := fs.String("change", "", "change to archive (required)")
+	repo := fs.String("repo", "", "target repo as owner/name (default: auto-detect)")
+	retain := fs.String("retain", "", "retention policy: move (keep) or prune (delete)")
+	force := fs.Bool("force", false, "archive even when tasks are unchecked")
+	dryRun := fs.Bool("dry-run", false, "print the plan without making changes")
+	if err := fs.Parse(args); err != nil {
+		fail(err)
+	}
+
+	if *change == "" {
+		fail(fmt.Errorf("archive: -change <slug> is required"))
+	}
+
+	abs, err := filepath.Abs(*openspec)
+	if err != nil {
+		fail(err)
+	}
+
+	// Build provider.
+	var provider specsync.WorkProvider
+	if *dryRun {
+		provider = specsync.NewGitHubProviderFunc(dryRunner)
+	} else {
+		p := specsync.NewGitHubProvider()
+		if *repo != "" {
+			p = specsync.NewGitHubProviderWithRepo(*repo)
+		}
+		provider = p
+	}
+
+	retainPolicy := specsync.RetentionPolicy(*retain)
+
+	result, err := specsync.Archive(context.Background(), specsync.ArchiveOptions{
+		OpenSpecDir: abs,
+		Slug:        *change,
+		Provider:    provider,
+		Retain:      retainPolicy,
+		Force:       *force,
+		DryRun:      *dryRun,
+	})
+	if err != nil {
+		fail(err)
+	}
+
+	for _, line := range result.Plan {
+		fmt.Println(line)
+	}
+
+	if result.UncheckedTasks > 0 && !*force {
+		fmt.Fprintln(os.Stderr, "specsync: archive refused — use -force to override")
+		os.Exit(1)
+	}
+
+	if *dryRun {
+		fmt.Println("\nDRY RUN — no files or GitHub calls were modified")
 	}
 }
 

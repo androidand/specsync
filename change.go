@@ -151,6 +151,7 @@ type Change struct {
 	OriginalAsk   string // original-ask.md contents, may be ""
 	Discoveries   string // discoveries.md contents, may be ""
 	Archived      bool
+	Significant   bool         // true when the change has a significant marker, design.md, or >5 tasks
 	Progress      TaskProgress // what the task checklist says
 	Stage         Stage        // current workflow placement
 	StageSource   StageSource  // how we arrived at Stage (default/tasks/metadata/legacy-status/folder)
@@ -211,13 +212,17 @@ func LoadChange(dir string, archived bool, openspecDir string) (*Change, error) 
 	}
 
 	slug := filepath.Base(dir)
+	// Detect significance: marker file, design.md, or task count > 5.
+	significant := IsSignificant(dir)
+
 	c := &Change{
-		Dir:      dir,
-		Slug:     slug,
-		Title:    firstHeading(string(body), slug),
-		Body:     string(body),
-		Archived: archived,
-		Stage:    StageActive,
+		Dir:         dir,
+		Slug:        slug,
+		Title:       firstHeading(string(body), slug),
+		Body:        string(body),
+		Archived:    archived,
+		Significant: significant,
+		Stage:       StageActive,
 	}
 	if archived {
 		c.Stage = StageArchived
@@ -700,4 +705,24 @@ func atoiSafe(s string) int {
 		n = n*10 + int(r-'0')
 	}
 	return n
+}
+
+// IsSignificant reports whether a change folder is "significant" (worth a
+// full kept archive). A change is significant if it has a significant marker
+// file, a design.md, or more than 5 live tasks.
+func IsSignificant(dir string) bool {
+	if _, err := os.Stat(filepath.Join(dir, "significant")); err == nil {
+		return true
+	}
+	if _, err := os.Stat(filepath.Join(dir, "design.md")); err == nil {
+		return true
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "tasks.md"))
+	if err == nil {
+		total, _ := CountCheckboxes(string(data))
+		if total > 5 {
+			return true
+		}
+	}
+	return false
 }

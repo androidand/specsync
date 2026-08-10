@@ -15,12 +15,13 @@ import (
 // Used for three-way merge: local stage, remote status, and last-synced base
 // detect what changed since last sync.
 type BoardBinding struct {
-	Provider           string    `json:"provider"` // "github-projects", etc.
-	ProjectID          string    `json:"project_id"`
-	ItemID             string    `json:"item_id"`
-	LocalStageBase     Stage     `json:"local_stage_base"`      // what local stage was last time
-	RemoteOptionIDBase string    `json:"remote_option_id_base"` // what remote option was last time
-	SyncedAt           time.Time `json:"synced_at"`
+	Provider            string    `json:"provider"` // "github-projects", etc.
+	ProjectID           string    `json:"project_id"`
+	ItemID              string    `json:"item_id"`
+	LocalStageBase      Stage     `json:"local_stage_base"`       // what local stage was last time
+	RemoteOptionIDBase  string    `json:"remote_option_id_base"`  // what remote option was last time
+	LastWrittenOptionID string    `json:"last_written_option_id"` // option ID specsync last wrote
+	SyncedAt            time.Time `json:"synced_at"`
 }
 
 // BoardState wraps all board bindings for a change. Enables multi-provider
@@ -81,10 +82,20 @@ func (f statusField) option(name string) (statusOption, bool) {
 	return statusOption{}, false
 }
 
+// isTerminalStatus reports whether the given status name matches the last
+// option in the field, which is treated as the terminal ("Done"-like) status.
+func isTerminalStatus(f statusField, name string) bool {
+	if len(f.options) == 0 {
+		return false
+	}
+	last := f.options[len(f.options)-1]
+	return strings.EqualFold(name, last.name)
+}
+
 // ProjectOntoBoard satisfies the BoardProjector capability. See the interface
 // doc: it ensures ref's issue is on target, maps item.Stage to the board Status,
 // and assigns it, idempotently and without clobbering human curation.
-func (p *GitHubProvider) ProjectOntoBoard(ctx context.Context, target BoardTarget, ref Ref, item WorkItem, dryRun bool) (BoardPlan, error) {
+func (p *GitHubProvider) ProjectOntoBoard(ctx context.Context, target BoardTarget, ref Ref, item WorkItem, dryRun bool, changeDir string) (BoardPlan, error) {
 	if !target.Configured() {
 		// Unconfigured target: no board calls at all (backward-compatible).
 		return BoardPlan{}, nil
@@ -128,6 +139,17 @@ func (p *GitHubProvider) ProjectOntoBoard(ctx context.Context, target BoardTarge
 	plan.AlreadyOnBoard = member.itemID != ""
 	plan.CurrentStatus = member.statusName
 
+	// Inbound board-status read: detect human moves before projecting.
+	if member.itemID != "" && member.statusName != "" {
+		terminal := isTerminalStatus(schema.statusField, member.statusName)
+		if terminal && !item.IsComplete() {
+			plan.HumanMovedToDone = fmt.Sprintf("Status %q is terminal but change has incomplete tasks", member.statusName)
+		}
+		if !terminal && item.IsComplete() && member.statusName != wantName {
+			plan.HumanMovedToActive = fmt.Sprintf("Status %q is active but change is complete — reopen signal", member.statusName)
+		}
+	}
+
 	itemID := member.itemID
 	if itemID == "" {
 		itemID, err = p.addToBoard(ctx, schema.projectID, member.contentID)
@@ -137,10 +159,19 @@ func (p *GitHubProvider) ProjectOntoBoard(ctx context.Context, target BoardTarge
 		plan.AddedToBoard = true
 	}
 
-	// Status: set only when unset or when the current value is one specsync
-	// manages; a human-moved card wins.
+	// Status: set only when the current value is what specsync last wrote;
+	// a human-moved card wins. Uses LastWrittenOptionID from the binding
+	// to determine specsync-managed status instead of managed names. Falls
+	// back to the managed-names check when there is no binding yet.
 	if wantName != "" {
-		if reason := statusClobberReason(member.statusName, target, schema.statusField); reason != "" {
+		binding := loadBoardBinding(changeDir, boardBindingKey(target, "github"))
+		var reason string
+		if binding.LastWrittenOptionID != "" {
+			reason = statusClobberReasonTwoWay(member.statusOptionID, binding.LastWrittenOptionID, member.statusName)
+		} else {
+			reason = statusClobberReason(member.statusName, target, schema.statusField)
+		}
+		if reason != "" {
 			plan.StatusSkipped = reason
 		} else if member.statusName != wantName {
 			if err := p.setStatus(ctx, schema.projectID, itemID, schema.statusField.id, wantOption); err != nil {
@@ -167,6 +198,12 @@ func (p *GitHubProvider) ProjectOntoBoard(ctx context.Context, target BoardTarge
 			return BoardPlan{}, err
 		}
 		plan.AssigneeLogin = login
+	}
+
+	if changeDir != "" {
+		if err := saveBoardBinding(changeDir, target, "github", item.Stage, plan); err != nil {
+			return BoardPlan{}, err
+		}
 	}
 
 	return plan, nil
@@ -247,6 +284,27 @@ func statusClobberReason(current string, target BoardTarget, f statusField) stri
 		return ""
 	}
 	return fmt.Sprintf("Status %q was set by a human", current)
+}
+
+// statusClobberReasonTwoWay determines whether specsync should overwrite the
+// current board status. If the current option ID matches what specsync last
+// wrote (LastWrittenOptionID), specsync owns the value and may overwrite. If
+// the current option ID differs, a human moved the card and specsync defers.
+// When no binding exists yet (first sync), specsync assumes ownership.
+func statusClobberReasonTwoWay(currentOptionID, lastWrittenOptionID, currentName string) string {
+	if currentOptionID == "" {
+		// No current status — specsync can set it.
+		return ""
+	}
+	if lastWrittenOptionID == "" {
+		// No prior binding — first sync; specsync claims ownership.
+		return ""
+	}
+	if currentOptionID == lastWrittenOptionID {
+		// Current status is what specsync last wrote — safe to overwrite.
+		return ""
+	}
+	return fmt.Sprintf("Status %q was set by a human", currentName)
 }
 
 func unknownStatusErr(name string, f statusField) error {
@@ -697,6 +755,16 @@ func LoadBoardState(changeDir string) (BoardState, error) {
 	return state, nil
 }
 
+// loadBoardBinding loads a single BoardBinding from the change's board state.
+// Returns an empty binding if the key doesn't exist.
+func loadBoardBinding(changeDir, key string) BoardBinding {
+	state, err := LoadBoardState(changeDir)
+	if err != nil {
+		return BoardBinding{}
+	}
+	return state.Bindings[key]
+}
+
 // SaveBoardState atomically writes .specsync/board.json (temp + rename pattern).
 func SaveBoardState(changeDir string, state BoardState) error {
 	data, err := json.MarshalIndent(state, "", "  ")
@@ -719,6 +787,13 @@ func SaveBoardState(changeDir string, state BoardState) error {
 	return os.Rename(tmpPath, path)
 }
 
+// boardBindingKey builds the key used to store and look up a BoardBinding for
+// one (target, provider) pair. Both the read side (ProjectOntoBoard) and the
+// write side (saveBoardBinding) must agree on this format.
+func boardBindingKey(target BoardTarget, provider string) string {
+	return fmt.Sprintf("%s:%d:%s", target.Owner, target.Number, provider)
+}
+
 // saveBoardBinding updates the board binding for a project after a successful projection.
 // Stores the resolved project ID and current option ID for future three-way merge.
 func saveBoardBinding(changeDir string, target BoardTarget, provider string, stage Stage, plan BoardPlan) error {
@@ -727,7 +802,7 @@ func saveBoardBinding(changeDir string, target BoardTarget, provider string, sta
 		return err
 	}
 
-	bindingKey := fmt.Sprintf("%s:%d:%s", target.Owner, target.Number, provider)
+	bindingKey := boardBindingKey(target, provider)
 	binding := state.Bindings[bindingKey]
 
 	// Update binding base state to current (for next three-way merge).
@@ -735,7 +810,8 @@ func saveBoardBinding(changeDir string, target BoardTarget, provider string, sta
 	binding.Provider = provider
 	binding.ProjectID = plan.ProjectID // GraphQL node ID of the project
 	binding.LocalStageBase = stage
-	binding.RemoteOptionIDBase = plan.StatusOptionID // What we just pushed to the board
+	binding.RemoteOptionIDBase = plan.StatusOptionID  // What we just pushed to the board
+	binding.LastWrittenOptionID = plan.StatusOptionID // specsync wrote this value
 	binding.SyncedAt = time.Now()
 
 	state.Bindings[bindingKey] = binding
@@ -790,8 +866,8 @@ func parseSpecSyncConfig(data []byte) SpecSyncConfig {
 type BoardRule int
 
 const (
-	BoardRuleFlag  BoardRule = iota // -project flag
-	BoardRuleConfig                 // openspec/specsync.yml
+	BoardRuleFlag   BoardRule = iota // -project flag
+	BoardRuleConfig                  // openspec/specsync.yml
 )
 
 func (r BoardRule) String() string {

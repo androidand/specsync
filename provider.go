@@ -10,9 +10,16 @@ type WorkItem struct {
 	Body         string // proposal plus rendered tasks; the provider prepends identity
 	Stage        Stage
 	Priority     int
-	Closed       bool // desired state when ManageClosed is true
-	ManageClosed bool // provider must enforce the desired open/closed state
+	Closed       bool     // desired state when ManageClosed is true
+	ManageClosed bool     // provider must enforce the desired open/closed state
 	Labels       []string // explicit labels (when non-nil, overrides Stage/Priority)
+}
+
+// IsComplete reports whether the work item is fully done: either archived
+// or every task checked. This is used to detect human moves to Done when
+// the change is not yet complete.
+func (w WorkItem) IsComplete() bool {
+	return w.Stage == StageArchived || w.Stage == StageComplete
 }
 
 // Ref is the disposable binding between a Change and its projection in one
@@ -181,6 +188,9 @@ type BoardPlan struct {
 	CurrentStatus  string // the board Status before specsync acted
 	StatusSkipped  string // reason the Status was left unchanged (human curation), if any
 
+	HumanMovedToDone   string // reason: human moved to Done with incomplete tasks (specsync won't drag back)
+	HumanMovedToActive string // reason: human moved to active on a complete change (reopen signal)
+
 	AssigneeLogin string // the login specsync assigned (or would assign); "" = none
 	AssignSkipped string // reason the assignee was left unchanged, if any
 }
@@ -200,8 +210,9 @@ type LabelApplier interface {
 type BoardProjector interface {
 	// ProjectOntoBoard reconciles ref's issue with target. When dryRun is set it
 	// performs only read queries and returns the plan it would apply, making no
-	// mutation. item.Stage drives the Status mapping.
-	ProjectOntoBoard(ctx context.Context, target BoardTarget, ref Ref, item WorkItem, dryRun bool) (BoardPlan, error)
+	// mutation. item.Stage drives the Status mapping. changeDir is the local
+	// change directory for board-state persistence (two-way merge).
+	ProjectOntoBoard(ctx context.Context, target BoardTarget, ref Ref, item WorkItem, dryRun bool, changeDir string) (BoardPlan, error)
 }
 
 // IssueSearcher is an optional, type-asserted provider capability: finding open

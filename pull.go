@@ -119,7 +119,8 @@ func Pull(ctx context.Context, opts PullOptions) (PullResult, error) {
 		if bp, ok := opts.Provider.(BoardProjector); ok {
 			pulledItem := WorkItem{Slug: slug, Title: item.Title, Stage: StageActive}
 			ref := Ref{Provider: opts.Provider.Name(), ID: item.ID, URL: item.URL}
-			plan, perr := bp.ProjectOntoBoard(ctx, opts.Project, ref, pulledItem, opts.DryRun)
+			changeDir := filepath.Join(opts.OpenSpecDir, "changes", slug)
+			plan, perr := bp.ProjectOntoBoard(ctx, opts.Project, ref, pulledItem, opts.DryRun, changeDir)
 			if perr != nil {
 				return PullResult{}, perr
 			}

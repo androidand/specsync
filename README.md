@@ -209,18 +209,22 @@ need not implement everything:
 | `IssueReader` | Read an existing item by ID | `pull`, reconcile |
 | `IssueMarkerWriter` | Persist identity marker into item body | `pull` (rediscoverability) |
 | `TaskStateReader` | Report external task done-state | reconcile |
-| `BoardProjector` | Project onto a GitHub Projects board | sync |
+| `BoardProjector` | Project onto a GitHub Projects board | `pull` |
 | `IssueSearcher` | Find open issues by free-text query | `scan` |
 | `CommentCapable` | Post comments on items | future |
 | `SubItemCapable` | Create sub-items under a parent | future |
 | `CustomFieldCapable` | Read/write custom fields on items | future |
 | `OpenSpecSource` | Read OpenSpec change metadata/deltas | `release-plan` |
 
-**Available providers**:
+**Available providers** (selectable via `-provider`):
 
 - `github` — default, shells out to `gh` CLI (human-facing issues)
 - `beads` — local agent graph via `bd` CLI (agent-facing)
-- `mcp` — Model Context Protocol server (stdio transport, delegates issue operations)
+
+An `MCPProvider` (stdio and HTTP transports) also exists in the Go package for
+delegating issue operations to an external MCP server, but it isn't yet wired
+to a `-provider` value or CLI flags for its endpoint config — construct it
+directly (`specsync.NewMCPProvider`) if you need it today.
 
 To add a new provider, implement `WorkProvider` and register it in `makeProvider`
 in `cmd/specsync/main.go`.
@@ -388,6 +392,32 @@ completed tasks are still unarchived in `openspec/changes/`.
 `release-plan` remains read-only by default. `-archive-completed` is the
 explicit mutation flag that moves shipped+complete changes into
 `openspec/changes/archive/`.
+
+### `archive` — close, label, and retire a completed change
+
+`specsync archive` runs the full close-out lifecycle for one change: final
+sync, close the issue, label it, then apply a retention policy to the local
+folder.
+
+```bash
+specsync archive -change my-feature                    # move or prune, per policy
+specsync archive -change my-feature -retain move        # force keep in git
+specsync archive -change my-feature -retain prune       # force delete the local folder
+specsync archive -change my-feature -force              # override unchecked-task refusal
+specsync archive -change my-feature -dry-run            # print the plan, mutate nothing
+```
+
+Steps: **(1)** final push so the issue reflects current scope and task state;
+**(2)** close the issue and add the `spec:archived` label; **(3)** apply
+retention to `openspec/changes/<slug>/` — `move` relocates it to
+`openspec/changes/archive/<slug>/` (kept in git), `prune` deletes it (the
+closed issue is the record).
+
+Retention policy resolves in order: `-retain` flag → `retain=` key in
+`.specsync/config` → a significance heuristic (a change with a `significant`
+marker file, a `design.md`, or more than 5 tasks defaults to `move`;
+otherwise `prune`). Archiving refuses when tasks are unchecked unless
+`-force` is passed.
 
 ### `changelog` — a changelog generated from your specs, not your commits
 

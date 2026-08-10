@@ -75,13 +75,23 @@ func (f *fakeBoard) schemaJSON() string {
 		f.statusFieldID, strings.Join(opts, ","))
 }
 
+func (f *fakeBoard) optionIDForName(name string) string {
+	for _, o := range f.options {
+		if strings.EqualFold(o.name, name) {
+			return o.id
+		}
+	}
+	return ""
+}
+
 func (f *fakeBoard) membershipJSON() string {
 	items := ""
 	if f.onBoardItemID != "" {
 		fieldVals := ""
 		if f.currentStatus != "" {
-			fieldVals = fmt.Sprintf(`{"__typename":"ProjectV2ItemFieldSingleSelectValue","name":%q,"field":{"id":%q}}`,
-				f.currentStatus, f.statusFieldID)
+			optID := f.optionIDForName(f.currentStatus)
+			fieldVals = fmt.Sprintf(`{"__typename":"ProjectV2ItemFieldSingleSelectValue","name":%q,"optionId":%q,"field":{"id":%q}}`,
+				f.currentStatus, optID, f.statusFieldID)
 		}
 		items = fmt.Sprintf(`{"id":%q,"project":{"id":%q},"fieldValues":{"nodes":[%s]}}`,
 			f.onBoardItemID, f.projectID, fieldVals)
@@ -143,7 +153,7 @@ func activeItem() WorkItem { return WorkItem{Slug: "s", Title: "T", Stage: Stage
 func project(t *testing.T, f *fakeBoard, target BoardTarget, ref Ref, item WorkItem, dry bool) BoardPlan {
 	t.Helper()
 	prov := NewGitHubProviderFunc(f.run)
-	plan, err := prov.ProjectOntoBoard(context.Background(), target, ref, item, dry)
+	plan, err := prov.ProjectOntoBoard(context.Background(), target, ref, item, dry, "")
 	if err != nil {
 		t.Fatalf("ProjectOntoBoard: %v", err)
 	}
@@ -269,7 +279,7 @@ func TestBoardUnknownConfiguredStatusFailsLoud(t *testing.T) {
 	target := orgTarget()
 	target.StatusMapping = map[Stage]string{StageActive: "Nonexistent"}
 	prov := NewGitHubProviderFunc(f.run)
-	_, err := prov.ProjectOntoBoard(context.Background(), target, activeRef(), activeItem(), false)
+	_, err := prov.ProjectOntoBoard(context.Background(), target, activeRef(), activeItem(), false, "")
 	if err == nil {
 		t.Fatalf("expected an error for an unknown configured status")
 	}
@@ -852,36 +862,36 @@ func TestThreeWayMergeConvergenceBothChanged(t *testing.T) {
 
 func TestResolveBoard(t *testing.T) {
 	tests := []struct {
-		name         string
-		projectFlag  string
-		configBoard  string
+		name           string
+		projectFlag    string
+		configBoard    string
 		wantConfigured bool
-		wantOwner    string
-		wantNumber   int
-		wantRule     BoardRule
+		wantOwner      string
+		wantNumber     int
+		wantRule       BoardRule
 	}{
 		{
-			name:         "flag wins over config",
-			projectFlag:  "acme/6",
-			configBoard:  "other/7",
+			name:           "flag wins over config",
+			projectFlag:    "acme/6",
+			configBoard:    "other/7",
 			wantConfigured: true,
-			wantOwner:    "acme",
-			wantNumber:   6,
-			wantRule:     BoardRuleFlag,
+			wantOwner:      "acme",
+			wantNumber:     6,
+			wantRule:       BoardRuleFlag,
 		},
 		{
-			name:         "config used when no flag",
-			projectFlag:  "",
-			configBoard:  "org/3",
+			name:           "config used when no flag",
+			projectFlag:    "",
+			configBoard:    "org/3",
 			wantConfigured: true,
-			wantOwner:    "org",
-			wantNumber:   3,
-			wantRule:     BoardRuleConfig,
+			wantOwner:      "org",
+			wantNumber:     3,
+			wantRule:       BoardRuleConfig,
 		},
 		{
-			name:         "no board when neither flag nor config",
-			projectFlag:  "",
-			configBoard:  "",
+			name:           "no board when neither flag nor config",
+			projectFlag:    "",
+			configBoard:    "",
 			wantConfigured: false,
 		},
 	}
@@ -971,9 +981,9 @@ func TestBoardRefusal(t *testing.T) {
 
 func TestParseSpecSyncConfig(t *testing.T) {
 	tests := []struct {
-		name    string
-		input   string
-		want    SpecSyncConfig
+		name  string
+		input string
+		want  SpecSyncConfig
 	}{
 		{
 			name:  "board only",
@@ -991,9 +1001,9 @@ func TestParseSpecSyncConfig(t *testing.T) {
 			want:  SpecSyncConfig{},
 		},
 		{
-			name:    "unknown key ignored",
-			input:   "unknown: value\nboard: acme/6\n",
-			want:    SpecSyncConfig{Board: "acme/6"},
+			name:  "unknown key ignored",
+			input: "unknown: value\nboard: acme/6\n",
+			want:  SpecSyncConfig{Board: "acme/6"},
 		},
 	}
 
@@ -1016,5 +1026,135 @@ func TestBoardRuleString(t *testing.T) {
 	}
 	if got := BoardRule(99).String(); got != "unknown" {
 		t.Errorf("unknown rule String() = %q, want %q", got, "unknown")
+	}
+}
+
+func TestBoardTwoWayFreshCard(t *testing.T) {
+	f := defaultFake()
+	// Issue not yet on the board — fresh card.
+	plan := project(t, f, orgTarget(), activeRef(), activeItem(), false)
+	if !plan.AddedToBoard {
+		t.Fatalf("expected AddedToBoard for a fresh card")
+	}
+	if !f.mutated("setStatus") {
+		t.Fatalf("expected setStatus for a fresh card")
+	}
+}
+
+func TestBoardTwoWayUntouchedStatus(t *testing.T) {
+	f := defaultFake()
+	f.onBoardItemID = "ITEM_1"
+	f.currentStatus = "In progress" // specsync set this previously
+	// With no binding, the managed-names check allows overwriting managed statuses.
+	plan := project(t, f, orgTarget(), activeRef(), activeItem(), false)
+	if f.mutated("setStatus") {
+		t.Fatalf("must not overwrite an untouched specsync-managed status")
+	}
+	if plan.StatusName != "" {
+		t.Fatalf("expected no StatusName for an unchanged status, got %q", plan.StatusName)
+	}
+}
+
+func TestBoardTwoWayHumanMovedToDone(t *testing.T) {
+	f := defaultFake()
+	f.onBoardItemID = "ITEM_1"
+	f.currentStatus = "Done" // human moved to Done
+
+	// Active item has incomplete tasks, so human move to Done should be surfaced.
+	plan := project(t, f, orgTarget(), activeRef(), activeItem(), false)
+	if plan.HumanMovedToDone == "" {
+		t.Fatalf("expected HumanMovedToDone signal, got plan %+v", plan)
+	}
+	// Without a binding, the managed-names fallback considers "Done" as managed,
+	// so it will overwrite. The inbound signal is the key outcome here.
+}
+
+func TestBoardTwoWayHumanMovedBackward(t *testing.T) {
+	f := defaultFake()
+	f.onBoardItemID = "ITEM_1"
+	f.currentStatus = "In progress" // human moved from Done back to In progress
+	// Active item wants "In progress" — matches current, so no mutation needed.
+	_ = project(t, f, orgTarget(), activeRef(), activeItem(), false)
+	if f.mutated("setStatus") {
+		t.Fatalf("must not overwrite a human-moved backward status when it matches the stage")
+	}
+}
+
+func TestBoardTwoWayWithBindingUntouched(t *testing.T) {
+	f := defaultFake()
+	f.onBoardItemID = "ITEM_1"
+	f.currentStatus = "In progress"
+
+	// Set up a binding that says specsync last wrote "In progress".
+	changeDir := t.TempDir()
+	state := BoardState{Version: 1, Bindings: map[string]BoardBinding{
+		"org:6:github": {LastWrittenOptionID: "OPT_PROG"},
+	}}
+	if err := SaveBoardState(changeDir, state); err != nil {
+		t.Fatal(err)
+	}
+
+	prov := NewGitHubProviderFunc(f.run)
+	_, err := prov.ProjectOntoBoard(context.Background(), orgTarget(), activeRef(), activeItem(), false, changeDir)
+	if err != nil {
+		t.Fatalf("ProjectOntoBoard: %v", err)
+	}
+	if f.mutated("setStatus") {
+		t.Fatalf("must not overwrite a status specsync last wrote when unchanged")
+	}
+}
+
+func TestBoardTwoWayWithBindingHumanMove(t *testing.T) {
+	f := defaultFake()
+	f.onBoardItemID = "ITEM_1"
+	f.currentStatus = "Done" // human moved from "In progress" to "Done"
+
+	// Set up a binding that says specsync last wrote "In progress".
+	changeDir := t.TempDir()
+	state := BoardState{Version: 1, Bindings: map[string]BoardBinding{
+		"org:6:github": {LastWrittenOptionID: "OPT_PROG"},
+	}}
+	if err := SaveBoardState(changeDir, state); err != nil {
+		t.Fatal(err)
+	}
+
+	prov := NewGitHubProviderFunc(f.run)
+	plan, err := prov.ProjectOntoBoard(context.Background(), orgTarget(), activeRef(), activeItem(), false, changeDir)
+	if err != nil {
+		t.Fatalf("ProjectOntoBoard: %v", err)
+	}
+	if f.mutated("setStatus") {
+		t.Fatalf("must not overwrite a human-moved status")
+	}
+	if plan.StatusSkipped == "" {
+		t.Fatalf("expected StatusSkipped for a human-moved status, got plan %+v", plan)
+	}
+}
+
+func TestBoardTwoWayWithBindingReopen(t *testing.T) {
+	f := defaultFake()
+	f.onBoardItemID = "ITEM_1"
+	f.currentStatus = "Done" // human moved to Done
+
+	// Set up a binding that says specsync last wrote "Done".
+	changeDir := t.TempDir()
+	state := BoardState{Version: 1, Bindings: map[string]BoardBinding{
+		"org:6:github": {LastWrittenOptionID: "OPT_DONE"},
+	}}
+	if err := SaveBoardState(changeDir, state); err != nil {
+		t.Fatal(err)
+	}
+
+	// Now the change is active again (reopened) — specsync should move it back.
+	prov := NewGitHubProviderFunc(f.run)
+	plan, err := prov.ProjectOntoBoard(context.Background(), orgTarget(), activeRef(), activeItem(), false, changeDir)
+	if err != nil {
+		t.Fatalf("ProjectOntoBoard: %v", err)
+	}
+	if !f.mutated("setStatus") {
+		t.Fatalf("expected setStatus to move card back to active status after reopen")
+	}
+	if plan.StatusName != "In progress" {
+		t.Fatalf("expected StatusName %q, got %q", "In progress", plan.StatusName)
 	}
 }
