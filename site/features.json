@@ -82,11 +82,5 @@
     "icon": "flow",
     "title": "CLI self-documentation",
     "body": "<code>specsync agent-help</code> provides command guidance without manuals. Use <code>--json</code> for machine-readable schema suitable for agents and automation."
-  },
-  {
-    "group": "collaborate",
-    "icon": "state",
-    "title": "Token diagnostics",
-    "body": "<code>specsync doctor</code> analyzes Claude Code integration and recommends optimizations for efficient token usage across AI agents."
   }
 ]
