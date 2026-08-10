@@ -82,5 +82,11 @@
     "icon": "flow",
     "title": "CLI self-documentation",
     "body": "<code>specsync agent-help</code> provides command guidance without manuals. Use <code>--json</code> for machine-readable schema suitable for agents and automation."
+  },
+  {
+    "group": "collaborate",
+    "icon": "state",
+    "title": "Agent skill diagnostics",
+    "body": "<code>specsync doctor</code> detects and diagnoses AI agent skill installations (Claude Code, OpenCode, Copilot, etc.), analyzes token usage, and recommends optimizations."
   }
 ]
