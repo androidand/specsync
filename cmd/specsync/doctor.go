@@ -41,8 +41,16 @@ type TokenAnalysisInfo struct {
 func runDoctor(args []string) {
 	fs := flag.NewFlagSet("doctor", flag.ExitOnError)
 	jsonFlag := fs.Bool("json", false, "emit machine-readable JSON output")
+	skipUpdate := fs.Bool("skip-skill-update", false, "skip auto-updating skill files")
 	if err := fs.Parse(args); err != nil {
 		fail(err)
+	}
+
+	// Auto-update skills unless --skip-skill-update is set
+	if !*skipUpdate && version != "" && version != "dev" {
+		if updateSkillsIfNeeded(version) {
+			fmt.Fprintf(os.Stderr, "\n")
+		}
 	}
 
 	remaining := fs.Args()

@@ -95,11 +95,6 @@ func main() {
 		os.Exit(2)
 	}
 
-	// Auto-update skills if stale, unless --skip-skill-update is present or we're just showing version
-	if cmd != "version" && !containsFlag(rest, "skip-skill-update") {
-		updateSkillsIfNeeded(version)
-	}
-
 	switch cmd {
 	case "version":
 		fmt.Println("specsync " + version)
