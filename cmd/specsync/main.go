@@ -30,6 +30,7 @@ var knownSubcommands = map[string]bool{
 	"changes": true, "set-stage": true, "set-priority": true, "note": true,
 	"sync": true, "audit": true, "audit-tasks": true, "validate": true,
 	"spinoff": true, "pr-body": true, "verify": true, "relate": true, "work-graph": true,
+	"agent-help": true, "doctor": true,
 }
 
 // knownConfusions maps a word someone might reach for by habit (e.g. git's
@@ -132,6 +133,10 @@ func main() {
 		runPRBody(rest)
 	case "verify":
 		runVerify(rest)
+	case "agent-help":
+		runAgentHelp(rest)
+	case "doctor":
+		runDoctor(rest)
 	default:
 		runSync(rest)
 	}
