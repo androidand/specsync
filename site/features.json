@@ -93,8 +93,6 @@
     "group": "collaborate",
     "icon": "flow",
     "title": "Any MCP-connected tracker",
-    "body": "<code>-provider mcp</code> projects changes through any external MCP server instead of <code>gh</code> — Linear, Jira, GitHub, or in-house. Speaks the current MCP spec with automatic fallback to legacy handshake-based servers.",
-    "status": "soon",
-    "issue": 4
+    "body": "<code>-provider mcp</code> projects changes through any external MCP server instead of <code>gh</code> — Linear, Jira, GitHub, or in-house. Speaks the current MCP spec with automatic fallback to legacy handshake-based servers."
   }
 ]
