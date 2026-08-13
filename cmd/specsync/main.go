@@ -1756,16 +1756,19 @@ func runValidate(args []string) {
 // verbatim text plus a capture timestamp.
 func runIdea(args []string) {
 	fs := flag.NewFlagSet("idea", flag.ExitOnError)
-	repo := fs.String("repo", "", "repo as owner/name (default: $SPECSYNC_IDEAS_REPO or current repo)")
+	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	repo := fs.String("repo", "", "repo as owner/name (default: config ideas_repo, $SPECSYNC_IDEAS_REPO, or current repo)")
 	if err := fs.Parse(args); err != nil {
 		fail(err)
 	}
 
-	// Resolve repo: -repo flag → SPECSYNC_IDEAS_REPO env → auto-detect from git.
-	targetRepo := *repo
-	if targetRepo == "" {
-		targetRepo = os.Getenv("SPECSYNC_IDEAS_REPO")
+	// Resolve repo: -repo flag → openspec/specsync.yml → SPECSYNC_IDEAS_REPO → auto-detect.
+	abs, err := filepath.Abs(*openspec)
+	if err != nil {
+		fail(err)
 	}
+	repoRoot := filepath.Dir(abs)
+	targetRepo := specsync.ResolveIdeasRepo(*repo, repoRoot)
 
 	// Read idea text from arg or stdin.
 	var ideaText string
@@ -1824,16 +1827,19 @@ func runIdea(args []string) {
 // runIdeas lists open stage:intake issues for the repo.
 func runIdeas(args []string) {
 	fs := flag.NewFlagSet("ideas", flag.ExitOnError)
-	repo := fs.String("repo", "", "repo as owner/name (default: $SPECSYNC_IDEAS_REPO or current repo)")
+	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	repo := fs.String("repo", "", "repo as owner/name (default: config ideas_repo, $SPECSYNC_IDEAS_REPO, or current repo)")
 	asJSON := fs.Bool("json", false, "output as JSON")
 	if err := fs.Parse(args); err != nil {
 		fail(err)
 	}
 
-	targetRepo := *repo
-	if targetRepo == "" {
-		targetRepo = os.Getenv("SPECSYNC_IDEAS_REPO")
+	abs, err := filepath.Abs(*openspec)
+	if err != nil {
+		fail(err)
 	}
+	repoRoot := filepath.Dir(abs)
+	targetRepo := specsync.ResolveIdeasRepo(*repo, repoRoot)
 
 	// List open issues with stage:intake label.
 	runGH := func(ctx context.Context, ghArgs ...string) (string, error) {

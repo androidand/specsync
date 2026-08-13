@@ -7,3 +7,4 @@
 - [x] `specsync pull -issue <n>` on an intake issue transitions the label intake → active on next sync (verify, adjust if needed)
 - [x] Docs: README section + skill file update (capture → triage → pull lifecycle)
 - [x] Tests: title derivation edge cases (one word, multiline, unicode), label creation idempotence, default-repo resolution order
+- [x] Site: promote the idea command in site/features.json + regenerate site/index.html

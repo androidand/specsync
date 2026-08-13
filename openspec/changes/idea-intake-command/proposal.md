@@ -38,6 +38,13 @@ Lists open `stage:intake` issues for the repo (or `-repo`/default), so
 "what have I captured that nobody has triaged?" is one command. This is
 the rest-assured view: nothing lost, everything visible.
 
+### 4. Site promotion
+
+The idea command is a new user-facing capability, so this change also
+updates `site/features.json` (a "Capture ideas" card under the plan group)
+and regenerates `site/index.html` — per the repo rule that site updates
+ship with the capability change, not as a follow-up.
+
 ### 3. Triage path (existing machinery)
 
 An intake issue graduates by being pulled into a change
