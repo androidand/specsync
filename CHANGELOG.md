@@ -4,6 +4,14 @@ All notable changes to this project are documented here. One entry per shipped
 OpenSpec change — see the linked issues for the full spec and discussion.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.11.2] - 2026-08-13
+
+### Added
+
+- Idea intake command (#101)
+
+<!-- 2 internal commit(s) omitted (chore/docs/ci/...) -->
+
 ## [0.11.1] - 2026-08-10
 
 ### Fixed
