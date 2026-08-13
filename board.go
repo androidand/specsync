@@ -821,7 +821,8 @@ func saveBoardBinding(changeDir string, target BoardTarget, provider string, sta
 // SpecSyncConfig holds repository-local specsync configuration read from
 // openspec/specsync.yml.
 type SpecSyncConfig struct {
-	Board string // board as "owner/number"; empty = no board
+	Board     string // board as "owner/number"; empty = no board
+	IdeasRepo string // default ideas repo as "owner/name"; empty = auto-detect
 }
 
 // SpecSyncConfigPath is the conventional config file location relative to
@@ -857,6 +858,8 @@ func parseSpecSyncConfig(data []byte) SpecSyncConfig {
 		switch k {
 		case "board":
 			cfg.Board = v
+		case "ideas_repo":
+			cfg.IdeasRepo = v
 		}
 	}
 	return cfg
@@ -909,6 +912,32 @@ func ResolveBoard(projectFlag string, root string) (ResolvedBoard, error) {
 
 	// 3. No board.
 	return ResolvedBoard{}, nil
+}
+
+// ResolveIdeasRepo implements the ideas repo resolution order:
+// 1. -repo flag (explicit)
+// 2. Repository-local declaration (openspec/specsync.yml ideas_repo)
+// 3. SPECSYNC_IDEAS_REPO env var
+// 4. Empty (let the GitHub CLI auto-detect from git)
+func ResolveIdeasRepo(repoFlag string, root string) string {
+	// 1. Explicit flag.
+	if strings.TrimSpace(repoFlag) != "" {
+		return strings.TrimSpace(repoFlag)
+	}
+
+	// 2. Repository-local config.
+	cfg := ReadSpecSyncConfig(root)
+	if strings.TrimSpace(cfg.IdeasRepo) != "" {
+		return strings.TrimSpace(cfg.IdeasRepo)
+	}
+
+	// 3. Env var.
+	if v := strings.TrimSpace(os.Getenv("SPECSYNC_IDEAS_REPO")); v != "" {
+		return v
+	}
+
+	// 4. Auto-detect (gh uses its default repo).
+	return ""
 }
 
 // parseBoardTarget parses an "owner/number" string into a ResolvedBoard.

@@ -18,6 +18,12 @@
     "body": "<code>specsync spinoff</code> spawns a new linked change from a discovery, keeping the parent scoped and marking the source task as moved."
   },
   {
+    "group": "plan",
+    "icon": "flow",
+    "title": "Capture ideas",
+    "body": "<code>specsync idea \"Thought\"</code> files a vague or elaborate idea as a GitHub issue in your ideas inbox; <code>specsync ideas</code> lists open intake. Graduate with <code>specsync pull -issue &lt;n&gt;</code>."
+  },
+  {
     "group": "collaborate",
     "icon": "idempotent",
     "title": "Idempotent",

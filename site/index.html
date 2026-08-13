@@ -817,7 +817,7 @@ a:focus-visible {
     </svg>
     specsync
     <span class="nav-badge"><!-- VERSION:start -->
-v0.9.1
+v0.11.1
 <!-- VERSION:end --></span>
   </a>
   <div class="nav-links">
@@ -907,6 +907,10 @@ v0.9.1
         <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6"/><path d="M9 1v4"/><path d="M15 1v4"/><rect x="4" y="3" width="16" height="20" rx="2"/><path d="M8 10h8"/><path d="M8 14h8"/><path d="M8 18h5"/><path d="M17 18l2 2 3-3"/></svg></span><span class="feature-title">Spin off emergent work</span></h4>
           <p><code>specsync spinoff</code> spawns a new linked change from a discovery, keeping the parent scoped and marking the source task as moved.</p>
         </div>
+        <div class="feature">
+        <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h6"/><path d="M4 18h6"/><path d="M10 6l3 6"/><path d="M10 18l3-6"/><path d="M13 12h7"/><path d="M18 9l3 3-3 3"/><circle cx="4" cy="6" r="1.5"/><circle cx="4" cy="18" r="1.5"/></svg></span><span class="feature-title">Capture ideas</span></h4>
+          <p><code>specsync idea "Thought"</code> files a vague or elaborate idea as a GitHub issue in your ideas inbox; <code>specsync ideas</code> lists open intake. Graduate with <code>specsync pull -issue &lt;n&gt;</code>.</p>
+        </div>
         </div>
       </div>
       <div class="feature-theme">
@@ -947,6 +951,10 @@ v0.9.1
         <div class="feature">
         <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h5"/><path d="M5 12h9"/><path d="M5 17h13"/><circle cx="4" cy="7" r="1.2"/><circle cx="4" cy="12" r="1.2"/><circle cx="4" cy="17" r="1.2"/><path d="M19 17l1.8 1.8L23 16.6"/></svg></span><span class="feature-title">Agent skill diagnostics</span></h4>
           <p><code>specsync doctor</code> detects and diagnoses AI agent skill installations (Claude Code, OpenCode, Copilot, etc.), analyzes token usage, and recommends optimizations.</p>
+        </div>
+        <div class="feature">
+        <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h6"/><path d="M4 18h6"/><path d="M10 6l3 6"/><path d="M10 18l3-6"/><path d="M13 12h7"/><path d="M18 9l3 3-3 3"/><circle cx="4" cy="6" r="1.5"/><circle cx="4" cy="18" r="1.5"/></svg></span><span class="feature-title">Any MCP-connected tracker</span></h4>
+          <p><code>-provider mcp</code> projects changes through any external MCP server instead of <code>gh</code> — Linear, Jira, GitHub, or in-house. Speaks the current MCP spec with automatic fallback to legacy handshake-based servers.</p>
         </div>
         </div>
       </div>
@@ -1050,59 +1058,32 @@ v0.9.1
   <!-- CHANGELOG:start -->
         <div class="release">
           <div class="release-header">
-            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.9.1" target="_blank" rel="noopener">v0.9.1</a>
-            <span class="release-date">Jul 28, 2026</span>
+            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.11.1" target="_blank" rel="noopener">v0.11.1</a>
+            <span class="release-date">Aug 10, 2026</span>
           </div>
-          <div class="release-body"><h5>Added</h5><ul><li><strong>Repo resolution is now explicit.</strong> specsync resolves the target repository deterministically and always passes <code>--repo</code> to every <code>gh</code> invocation. Resolution order: <code>-repo</code> flag → <code>gh repo set-default</code> → <code>origin</code>. Fork-parent writes are refused by default; use <code>-repo</code> to override. Board resolution also gained a repository-local declaration: <code>openspec/specsync.yml</code> with <code>board: owner/number</code>. The <code>-project</code> flag and this config file are the only ways to set a board; the <code>SPECSYNC_PROJECT</code> env var is no longer used. <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/76" target="_blank" rel="noopener">#76</a></span></li>
-<li>Multi-provider sync (fan-out) <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/24" target="_blank" rel="noopener">#24</a></span></li>
-<li>Auto-detect Beads provider <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/62" target="_blank" rel="noopener">#62</a></span></li>
-<li>Link existing issues by reference, without scaffolding specs <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/18" target="_blank" rel="noopener">#18</a></span></li>
-<li>fix task dogfooding — audit-tasks command and reconcile all changes (#61) <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/03f09859" target="_blank" rel="noopener">03f0985</a></li>
-<li>convergence check for 3-way board merge (#42) (#74) <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/04ea25a6" target="_blank" rel="noopener">04ea25a</a></li>
-<li>linker cleanup — LinkerResult, slug-matching, dead code removal (#97) <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/079b9132" target="_blank" rel="noopener">079b913</a></li>
-<li>spinoff subcommand — spawn linked child changes from discoveries (#9) <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/0c2bd80f" target="_blank" rel="noopener">0c2bd80</a></li>
-<li>add --worktree flag to pull — create or reuse worktree (#51) (#72) <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/18c09518" target="_blank" rel="noopener">18c0951</a></li>
-<li>add specsync validate command for change structure (#64) (#67) <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/22cfa581" target="_blank" rel="noopener">22cfa58</a></li>
-<li>spec-issue-linker — pull integration, Linker context resolution, skill doc (#95) <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/47cedb84" target="_blank" rel="noopener">47cedb8</a></li>
-<li>spec-issue-linker — Linker interface, resolvers, sync integration <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/8b752045" target="_blank" rel="noopener">8b75204</a></li>
-<li>stable task ID — position-based mapping for rewritten task detection (#65) (#73) <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/b542d927" target="_blank" rel="noopener">b542d92</a></li>
-<li>slug validation, archived priority, slug tests (#43) <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/b6f71361" target="_blank" rel="noopener">b6f7136</a></li>
-<li>slug validation, archived priority support (#43) (#75) <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/f0d8d40e" target="_blank" rel="noopener">f0d8d40</a></li></ul>
-<h5>Changed</h5><ul><li>Claim work in flight so concurrent agents don't collide <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/78" target="_blank" rel="noopener">#78</a></span></li>
-<li>Work graph <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/19" target="_blank" rel="noopener">#19</a></span></li></ul>
-<h5>Fixed</h5><ul><li>Add <code>specsync audit</code> — a read-only command that cross-references archived OpenSpec changes against GitHub PRs to find archived changes whose PR was never merged. Also add a new <code>shipped</code> stage that represents the final step in the lifecycle: the PR has landed. <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/59" target="_blank" rel="noopener">#59</a></span></li>
-<li>apply changelog 0.9.1, bump npm to 0.9.1, archive linker-cleanup (#98) <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/ee000c8a" target="_blank" rel="noopener">ee000c8</a></li></ul></div>
-          <a class="release-full-link" href="https://github.com/androidand/specsync/releases/tag/v0.9.1" target="_blank" rel="noopener">View complete release details on GitHub →</a>
+          <div class="release-body"><h5>Fixed</h5><ul><li>archive closeAndLabel pushed a blank-title WorkItem and never attached the label <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/1462356e" target="_blank" rel="noopener">1462356</a></li>
+<li>retry Find before create to close a duplicate-issue race <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/7cd024dd" target="_blank" rel="noopener">7cd024d</a></li></ul></div>
+          <a class="release-full-link" href="https://github.com/androidand/specsync/releases/tag/v0.11.1" target="_blank" rel="noopener">View complete release details on GitHub →</a>
         </div>
         <div class="release">
           <div class="release-header">
-            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.8.0" target="_blank" rel="noopener">v0.8.0</a>
-            <span class="release-date">Jul 16, 2026</span>
+            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.11.0" target="_blank" rel="noopener">v0.11.0</a>
+            <span class="release-date">Aug 10, 2026</span>
           </div>
-          <div class="release-body"><h5>Added</h5><ul><li>add three-phase workflow state management for SpecSync <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/0ba30bd4" target="_blank" rel="noopener">0ba30bd</a></li>
-<li>phase 1 - implement SpecSource interface and OpenSpec implementation <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/1065b593" target="_blank" rel="noopener">1065b59</a></li>
-<li>add SpecSourceFactory and --spec CLI flag <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/1094ca19" target="_blank" rel="noopener">1094ca1</a></li>
-<li>implement rich-change-state foundation <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/1ae74b8a" target="_blank" rel="noopener">1ae74b8</a></li>
-<li>add change-status commands (partial) <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/36c7ddeb" target="_blank" rel="noopener">36c7dde</a></li>
-<li>implement three-way merge reconciliation with human-move detection <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/4b7bc5a2" target="_blank" rel="noopener">4b7bc5a</a></li>
-<li>add three-way merge infrastructure for board-state-reconciliation <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/8386fe9c" target="_blank" rel="noopener">8386fe9</a></li>
-<li>add explicit archive-completed execution <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/83898732" target="_blank" rel="noopener">8389873</a></li>
-<li>rework changelog, hero, IA, and a11y per review feedback <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/d0de2e57" target="_blank" rel="noopener">d0de2e5</a></li>
-<li>complete change-status-cli with atomic writes and JSON output <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/fe6e6a39" target="_blank" rel="noopener">fe6e6a3</a></li></ul>
-<h5>Changed</h5><ul><li><strong>Breaking:</strong> repair set-stage/set-priority semantics; drop dead code and artifact docs <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/3cd81b7f" target="_blank" rel="noopener">3cd81b7</a></li></ul>
-<h5>Fixed</h5><ul><li>show unlinked-but-shipped commits too, not just spec-backed ones <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/07602bd3" target="_blank" rel="noopener">07602bd</a></li></ul></div>
-          <a class="release-full-link" href="https://github.com/androidand/specsync/releases/tag/v0.8.0" target="_blank" rel="noopener">View complete release details on GitHub →</a>
+          <div class="release-body"><h5>Added</h5><ul><li>add OpenSpec coordination support (references, worksets) <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/03a0dc5d" target="_blank" rel="noopener">03a0dc5</a></li>
+<li>add archive lifecycle, board two-way merge, and MCP provider type <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/24dcc5a7" target="_blank" rel="noopener">24dcc5a</a></li>
+<li>add LabelApplier interface and idea/ideas commands <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/520087f3" target="_blank" rel="noopener">520087f</a></li></ul>
+<h5>Fixed</h5><ul><li>resync derived SKILL.md copies with the canonical minimal version <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/7a4ae8e5" target="_blank" rel="noopener">7a4ae8e</a></li>
+<li>set GH_TOKEN so gh-calling CI steps can authenticate <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/b40fad91" target="_blank" rel="noopener">b40fad9</a></li></ul></div>
+          <a class="release-full-link" href="https://github.com/androidand/specsync/releases/tag/v0.11.0" target="_blank" rel="noopener">View complete release details on GitHub →</a>
         </div>
         <div class="release">
           <div class="release-header">
-            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.7.0" target="_blank" rel="noopener">v0.7.0</a>
-            <span class="release-date">Jul 14, 2026</span>
+            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.10.1" target="_blank" rel="noopener">v0.10.1</a>
+            <span class="release-date">Aug 10, 2026</span>
           </div>
-          <div class="release-body"><h5>Added</h5><ul><li>resolve refs live at release time, wire into release CI <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/d0578292" target="_blank" rel="noopener">d057829</a></li>
-<li>render changelog from CHANGELOG.md, not the GitHub API <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/e2c18f8d" target="_blank" rel="noopener">e2c18f8</a></li></ul>
-<h5>Fixed</h5><ul><li>never let a failed build degrade committed content <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/9035465c" target="_blank" rel="noopener">9035465</a></li>
-<li>stop reading bare #N in commit prose as issue evidence <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/aeee62a9" target="_blank" rel="noopener">aeee62a</a></li></ul></div>
-          <a class="release-full-link" href="https://github.com/androidand/specsync/releases/tag/v0.7.0" target="_blank" rel="noopener">View complete release details on GitHub →</a>
+          <div class="release-body"><h5>Added</h5><ul><li>auto-update skills on binary upgrade (#120) (#121) <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/08801273" target="_blank" rel="noopener">0880127</a></li></ul></div>
+          <a class="release-full-link" href="https://github.com/androidand/specsync/releases/tag/v0.10.1" target="_blank" rel="noopener">View complete release details on GitHub →</a>
         </div>
 <!-- CHANGELOG:end -->
 </section>
