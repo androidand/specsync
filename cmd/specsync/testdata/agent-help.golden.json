@@ -977,7 +977,7 @@
           "type": "boolean",
           "required": false,
           "default": false,
-          "description": "install to Generic (.agents) (~/.agents/skills/specsync)"
+          "description": "install to Agent Skills (~/.agents/skills/specsync)"
         },
         {
           "name": "all",
@@ -998,21 +998,14 @@
           "type": "boolean",
           "required": false,
           "default": false,
-          "description": "install to Codex / Skein (~/.codex/skills/specsync)"
-        },
-        {
-          "name": "copilot",
-          "type": "boolean",
-          "required": false,
-          "default": false,
-          "description": "install to GitHub Copilot (~/.copilot/skills/specsync)"
+          "description": "alias for -agents"
         },
         {
           "name": "opencode",
           "type": "boolean",
           "required": false,
           "default": false,
-          "description": "install to OpenCode (~/.config/opencode/skills/specsync)"
+          "description": "alias for -agents"
         }
       ],
       "safety_rules": [

@@ -146,12 +146,12 @@ func TestDoctorInstallJSON_EmitsStructuredOutput(t *testing.T) {
 
 	out := captureStdout(t, func() { doctorInstall(true) })
 
-	var result InstallResult
+	var result installDoctorJSON
 	if err := json.Unmarshal([]byte(out), &result); err != nil {
 		t.Fatalf("unmarshal doctor install --json output: %v\noutput: %s", err, out)
 	}
-	if len(result.Locations) == 0 {
-		t.Errorf("Locations is empty, want per-agent skill locations")
+	if len(result.Canonical) == 0 {
+		t.Errorf("Canonical is empty, want per-agent skill locations")
 	}
 	if len(result.Dependencies) != 1 || result.Dependencies[0].Name != "openspec" {
 		t.Errorf("Dependencies = %+v, want one entry named %q", result.Dependencies, "openspec")

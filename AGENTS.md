@@ -171,3 +171,15 @@ it.
 - Keep docs concise and practical.
 - Avoid AI-bloated wording and repetition.
 - Prefer direct instructions and concrete examples.
+
+## SpecSync Skill
+
+The `specsync` agent skill is the operational guide for the SpecSync CLI.
+Use it whenever planning, creating, pulling, synchronizing, linking,
+implementing, completing, or archiving SpecSync/OpenSpec changes.
+
+For command-specific details prefer:
+
+    specsync agent-help <command>
+
+over guessing CLI behavior.

@@ -18,20 +18,38 @@ type target struct {
 	flag    string
 	label   string
 	relPath []string // relative to home dir
+	aliases []string // other flags that resolve to this target
 }
 
 var skillTargets = []target{
-	{"claude-code", "Claude Code", []string{".claude", "skills", "specsync"}},
-	{"codex", "Codex / Skein", []string{".codex", "skills", "specsync"}},
-	{"opencode", "OpenCode", []string{".config", "opencode", "skills", "specsync"}},
-	{"copilot", "GitHub Copilot", []string{".copilot", "skills", "specsync"}},
-	{"agents", "Generic (.agents)", []string{".agents", "skills", "specsync"}},
+	{
+		flag:    "claude-code",
+		label:   "Claude Code",
+		relPath: []string{".claude", "skills", "specsync"},
+	},
+	{
+		flag:    "agents",
+		label:   "Agent Skills",
+		relPath: []string{".agents", "skills", "specsync"},
+		aliases: []string{"codex", "opencode"},
+	},
 }
+
+// aliasToFlag maps alias flags to their canonical target flag.
+var aliasToFlag = func() map[string]string {
+	m := make(map[string]string)
+	for _, t := range skillTargets {
+		for _, a := range t.aliases {
+			m[a] = t.flag
+		}
+	}
+	return m
+}()
 
 // installSkillCmd copies the embedded skill into agent skill directories.
 type installSkillCmd struct {
-	all     *bool
-	targets []*bool
+	all   *bool
+	flags map[string]*bool
 }
 
 func init() { Register(&installSkillCmd{}) }
@@ -55,9 +73,12 @@ func (*installSkillCmd) Spec() Spec {
 
 func (cm *installSkillCmd) Flags(fs *flag.FlagSet) {
 	cm.all = fs.Bool("all", false, "install to every known agent directory")
-	cm.targets = make([]*bool, len(skillTargets))
-	for i, t := range skillTargets {
-		cm.targets[i] = fs.Bool(t.flag, false, fmt.Sprintf("install to %s (~/%s)", t.label, filepath.Join(t.relPath...)))
+	cm.flags = make(map[string]*bool)
+	for _, t := range skillTargets {
+		cm.flags[t.flag] = fs.Bool(t.flag, false, fmt.Sprintf("install to %s (~/%s)", t.label, filepath.Join(t.relPath...)))
+		for _, a := range t.aliases {
+			cm.flags[a] = fs.Bool(a, false, fmt.Sprintf("alias for -%s", t.flag))
+		}
 	}
 }
 
@@ -68,7 +89,7 @@ func (cm *installSkillCmd) Run(_ context.Context, args []string) error {
 
 func (cm *installSkillCmd) run(args []string) {
 	fs := flagSetFor(cm)
-	all, flags := cm.all, cm.targets
+	all, flags := cm.all, cm.flags
 	_ = fs.Parse(args)
 	checkArgs(fs, args, 0)
 
@@ -77,28 +98,40 @@ func (cm *installSkillCmd) run(args []string) {
 		fail(fmt.Errorf("install-skill: cannot determine home directory: %w", err))
 	}
 
-	selected := *all
-	if !selected {
-		for _, f := range flags {
-			if *f {
-				selected = true
-				break
+	// Resolve selected targets, deduplicating aliases.
+	selected := make(map[string]bool)
+	for _, t := range skillTargets {
+		if *all {
+			selected[t.flag] = true
+			continue
+		}
+		if *flags[t.flag] {
+			selected[t.flag] = true
+			continue
+		}
+		for _, a := range t.aliases {
+			if *flags[a] {
+				selected[t.flag] = true
 			}
 		}
 	}
-	if !selected {
+
+	if !selected["claude-code"] && !selected["agents"] {
 		fmt.Fprintln(os.Stderr, "specsync install-skill: specify --all or at least one platform flag")
 		fmt.Fprintln(os.Stderr, "  --all            install to every known agent directory")
-		for _, t := range skillTargets {
-			fmt.Fprintf(os.Stderr, "  --%-16s install to %s\n", t.flag, t.label)
-		}
+		fmt.Fprintln(os.Stderr, "  --claude-code    install to Claude Code (~/.claude/skills/specsync)")
+		fmt.Fprintln(os.Stderr, "  --agents         install to Agent Skills (~/.agents/skills/specsync)")
+		fmt.Fprintln(os.Stderr, "  --codex          alias for --agents")
+		fmt.Fprintln(os.Stderr, "  --opencode       alias for --agents")
 		os.Exit(1)
 	}
 
 	installedVersion := extractSkillVersion(skillContent)
 
-	for i, t := range skillTargets {
-		if !*all && !*flags[i] {
+	fmt.Fprintln(os.Stderr, "Installing SpecSync skill...")
+
+	for _, t := range skillTargets {
+		if !selected[t.flag] {
 			continue
 		}
 		dir := filepath.Join(append([]string{home}, t.relPath...)...)
@@ -111,10 +144,19 @@ func (cm *installSkillCmd) run(args []string) {
 			fmt.Printf("  skipped  %-20s (%s)\n", t.label, err)
 			continue
 		}
+
+		var extra string
+		if t.label == "Agent Skills" {
+			extra = "  Used by: Codex, OpenCode, and other Agent Skills hosts"
+		}
+
 		fmt.Printf("  wrote    %-20s %s\n", t.label, dest)
+		if extra != "" {
+			fmt.Printf("             %s\n", extra)
+		}
 	}
 
 	if installedVersion != "" && installedVersion != "dev" {
-		fmt.Printf("\n✓ Installed specsync skill version %s\n", installedVersion)
+		fmt.Printf("\nInstalled specsync skill version %s\n", installedVersion)
 	}
 }
