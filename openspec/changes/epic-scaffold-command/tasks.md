@@ -5,11 +5,16 @@
   shipped cross-repo linking actually reaches installed copies; archive
   `link-by-issue-reference` per the completion-hygiene rule. Add the
   publish-before-archive line to the release checklist.
-- [ ] 2. `epic` subcommand skeleton: parse `<title>`, `--repo`, repeated
-  `--child` (classify slug vs issue ref via `resolveEntry`), `-dry-run`.
-- [ ] 3. Epic creation: `type:epic` + `specsync` labels, roll-up body listing
-  children; **idempotent** — find an existing epic by managed body marker
-  (`specsync:epic=<normalized-title>`) before creating.
+- [ ] 2. `epic` subcommand skeleton: parse `<title>`, `-repo` (optional,
+  default auto-detect from git remote, same as `relate`/`link`), repeated
+  `-child` via the existing `stringSlice` flag type (classify each as slug
+  vs issue ref via `classifyArg` from `link.go`), `-dry-run`.
+- [ ] 3. Epic creation: `type:epic` + `specsync` labels (explicit
+  `WorkItem.Labels`, bypassing the stage/priority default), roll-up body
+  listing children; **idempotent** — reuse `Push`/`Find`/`marker()` unchanged
+  by giving the epic `WorkItem.Slug: "epic:" + normalizeTitle(title)`, so
+  `Find` locates the existing epic by that slug's marker before creating (no
+  new marker format, no local ref cache — see design.md).
 - [ ] 4. Child wiring, degraded mode: managed `## Related` upsert in both
   directions (epic body ↔ each child), reusing the shared renderer. Slug
   children are synced first if they have no ref.

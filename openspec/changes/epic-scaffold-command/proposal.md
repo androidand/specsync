@@ -29,11 +29,11 @@ still serves 0.9.1 without it).
 
 ## What Changes
 
-- **`specsync epic <title> [--repo owner/name] [--child <slug|owner/repo#N|url>]...`**
+- **`specsync epic <title> [-repo owner/name] [-child <slug|owner/repo#N|url>]...`**
   One command that:
   1. creates the epic as a coordination issue (`type:epic` label, no local
      change directory — an epic is not a spec) in the target repo;
-  2. attaches every `--child` — a local change slug (synced first if needed,
+  2. attaches every `-child` — a local change slug (synced first if needed,
      honoring the existing `-repo` behavior) or an existing issue reference in
      any repo — as a **native GitHub sub-issue** once `epic-and-subissue-
      projection` lands, and as a managed `## Related` cross-reference until
@@ -54,17 +54,24 @@ still serves 0.9.1 without it).
 From any repo:
 
 ```
-specsync epic "Feature X: cross-repo widgets" --repo androidand/planning \
-  --child androidand/backend#12 \
-  --child frontend-widget-view        # local slug in this repo's openspec tree
+specsync epic "Feature X: cross-repo widgets" -repo androidand/planning \
+  -child androidand/backend#12 \
+  -child frontend-widget-view        # local slug in this repo's openspec tree
 ```
 
 produces: one `type:epic` issue in `androidand/planning`; backend#12 and the
 frontend change's issue attached (sub-issues when projection exists, Related
 until then); each child body pointing back at the epic; a second identical
 invocation changing nothing. With `issue-dependency-sync` landed, adding
-`--blocked-by androidand/backend#12` on a child records real direction — that
+`-blocked-by androidand/backend#12` on a child records real direction — that
 flag belongs to that change and is only *reserved* here.
+
+## Release note
+
+Add `specsync epic <title> -repo owner/name -child ...` (repeatable `-child`):
+mints a `type:epic` coordination issue and wires cross-repo children to it —
+local change slugs or existing issue references — idempotently. Falls back to
+a managed `## Related` cross-link until native sub-issue projection lands.
 
 ## Out of scope
 
@@ -76,10 +83,26 @@ flag belongs to that change and is only *reserved* here.
   (`openspec-references-coordination`).
 - Non-GitHub providers (`pluggable-providers`).
 
+## Capabilities
+
+### New Capabilities
+- `epic-scaffold`: `specsync epic` creates a `type:epic` coordination issue and
+  idempotently wires cross-repo children to it (slugs and issue references),
+  degrading gracefully to a managed `## Related` cross-link until native
+  sub-issue projection lands.
+- `release-gap-guard`: `specsync --version` distinguishes a repo dev build from
+  a published release, and the release checklist requires publishing a
+  16/16-complete change before it is archived, so a shipped capability can't
+  silently miss the published package the way `link-by-issue-reference` did.
+
+### Modified Capabilities
+(none)
+
 ## Impact
 
 - New `epic.go` + `epic` subcommand in `cmd/specsync/main.go`; reuses
-  `NewGitHubProviderWithRepo`, `resolveEntry` classification, and the shared
-  `## Related` upsert from `link-by-issue-reference`.
+  `NewGitHubProviderWithRepo`, `classifyArg` classification (from
+  `link.go`), and the shared `## Related` upsert (`UpsertRelatedSection`) from
+  `link-by-issue-reference`.
 - `releasetool.go` / release checklist: the publish-before-archive rule.
 - Depends on published `link-by-issue-reference` (task 1 is the npm release).
