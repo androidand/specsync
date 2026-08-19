@@ -4,6 +4,16 @@ All notable changes to this project are documented here. One entry per shipped
 OpenSpec change — see the linked issues for the full spec and discussion.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.12.0] - 2026-08-19
+
+### Added
+
+- `specsync doctor` now checks that the `openspec` binary is installed and reachable, reporting its path/version or a fix recommendation when missing; `doctor install --json` now also emits structured JSON. (#132)
+- Idea intake command (#101)
+- add specsync epic command to mint and wire coordination epics (#134) (32f773b2)
+
+<!-- 8 internal commit(s) omitted (chore/docs/ci/...) -->
+
 ## [0.11.2] - 2026-08-13
 
 ### Added
