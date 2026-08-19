@@ -93,7 +93,7 @@
     "group": "collaborate",
     "icon": "state",
     "title": "Agent skill diagnostics",
-    "body": "<code>specsync doctor</code> detects and diagnoses AI agent skill installations (Claude Code, OpenCode, Copilot, etc.), analyzes token usage, and recommends optimizations."
+    "body": "<code>specsync doctor</code> detects and diagnoses AI agent skill installations (Claude Code, OpenCode, Copilot, etc.), analyzes token usage, checks that the <code>openspec</code> CLI dependency is installed and reachable, and recommends fixes."
   },
   {
     "group": "collaborate",
