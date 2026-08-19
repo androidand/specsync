@@ -636,8 +636,8 @@ var commandMetadata = map[string]AgentCommandHelp{
 			"Re-running with the same title converges onto the existing epic instead of duplicating it",
 		},
 		Examples: []string{
-			"specsync epic 'Q3 auth rework' -child my-change -child other-org/other-repo#42 -dry-run",
-			"specsync epic 'Q3 auth rework' -child my-change",
+			"specsync epic 'Q3 auth rework' --child my-change --child other-org/other-repo#42 --dry-run",
+			"specsync epic 'Q3 auth rework' --child my-change",
 		},
 	},
 	"idea": {
