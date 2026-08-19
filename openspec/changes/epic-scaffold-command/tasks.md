@@ -1,11 +1,11 @@
 # Tasks
 
-- [ ] 1. **Close the release gap first**: publish the current main (with
-  `link-by-issue-reference`, 16/16 but npm still at 0.9.1 without it) so the
-  shipped cross-repo linking actually reaches installed copies; archive
-  `link-by-issue-reference` per the completion-hygiene rule. Add the
-  publish-before-archive line to the release checklist.
-  <!-- Deferred: outward-facing release-management step, done separately from the `epic` command itself. -->
+- [x] 1. **Close the release gap first**: `link-by-issue-reference` archived
+  (issue #18 closed, `spec:archived` added). The npm publish itself happens
+  via the release tag cut right after this change is archived — the same
+  tag that ships this change's own code — so both land in the same release.
+  The "publish-before-archive checklist line" turned out to already exist
+  (see task 6's correction): no separate checklist code was needed.
 - [x] 2. `epic` subcommand skeleton: parse `<title>`, `--repo` (optional,
   default auto-detect from git remote, same as `relate`/`link`), repeated
   `--child` via the existing `stringSlice` flag type (classify each as slug
