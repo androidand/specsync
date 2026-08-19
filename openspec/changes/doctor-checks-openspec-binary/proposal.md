@@ -50,3 +50,9 @@ No changes to sync/pull/scan behavior itself — this is diagnostics only.
   if desired).
 - No breaking changes to existing `doctor` output fields; new fields are
   additive.
+
+## Release note
+
+`specsync doctor` now checks that the `openspec` binary is installed and
+reachable, reporting its path/version or a fix recommendation when missing;
+`doctor install --json` now also emits structured JSON.

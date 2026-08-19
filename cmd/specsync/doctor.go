@@ -5,29 +5,75 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strings"
 )
 
 // DoctorResult represents diagnostic output.
 type DoctorResult struct {
-	Status          string                 `json:"status"`
-	Message         string                 `json:"message,omitempty"`
-	Installation    InstallationInfo       `json:"installation,omitempty"`
-	TokenAnalysis   TokenAnalysisInfo      `json:"token_analysis,omitempty"`
-	Recommendations []string               `json:"recommendations,omitempty"`
+	Status          string            `json:"status"`
+	Message         string            `json:"message,omitempty"`
+	Installation    InstallationInfo  `json:"installation,omitempty"`
+	TokenAnalysis   TokenAnalysisInfo `json:"token_analysis,omitempty"`
+	Recommendations []string          `json:"recommendations,omitempty"`
+	Dependencies    []DependencyInfo  `json:"dependencies,omitempty"`
+}
+
+// DependencyInfo describes a runtime CLI dependency specsync shells out to
+// (starting with `openspec`). Found is false, with Path/Version empty, when
+// the binary isn't reachable on $PATH. When found but its version can't be
+// determined (command failed or output unparseable), Found stays true and
+// Version stays empty — a diagnostic degrades gracefully rather than failing.
+type DependencyInfo struct {
+	Name    string `json:"name"`
+	Found   bool   `json:"found"`
+	Path    string `json:"path,omitempty"`
+	Version string `json:"version,omitempty"`
+}
+
+// openspecVersionRE matches the bare version string `openspec --version`
+// prints today (e.g. "1.5.0", no "v" prefix, no surrounding text). Anything
+// else is treated as unparseable rather than assumed to be a valid version.
+var openspecVersionRE = regexp.MustCompile(`^v?[0-9]+(\.[0-9]+){0,3}$`)
+
+// checkOpenspecBinary probes for the `openspec` binary on $PATH and,
+// best-effort, its reported version. It never returns an error: "not found"
+// and "version unparseable" are both reportable diagnostic states, not
+// failures the caller must handle.
+func checkOpenspecBinary() DependencyInfo {
+	info := DependencyInfo{Name: "openspec"}
+
+	path, err := exec.LookPath("openspec")
+	if err != nil {
+		return info
+	}
+	info.Found = true
+	info.Path = path
+
+	out, err := exec.Command("openspec", "--version").Output()
+	if err != nil {
+		return info
+	}
+	v := strings.TrimSpace(string(out))
+	if openspecVersionRE.MatchString(v) {
+		info.Version = v
+	}
+	return info
 }
 
 // InstallationInfo describes skill installation status.
 type InstallationInfo struct {
-	Primary         string `json:"primary"`
-	Installed       bool   `json:"installed"`
-	Version         string `json:"version,omitempty"`
-	BinaryVersion   string `json:"binary_version,omitempty"`
-	NeedsUpdate     bool   `json:"needs_update,omitempty"`
-	SizeBytes       int64  `json:"size_bytes"`
-	SizeKB          float64 `json:"size_kb"`
-	Lines           int    `json:"lines"`
-	Profile         string `json:"profile"`
+	Primary       string  `json:"primary"`
+	Installed     bool    `json:"installed"`
+	Version       string  `json:"version,omitempty"`
+	BinaryVersion string  `json:"binary_version,omitempty"`
+	NeedsUpdate   bool    `json:"needs_update,omitempty"`
+	SizeBytes     int64   `json:"size_bytes"`
+	SizeKB        float64 `json:"size_kb"`
+	Lines         int     `json:"lines"`
+	Profile       string  `json:"profile"`
 }
 
 // TokenAnalysisInfo describes token usage.
@@ -129,6 +175,15 @@ func doctorClaude(asJSON bool) {
 		}
 	}
 
+	dep := checkOpenspecBinary()
+	result.Dependencies = []DependencyInfo{dep}
+	if !dep.Found {
+		if result.Status == "ok" {
+			result.Status = "warning"
+		}
+		result.Recommendations = append(result.Recommendations, "Install with: openspec init")
+	}
+
 	if asJSON {
 		data, _ := json.MarshalIndent(result, "", "  ")
 		fmt.Println(string(data))
@@ -151,6 +206,8 @@ func doctorClaude(asJSON bool) {
 				fmt.Printf("Status: ⚠ Update available\n")
 			}
 		}
+		fmt.Println("\nDependencies:")
+		printDependency(dep)
 		if len(result.Recommendations) > 0 {
 			fmt.Println("\nRecommendations:")
 			for _, rec := range result.Recommendations {
@@ -158,6 +215,22 @@ func doctorClaude(asJSON bool) {
 			}
 		}
 	}
+}
+
+// SkillLocationInfo describes one agent's installed-skill location.
+type SkillLocationInfo struct {
+	Name        string  `json:"name"`
+	Path        string  `json:"path"`
+	Installed   bool    `json:"installed"`
+	Version     string  `json:"version,omitempty"`
+	SizeKB      float64 `json:"size_kb,omitempty"`
+	NeedsUpdate bool    `json:"needs_update,omitempty"`
+}
+
+// InstallResult is the machine-readable output of `doctor install --json`.
+type InstallResult struct {
+	Locations    []SkillLocationInfo `json:"locations"`
+	Dependencies []DependencyInfo    `json:"dependencies"`
 }
 
 // doctorInstall provides installation location diagnostics.
@@ -176,23 +249,62 @@ func doctorInstall(asJSON bool) {
 		{"OpenCode", filepath.Join(home, ".config", "opencode", "skills", "specsync")},
 	}
 
-	fmt.Printf("Installation Locations\n\n")
-	for _, loc := range locations {
+	locInfos := make([]SkillLocationInfo, len(locations))
+	for i, loc := range locations {
+		li := SkillLocationInfo{Name: loc.name, Path: loc.path}
 		skillFile := filepath.Join(loc.path, "SKILL.md")
 		if info, err := os.Stat(skillFile); err == nil {
 			content, _ := os.ReadFile(skillFile)
 			installedVersion := extractSkillVersion(content)
+			li.Installed = true
+			li.Version = installedVersion
+			li.SizeKB = float64(info.Size()) / 1024
+			if installedVersion != "" && versionCompare(version, installedVersion) {
+				li.NeedsUpdate = true
+			}
+		}
+		locInfos[i] = li
+	}
+
+	dep := checkOpenspecBinary()
+
+	if asJSON {
+		result := InstallResult{Locations: locInfos, Dependencies: []DependencyInfo{dep}}
+		data, _ := json.MarshalIndent(result, "", "  ")
+		fmt.Println(string(data))
+		return
+	}
+
+	fmt.Printf("Installation Locations\n\n")
+	for _, li := range locInfos {
+		if li.Installed {
 			versionStr := ""
-			if installedVersion != "" {
-				versionStr = fmt.Sprintf(" (v%s)", installedVersion)
-				if versionCompare(version, installedVersion) {
+			if li.Version != "" {
+				versionStr = fmt.Sprintf(" (v%s)", li.Version)
+				if li.NeedsUpdate {
 					versionStr += " ⚠ outdated"
 				}
 			}
-			fmt.Printf("%s: %s (%.1f KB)%s\n", loc.name, "✓ Installed", float64(info.Size())/1024, versionStr)
+			fmt.Printf("%s: %s (%.1f KB)%s\n", li.Name, "✓ Installed", li.SizeKB, versionStr)
 		} else {
-			fmt.Printf("%s: (not installed)\n", loc.name)
+			fmt.Printf("%s: (not installed)\n", li.Name)
 		}
+	}
+
+	fmt.Printf("\nExternal Dependencies\n\n")
+	printDependency(dep)
+}
+
+// printDependency prints one human-readable dependency-check line.
+func printDependency(dep DependencyInfo) {
+	if dep.Found {
+		versionStr := ""
+		if dep.Version != "" {
+			versionStr = fmt.Sprintf(" v%s", dep.Version)
+		}
+		fmt.Printf("%s: ✓ Found (%s)%s\n", dep.Name, dep.Path, versionStr)
+	} else {
+		fmt.Printf("%s: not found — install with: openspec init\n", dep.Name)
 	}
 }
 
