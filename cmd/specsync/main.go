@@ -100,7 +100,7 @@ func main() {
 
 	switch cmd {
 	case "version":
-		fmt.Println("specsync " + version)
+		fmt.Println("specsync " + versionString())
 	case "pull":
 		runPull(rest)
 	case "link":

@@ -16,20 +16,27 @@ from "I'm already on the latest release" in one command.
 - **WHEN** the binary was built by the release pipeline for a tagged version
 - **THEN** `specsync --version` reports that exact released version
 
-### Requirement: Require publication before archiving a shipped capability
-The release checklist SHALL require that a change reaching 16/16 (fully
-complete) tasks is published in the distributed package before it is
-archived, so a capability cannot be marked archived while still absent from
-what installed copies actually receive.
+### Requirement: A release SHALL NOT ship with a complete change left unarchived
+specsync SHALL fail a release build when a fully complete, already-shipped
+change is still sitting unarchived in `openspec/changes/`, so a capability
+cannot go out in a published release while its own planning artifacts claim
+it is still in progress.
 
-#### Scenario: Publish-before-archive enforced
-- **WHEN** a change's tasks reach full completion and the operator attempts
-  to archive it
-- **THEN** the checklist requires confirming the current release has been
-  published before archiving proceeds
+This is already implemented and already enforced, not new code from this
+change: `specsync release-plan -fail-on-archive-candidates` reports every
+complete change with commits in the release range that remains unarchived,
+and `.github/workflows/release.yml`'s "Enforce OpenSpec archive hygiene" step
+runs it before every tag's `goreleaser` step, failing the release job if any
+are found. This requirement documents that existing, already-shipped
+behavior for completeness — see design.md's correction.
 
-#### Scenario: Historical gap this prevents
-- **WHEN** a capability like `link-by-issue-reference` reaches 16/16 in git
-  but the published package still serves an older version
-- **THEN** the checklist surfaces that gap instead of allowing the change to
-  be archived while silently unavailable to installed copies
+#### Scenario: Archive candidate blocks the release
+- **WHEN** a tag is pushed and a complete, shipped change remains unarchived
+  in `openspec/changes/`
+- **THEN** `release-plan -fail-on-archive-candidates` exits non-zero
+- **AND** the release workflow fails before `goreleaser` runs, publishing
+  nothing
+
+#### Scenario: Nothing to archive
+- **WHEN** a tag is pushed and no complete, shipped change remains unarchived
+- **THEN** the hygiene check passes and the release proceeds

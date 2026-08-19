@@ -27,10 +27,19 @@
   (`epic-and-subissue-projection` hasn't landed), so every run takes the
   degraded `## Related` path today; a future provider implementation slots in
   without changing the caller.
-- [ ] 6. `--version` build info: distinguish a repo `dev` build from a
-  published release (goreleaser ldflags), so "installed lags repo" is
-  diagnosable in one command.
-  <!-- Deferred: independent of the `epic` command mechanically (design.md); its own capability, `release-gap-guard`. -->
+- [x] 6. `--version` build info: `versionString()` (`cmd/specsync/version.go`)
+  reports the VCS revision (via `runtime/debug.ReadBuildInfo()`, no ldflags
+  needed) for a local `dev` build, so it reads e.g. `dev (4075f69)` instead of
+  a bare `dev` — told apart from both a released binary and another dev
+  build.
+  Correction from design.md: the other half of this task — "the release
+  checklist grows one line: a capability shipped 16/16 MUST be published
+  before its change is archived" — turned out to already exist and already be
+  enforced in CI: `specsync release-plan -fail-on-archive-candidates` (in
+  `.github/workflows/release.yml`, "Enforce OpenSpec archive hygiene", runs
+  before every tag's goreleaser step) fails the release if a complete, shipped
+  change is still sitting unarchived. No new checklist code was needed; this
+  task only added the `--version` diagnostic.
 - [x] 7. Tests: idempotent re-run, mixed slug+ref children, cross-repo
   children, dry-run parity with real run (the dry-runner pattern) — see
   `epic_test.go`.
