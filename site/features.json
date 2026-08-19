@@ -85,6 +85,12 @@
   },
   {
     "group": "collaborate",
+    "icon": "idempotent",
+    "title": "Cross-repo epic scaffolding",
+    "body": "<code>specsync epic \"Feature X\" --repo org/planning --child org/backend#12 --child frontend-slug</code> mints a coordination issue and wires every child — local change or existing issue, any repo — to it, idempotently."
+  },
+  {
+    "group": "collaborate",
     "icon": "flow",
     "title": "CLI self-documentation",
     "body": "<code>specsync agent-help</code> provides command guidance without manuals. Use <code>--json</code> for machine-readable schema suitable for agents and automation."
