@@ -149,6 +149,20 @@ When related changes need to reference each other:
    ```
    GitHub issues now have mutual "## Related" sections.
 
+## Coordinating Cross-Repo Work with an Epic
+
+The canonical scenario: "We want feature X. It needs Y added to the backend repo and Z to use it in the frontend repo." One command mints the coordination issue and wires every child to it, in one step:
+
+```bash
+specsync epic "Feature X: cross-repo widgets" --repo owner/planning \
+  --child owner/backend#12 \
+  --child frontend-widget-view   # a local change slug in this repo's openspec tree
+```
+
+This creates one `type:epic` issue in `owner/planning`, attaches `owner/backend#12` and the frontend change's issue to it (syncing the frontend change first if it has no issue yet), and edits each child's body with a `## Related` backlink to the epic. Re-running with the same title and children converges instead of duplicating — safe to run again after adding another `--child`.
+
+Once `epic-and-subissue-projection` lands, the same command attaches children as native GitHub sub-issues instead of the `## Related` fallback — no change to how you call it. Once `issue-dependency-sync` lands, add `--blocked-by owner/backend#12` on a child to record real dependency direction between children of the same epic.
+
 ## Finding Related Work
 
 Before starting new work:

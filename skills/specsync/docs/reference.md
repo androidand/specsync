@@ -41,6 +41,23 @@ specsync link [-dry-run] <change1> <change2> [<change3>...]
 
 Creates `links.md` in each change with references to others. Arguments can be change slugs or issue references (`#N`, `owner/repo#N`, URLs).
 
+## epic
+
+Mint (or converge onto) a coordination epic issue and wire cross-repo children to it — the "feature X needs Y in the backend repo and Z in the frontend repo" workflow.
+
+```
+specsync epic <title> [--repo owner/name] [--child <slug|owner/repo#N|url>]... [--dry-run]
+```
+
+**Flags:**
+- `--repo owner/name` — Repo the epic issue itself lives in (default: auto-detect from git remote). Only bare `#N` children resolve against it; `owner/repo#N` and URL children ignore it.
+- `--child <slug|owner/repo#N|url>` — A child to attach; repeatable, may span different repos. A local change slug with no synced issue yet is synced automatically before being attached.
+- `--dry-run` — Preview without creating or editing any issue.
+
+Creates one issue labeled `type:epic` and `specsync`, keyed by an identity marker derived from the normalized title — re-running with the same title converges onto the same issue instead of duplicating it. Each child is wired to the epic (and the epic to each child) via a managed `## Related` section, upserted idempotently, until native GitHub sub-issue attachment (`epic-and-subissue-projection`) lands. Combine with `--blocked-by`/`--blocks` (once `issue-dependency-sync` lands) to record real dependency direction between children.
+
+The epic's body is fully regenerated on every run — it is not a spec, so there is no `proposal.md` to preserve, and a manual edit to the issue body is overwritten on the next `specsync epic` call.
+
 ## scan
 
 Scan for existing work in a code area or topic.

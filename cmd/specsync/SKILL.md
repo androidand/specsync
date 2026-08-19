@@ -40,6 +40,11 @@ specsync changes --json             # list all
 specsync link <change1> <change2>
 ```
 
+**Mint a coordination epic and wire its children:**
+```bash
+specsync epic "Feature X" --repo owner/planning --child owner/backend#12 --child frontend-slug
+```
+
 **Get help on any command:**
 ```bash
 specsync agent-help <command>      # read documentation
