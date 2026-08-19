@@ -31,7 +31,7 @@ var knownSubcommands = map[string]bool{
 	"release-plan": true, "changelog": true, "install-skill": true,
 	"changes": true, "set-stage": true, "set-priority": true, "note": true,
 	"sync": true, "audit": true, "audit-tasks": true, "validate": true,
-	"spinoff": true, "pr-body": true, "verify": true, "relate": true, "work-graph": true,
+	"spinoff": true, "pr-body": true, "verify": true,
 	"agent-help": true, "doctor": true, "idea": true, "ideas": true, "archive": true,
 	"epic": true,
 }
@@ -94,7 +94,7 @@ func deprecatedSlugFlag(args []string) error {
 func main() {
 	cmd, rest, err := resolveSubcommand(os.Args[1:])
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "specsync: %v\n\nRun with no subcommand (optionally with flags) to sync, or use one of: pull, link, scan, trace, release-plan, changelog, install-skill, changes, set-stage, set-priority, note, audit, audit-tasks, validate, spinoff, pr-body, verify, relate, work-graph, idea, ideas, archive, epic\n", err)
+		fmt.Fprintf(os.Stderr, "specsync: %v\n\nRun with no subcommand (optionally with flags) to sync, or use one of: pull, link, scan, trace, release-plan, changelog, install-skill, changes, set-stage, set-priority, note, audit, audit-tasks, validate, spinoff, pr-body, verify, idea, ideas, archive, epic\n", err)
 		os.Exit(2)
 	}
 
@@ -177,6 +177,25 @@ func containsFlag(args []string, name string) bool {
 		}
 	}
 	return false
+}
+
+// reorderFlagsFirst moves every flag token (anything starting with "-") ahead
+// of positional args, preserving relative order within each group. Go's flag
+// package stops parsing at the first positional token, so a flag written
+// after a subcommand name (e.g. "agent-help sync -json") is otherwise left
+// unparsed. Only safe for all-boolean flag sets, where no flag consumes a
+// separate value token.
+func reorderFlagsFirst(args []string) []string {
+	flags := make([]string, 0, len(args))
+	positional := make([]string, 0, len(args))
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "-") {
+			flags = append(flags, arg)
+		} else {
+			positional = append(positional, arg)
+		}
+	}
+	return append(flags, positional...)
 }
 
 // stringSlice implements flag.Value for repeatable -provider flags.

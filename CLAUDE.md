@@ -23,7 +23,7 @@ SpecSync uses OpenSpec and itself (dogfooding) to manage development.
 - **Implementation**: Changes reference GitHub issues synced by specsync
 - **Dogfooding**: This repo dogfoods specsync; every issue is spec-generated
 - **CI gates**: Changelog linking, archive hygiene, task accuracy enforced
-- **Agent tools**: `specsync agent-help`, `specsync doctor`, `specsync changes --json`
+- **Agent tools**: `specsync agent-help`, `specsync doctor`, `specsync changes -json`
 
 ## Where to Go Next
 
