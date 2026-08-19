@@ -10,7 +10,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - `specsync doctor` now checks that the `openspec` binary is installed and reachable, reporting its path/version or a fix recommendation when missing; `doctor install --json` now also emits structured JSON. (#132)
 - Idea intake command (#101)
-- add specsync epic command to mint and wire coordination epics (#134) (32f773b2)
+- `specsync epic <title> --repo owner/name --child ...` mints a `type:epic` coordination issue and wires cross-repo children to it — local change slugs or existing issue references — idempotently. (#100)
 
 <!-- 8 internal commit(s) omitted (chore/docs/ci/...) -->
 
