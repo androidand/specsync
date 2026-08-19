@@ -4,6 +4,14 @@ All notable changes to this project are documented here. One entry per shipped
 OpenSpec change — see the linked issues for the full spec and discussion.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.12.1] - 2026-08-19
+
+### Changed
+
+- Fixed `specsync relate` silently running a live sync instead of erroring (it was already unwired; now it fails loudly like any other unknown subcommand). Fixed `agent-help`/`doctor` ignoring `--json` when placed after the subcommand name. Added `agent-help` entries for `doctor`, `epic`, `idea`, `ideas`, `archive`, `set-priority`, and `note`. Standardized CLI help text and docs on single-dash flag style throughout. (#135)
+
+<!-- 3 internal commit(s) omitted (chore/docs/ci/...) -->
+
 ## [0.12.0] - 2026-08-19
 
 ### Added
