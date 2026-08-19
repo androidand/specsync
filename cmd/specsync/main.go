@@ -33,6 +33,7 @@ var knownSubcommands = map[string]bool{
 	"sync": true, "audit": true, "audit-tasks": true, "validate": true,
 	"spinoff": true, "pr-body": true, "verify": true, "relate": true, "work-graph": true,
 	"agent-help": true, "doctor": true, "idea": true, "ideas": true, "archive": true,
+	"epic": true,
 }
 
 // knownConfusions maps a word someone might reach for by habit (e.g. git's
@@ -93,13 +94,13 @@ func deprecatedSlugFlag(args []string) error {
 func main() {
 	cmd, rest, err := resolveSubcommand(os.Args[1:])
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "specsync: %v\n\nRun with no subcommand (optionally with flags) to sync, or use one of: pull, link, scan, trace, release-plan, changelog, install-skill, changes, set-stage, set-priority, note, audit, audit-tasks, validate, spinoff, pr-body, verify, relate, work-graph, idea, ideas, archive\n", err)
+		fmt.Fprintf(os.Stderr, "specsync: %v\n\nRun with no subcommand (optionally with flags) to sync, or use one of: pull, link, scan, trace, release-plan, changelog, install-skill, changes, set-stage, set-priority, note, audit, audit-tasks, validate, spinoff, pr-body, verify, relate, work-graph, idea, ideas, archive, epic\n", err)
 		os.Exit(2)
 	}
 
 	switch cmd {
 	case "version":
-		fmt.Println("specsync " + version)
+		fmt.Println("specsync " + versionString())
 	case "pull":
 		runPull(rest)
 	case "link":
@@ -146,6 +147,8 @@ func main() {
 		runIdeas(rest)
 	case "archive":
 		runArchive(rest)
+	case "epic":
+		runEpic(rest)
 	default:
 		runSync(rest)
 	}
@@ -718,29 +721,7 @@ func runLink(args []string) {
 		}
 
 		provider := makeProvider(lr.Repo, false, "github", "")
-		// Fetch the issue to get existing title, body, and labels.
-		reader, ok := provider.(specsync.IssueReader)
-		if !ok {
-			fail(fmt.Errorf("provider %T does not support reading issues", provider))
-		}
-		item, err := reader.Get(context.Background(), lr.ID)
-		if err != nil {
-			fail(fmt.Errorf("fetch issue %s: %w", lr.Ref.URL, err))
-		}
-
-		// Upsert the Related section in the body.
-		edited := specsync.UpsertRelatedSection(item.Body, others)
-
-		// Push the edited body back, preserving title and labels.
-		workItem := specsync.WorkItem{
-			Slug:         "",
-			Title:        item.Title,
-			Body:         edited,
-			Labels:       item.Labels,
-			ManageClosed: false,
-		}
-		_, err = provider.Push(context.Background(), workItem, &lr.Ref)
-		if err != nil {
+		if _, err := specsync.PushRelatedEdit(context.Background(), provider, lr.Ref, "", others); err != nil {
 			fail(fmt.Errorf("push edited body for %s: %w", lr.Ref.URL, err))
 		}
 		fmt.Printf("  linked  %s\n", lr.Ref.URL)
