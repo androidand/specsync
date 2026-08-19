@@ -5,9 +5,9 @@
   shipped cross-repo linking actually reaches installed copies; archive
   `link-by-issue-reference` per the completion-hygiene rule. Add the
   publish-before-archive line to the release checklist.
-- [ ] 2. `epic` subcommand skeleton: parse `<title>`, `-repo` (optional,
+- [ ] 2. `epic` subcommand skeleton: parse `<title>`, `--repo` (optional,
   default auto-detect from git remote, same as `relate`/`link`), repeated
-  `-child` via the existing `stringSlice` flag type (classify each as slug
+  `--child` via the existing `stringSlice` flag type (classify each as slug
   vs issue ref via `classifyArg` from `link.go`), `-dry-run`.
 - [ ] 3. Epic creation: `type:epic` + `specsync` labels (explicit
   `WorkItem.Labels`, bypassing the stage/priority default), roll-up body

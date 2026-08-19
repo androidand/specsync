@@ -3,7 +3,7 @@
 ## Why
 
 The cross-repo stack is planned as clean layers — and, as of 2026-07-30, partly
-shipped: `cross-repo-linked-issues` (archived) gave `link` + `-repo`;
+shipped: `cross-repo-linked-issues` (archived) gave `link` + `--repo`;
 `link-by-issue-reference` (16/16) lets one `link` call span repos with no local
 scaffolding, proven live today by cross-linking
 `androidand/brick-now#217 ↔ androidand/tengil#70 ↔ androidand/tengil#35`.
@@ -29,12 +29,12 @@ still serves 0.9.1 without it).
 
 ## What Changes
 
-- **`specsync epic <title> [-repo owner/name] [-child <slug|owner/repo#N|url>]...`**
+- **`specsync epic <title> [--repo owner/name] [--child <slug|owner/repo#N|url>]...`**
   One command that:
   1. creates the epic as a coordination issue (`type:epic` label, no local
      change directory — an epic is not a spec) in the target repo;
-  2. attaches every `-child` — a local change slug (synced first if needed,
-     honoring the existing `-repo` behavior) or an existing issue reference in
+  2. attaches every `--child` — a local change slug (synced first if needed,
+     honoring the existing `--repo` behavior) or an existing issue reference in
      any repo — as a **native GitHub sub-issue** once `epic-and-subissue-
      projection` lands, and as a managed `## Related` cross-reference until
      then (graceful degradation, same body-upsert helper);
@@ -54,21 +54,21 @@ still serves 0.9.1 without it).
 From any repo:
 
 ```
-specsync epic "Feature X: cross-repo widgets" -repo androidand/planning \
-  -child androidand/backend#12 \
-  -child frontend-widget-view        # local slug in this repo's openspec tree
+specsync epic "Feature X: cross-repo widgets" --repo androidand/planning \
+  --child androidand/backend#12 \
+  --child frontend-widget-view        # local slug in this repo's openspec tree
 ```
 
 produces: one `type:epic` issue in `androidand/planning`; backend#12 and the
 frontend change's issue attached (sub-issues when projection exists, Related
 until then); each child body pointing back at the epic; a second identical
 invocation changing nothing. With `issue-dependency-sync` landed, adding
-`-blocked-by androidand/backend#12` on a child records real direction — that
+`--blocked-by androidand/backend#12` on a child records real direction — that
 flag belongs to that change and is only *reserved* here.
 
 ## Release note
 
-Add `specsync epic <title> -repo owner/name -child ...` (repeatable `-child`):
+Add `specsync epic <title> --repo owner/name --child ...` (repeatable `--child`):
 mints a `type:epic` coordination issue and wires cross-repo children to it —
 local change slugs or existing issue references — idempotently. Falls back to
 a managed `## Related` cross-link until native sub-issue projection lands.
@@ -79,7 +79,7 @@ a managed `## Related` cross-link until native sub-issue projection lands.
   (`epic-and-subissue-projection` owns them; this command becomes their
   consumer).
 - Dependency direction (`issue-dependency-sync`).
-- Cross-repo *local* discovery — worktree/workset awareness
+- Cross--repo *local* discovery — worktree/workset awareness
   (`openspec-references-coordination`).
 - Non-GitHub providers (`pluggable-providers`).
 

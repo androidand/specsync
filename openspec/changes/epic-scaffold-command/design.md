@@ -4,7 +4,7 @@ Every piece the epic command needs already exists as a separate primitive:
 
 - `classifyArg(arg, openspecDir, repo string) (linkEntry, error)` (`link.go`)
   already classifies an argument as a local change slug or an issue reference
-  (`#N`, `owner/repo#N`, URL), resolving bare `#N` against `-repo`.
+  (`#N`, `owner/repo#N`, URL), resolving bare `#N` against `--repo`.
 - `UpsertRelatedSection(body string, links []Ref) string` (`link.go`) already
   renders/replaces a managed `## Related` section idempotently.
 - `GitHubProvider.Push(ctx, item WorkItem, existing *Ref) (Ref, error)`
@@ -29,8 +29,8 @@ Decisions).
 ## Goals / Non-Goals
 
 **Goals:**
-- One command, `specsync epic <title> -repo owner/name -child ...`
-  (repeatable `-child`), that creates or converges an epic issue and wires
+- One command, `specsync epic <title> --repo owner/name --child ...`
+  (repeatable `--child`), that creates or converges an epic issue and wires
   every child to it, cross-repo, idempotently.
 - Reuse `classifyArg`, `UpsertRelatedSection`, and `Push`/`Find` completely
   unchanged — no new provider interface methods for the degraded (`##
@@ -107,14 +107,14 @@ Decisions).
   because the whole body between the marker and end-of-file is
   specsync-owned for an epic (no human-authored prose to preserve, unlike a
   change's proposal).
-- **`-repo` is optional, defaulting to the current repo's git remote.**
-  Consistent with `relate`'s `-repo` ("target repo as owner/name (default:
+- **`--repo` is optional, defaulting to the current repo's git remote.**
+  Consistent with `relate`'s `--repo` ("target repo as owner/name (default:
   auto-detect from git remote)") and every other command's flag — the
   proposal's own usage line already brackets it as optional
-  (`[-repo owner/name]`), so `epic.go` must not make it required in practice.
+  (`[--repo owner/name]`), so `epic.go` must not make it required in practice.
   Only bare `#N` children resolve against it; `owner/repo#N` and URL children
   ignore it entirely.
-- **`-child` is repeatable via the existing `stringSlice` flag type**
+- **`--child` is repeatable via the existing `stringSlice` flag type**
   (`cmd/specsync/main.go`, already used for `-provider`) — no new flag
   plumbing needed, just `fs.Var(&children, "child", ...)`.
 - **`--version` build-info (task 6) is a separate, independently-landable
