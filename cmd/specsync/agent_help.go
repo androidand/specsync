@@ -92,7 +92,7 @@ var commandMetadata = map[string]AgentCommandHelp{
 		Examples: []string{
 			"specsync -dry-run -change my-change",
 			"specsync -change my-change",
-			"specsync sync --json -change my-change",
+			"specsync sync -json -change my-change",
 		},
 	},
 	"pull": {
@@ -139,7 +139,7 @@ var commandMetadata = map[string]AgentCommandHelp{
 		Examples: []string{
 			"specsync pull -issue 42 -dry-run",
 			"specsync pull -issue 42",
-			"specsync pull -issue 42 --json",
+			"specsync pull -issue 42 -json",
 		},
 	},
 	"link": {
@@ -195,7 +195,7 @@ var commandMetadata = map[string]AgentCommandHelp{
 		},
 		Examples: []string{
 			"specsync scan cmd/specsync/ 'label creation'",
-			"specsync scan cmd/specsync/ --json",
+			"specsync scan cmd/specsync/ -json",
 			"specsync scan openspec/changes/ reconcile",
 		},
 	},
@@ -229,7 +229,7 @@ var commandMetadata = map[string]AgentCommandHelp{
 		Examples: []string{
 			"specsync trace",
 			"specsync trace -change my-change",
-			"specsync trace --json",
+			"specsync trace -json",
 		},
 	},
 	"changes": {
@@ -262,7 +262,7 @@ var commandMetadata = map[string]AgentCommandHelp{
 		Examples: []string{
 			"specsync changes",
 			"specsync changes --stage backlog",
-			"specsync changes --json",
+			"specsync changes -json",
 		},
 	},
 	"set-stage": {
@@ -327,7 +327,7 @@ var commandMetadata = map[string]AgentCommandHelp{
 		Examples: []string{
 			"specsync release-plan",
 			"specsync release-plan --since v0.9.0",
-			"specsync release-plan --json",
+			"specsync release-plan -json",
 		},
 	},
 	"changelog": {
@@ -423,7 +423,7 @@ var commandMetadata = map[string]AgentCommandHelp{
 		},
 		Examples: []string{
 			"specsync audit",
-			"specsync audit --json",
+			"specsync audit -json",
 		},
 	},
 	"audit-tasks": {
@@ -450,7 +450,7 @@ var commandMetadata = map[string]AgentCommandHelp{
 		},
 		Examples: []string{
 			"specsync audit-tasks",
-			"specsync audit-tasks --json",
+			"specsync audit-tasks -json",
 		},
 	},
 	"validate": {
@@ -477,7 +477,7 @@ var commandMetadata = map[string]AgentCommandHelp{
 		},
 		Examples: []string{
 			"specsync validate",
-			"specsync validate --json",
+			"specsync validate -json",
 		},
 	},
 	"spinoff": {
@@ -566,13 +566,258 @@ var commandMetadata = map[string]AgentCommandHelp{
 			"specsync install-skill --claude-code --profile docs",
 		},
 	},
+	"doctor": {
+		Command:     "doctor",
+		Description: "Diagnose skill installation, environment, and context health.",
+		Mutates:     false,
+		Workflow: AgentCommandWorkflow{
+			Position:      "anytime",
+			RelatedBefore: []string{},
+			RelatedAfter:  []string{"install-skill"},
+		},
+		Flags: []AgentCommandFlag{
+			{
+				Name:        "json",
+				Type:        "boolean",
+				Required:    false,
+				Default:     false,
+				Description: "Emit machine-readable JSON output",
+			},
+			{
+				Name:        "skip-skill-update",
+				Type:        "boolean",
+				Required:    false,
+				Default:     false,
+				Description: "Skip auto-updating skill files before diagnosing",
+			},
+		},
+		SafetyRules: []string{
+			"Read-only operation",
+		},
+		Examples: []string{
+			"specsync doctor",
+			"specsync doctor install -json",
+			"specsync doctor context -json",
+		},
+	},
+	"epic": {
+		Command:     "epic",
+		Description: "Create a coordination issue and wire children to it.",
+		Mutates:     true,
+		Workflow: AgentCommandWorkflow{
+			Position:      "plan",
+			RelatedBefore: []string{"changes"},
+			RelatedAfter:  []string{"sync"},
+		},
+		Flags: []AgentCommandFlag{
+			{
+				Name:        "repo",
+				Type:        "string",
+				Required:    false,
+				Default:     "auto-detect",
+				Description: "Target repo for the epic issue, as owner/name",
+			},
+			{
+				Name:        "child",
+				Type:        "string",
+				Required:    false,
+				Description: "A child to attach: local change slug, owner/repo#N, bare #N, or issue URL (repeatable)",
+			},
+			{
+				Name:        "dry-run",
+				Type:        "boolean",
+				Required:    false,
+				Default:     false,
+				Description: "Print what would happen without creating or editing any issue",
+			},
+		},
+		SafetyRules: []string{
+			"Use -dry-run to preview before creating or editing issues",
+			"Re-running with the same title converges onto the existing epic instead of duplicating it",
+		},
+		Examples: []string{
+			"specsync epic 'Q3 auth rework' -child my-change -child other-org/other-repo#42 -dry-run",
+			"specsync epic 'Q3 auth rework' -child my-change",
+		},
+	},
+	"idea": {
+		Command:     "idea",
+		Description: "Capture a free-text idea as a stage:intake issue.",
+		Mutates:     true,
+		Workflow: AgentCommandWorkflow{
+			Position:      "capture",
+			RelatedBefore: []string{},
+			RelatedAfter:  []string{"ideas", "pull"},
+		},
+		Flags: []AgentCommandFlag{
+			{
+				Name:        "repo",
+				Type:        "string",
+				Required:    false,
+				Default:     "config ideas_repo, $SPECSYNC_IDEAS_REPO, or current repo",
+				Description: "Repo to create the idea issue in, as owner/name",
+			},
+		},
+		SafetyRules: []string{
+			"Creates a real GitHub issue — there is no -dry-run",
+		},
+		Examples: []string{
+			"specsync idea 'Consider caching the trace graph'",
+			"echo 'Consider caching the trace graph' | specsync idea",
+		},
+	},
+	"ideas": {
+		Command:     "ideas",
+		Description: "List open stage:intake issues for the repo.",
+		Mutates:     false,
+		Workflow: AgentCommandWorkflow{
+			Position:      "review",
+			RelatedBefore: []string{},
+			RelatedAfter:  []string{"pull"},
+		},
+		Flags: []AgentCommandFlag{
+			{
+				Name:        "repo",
+				Type:        "string",
+				Required:    false,
+				Default:     "config ideas_repo, $SPECSYNC_IDEAS_REPO, or current repo",
+				Description: "Repo to list idea issues from, as owner/name",
+			},
+			{
+				Name:        "json",
+				Type:        "boolean",
+				Required:    false,
+				Default:     false,
+				Description: "Emit machine-readable JSON output",
+			},
+		},
+		SafetyRules: []string{
+			"Read-only operation",
+		},
+		Examples: []string{
+			"specsync ideas",
+			"specsync ideas -json",
+		},
+	},
+	"archive": {
+		Command:     "archive",
+		Description: "Archive a completed change: final push, close, then retention.",
+		Mutates:     true,
+		Workflow: AgentCommandWorkflow{
+			Position:      "after-complete",
+			RelatedBefore: []string{"changes", "sync"},
+			RelatedAfter:  []string{"verify"},
+		},
+		Flags: []AgentCommandFlag{
+			{
+				Name:        "change",
+				Type:        "string",
+				Required:    true,
+				Description: "Change to archive",
+			},
+			{
+				Name:        "repo",
+				Type:        "string",
+				Required:    false,
+				Default:     "auto-detect",
+				Description: "Target repo as owner/name",
+			},
+			{
+				Name:        "retain",
+				Type:        "string",
+				Required:    false,
+				Description: "Retention policy: move (keep) or prune (delete)",
+			},
+			{
+				Name:        "force",
+				Type:        "boolean",
+				Required:    false,
+				Default:     false,
+				Description: "Archive even when tasks are unchecked",
+			},
+			{
+				Name:        "dry-run",
+				Type:        "boolean",
+				Required:    false,
+				Default:     false,
+				Description: "Print the plan without making changes",
+			},
+		},
+		SafetyRules: []string{
+			"Use -dry-run to preview before archiving",
+			"Refuses unchecked-task changes unless -force is set",
+		},
+		Examples: []string{
+			"specsync archive -change my-change -dry-run",
+			"specsync archive -change my-change -retain move",
+		},
+	},
+	"set-priority": {
+		Command:     "set-priority",
+		Description: "Set or unset a change's numeric priority override.",
+		Mutates:     true,
+		Workflow: AgentCommandWorkflow{
+			Position:      "plan",
+			RelatedBefore: []string{"changes"},
+			RelatedAfter:  []string{"changes"},
+		},
+		Flags: []AgentCommandFlag{
+			{
+				Name:        "openspec",
+				Type:        "string",
+				Required:    false,
+				Default:     "openspec",
+				Description: "Path to the openspec/ directory",
+			},
+		},
+		SafetyRules: []string{
+			"Takes positional args: <change> <1-100|unset>, not flags",
+		},
+		Examples: []string{
+			"specsync set-priority my-change 80",
+			"specsync set-priority my-change unset",
+		},
+	},
+	"note": {
+		Command:     "note",
+		Description: "Append a discovery line to a change's discoveries.md.",
+		Mutates:     true,
+		Workflow: AgentCommandWorkflow{
+			Position:      "implementation",
+			RelatedBefore: []string{},
+			RelatedAfter:  []string{"spinoff"},
+		},
+		Flags: []AgentCommandFlag{
+			{
+				Name:        "openspec",
+				Type:        "string",
+				Required:    false,
+				Default:     "openspec",
+				Description: "Path to the openspec/ directory",
+			},
+			{
+				Name:        "dry-run",
+				Type:        "boolean",
+				Required:    false,
+				Default:     false,
+				Description: "Show what would be written without modifying files",
+			},
+		},
+		SafetyRules: []string{
+			"Takes positional args: <change> <text>, not a -text flag",
+		},
+		Examples: []string{
+			"specsync note my-change 'Found edge case in X' -dry-run",
+			"specsync note my-change 'Found edge case in X'",
+		},
+	},
 }
 
 // runAgentHelp handles the agent-help command.
 func runAgentHelp(args []string) {
 	fs := flag.NewFlagSet("agent-help", flag.ExitOnError)
 	jsonFlag := fs.Bool("json", false, "emit machine-readable JSON output")
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(reorderFlagsFirst(args)); err != nil {
 		fail(err)
 	}
 
@@ -632,8 +877,8 @@ func renderAgentHelpOverview(asJSON bool) {
 			"commands":    availableCommands(),
 			"tips": []string{
 				"Use `specsync agent-help <command>` for detailed help on any command",
-				"Use `specsync agent-help <command> --json` for machine-readable output",
-				"All output formats support --json for automation",
+				"Use `specsync agent-help <command> -json` for machine-readable output",
+				"All output formats support -json for automation",
 				"Always use -dry-run before making changes",
 			},
 		}
@@ -649,7 +894,7 @@ SpecSync manages OpenSpec changes and keeps them in sync with GitHub Issues.
 For help on any command, use:
 
   specsync agent-help <command>
-  specsync agent-help <command> --json      # for JSON output
+  specsync agent-help <command> -json       # for JSON output
 
 Available commands:`)
 		for _, cmd := range availableCommands() {
@@ -662,7 +907,7 @@ Available commands:`)
 ## Tips
 
 - Always use -dry-run before making changes
-- Many commands support --json for machine-readable output
+- Many commands support -json for machine-readable output
 - See agent-help <command> for full details and flags
 - Read AGENTS.md for workflow patterns
 `)

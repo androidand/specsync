@@ -104,7 +104,6 @@ specsync [sync]          # project changes -> issues (default command)
 specsync pull            # pull an issue into a local change
 specsync scan            # what already exists in an area?
 specsync trace           # print the raw spec<->commit<->issue link graph
-specsync relate          # print the work graph around a change
 specsync link            # cross-link two or more changes
 specsync spinoff         # spawn emergent work as a linked sibling
 specsync epic            # create a coordination issue and wire children
@@ -471,7 +470,7 @@ See what you've captured that nobody has triaged yet:
 
 ```bash
 specsync ideas                    # table output, oldest first
-specsync ideas --json             # JSON for scripting
+specsync ideas -json              # JSON for scripting
 ```
 
 ### Triage: pull → triage → act
@@ -491,21 +490,6 @@ between them — for debugging or scripting:
 specsync trace -change my-feature      # scope to one change
 specsync trace -since v0.3.0 -json     # commits since a tag, as JSON
 ```
-
-### `relate` — the work graph for planning
-
-Prints the connected slice around a change: related specs (via `links.md`),
-their issues, linked PRs, merge commits, and releases. Built on the
-**asserted-graph principle**: every edge is authored in `links.md`/markers or
-read as fact from `git`/`gh` — never inferred or probabilistic.
-
-```bash
-specsync relate -change my-feature     # graph around one change
-specsync relate -path src/auth.ts      # changes touching a file
-```
-
-Read-only: never writes to disk or the tracker. Supports delta annotations
-when `openspec` is on PATH (tags spec nodes with ADDED/MODIFIED/REMOVED counts).
 
 **Non-goals** (parked for future changes):
 - **`graph.json` export** — no consumer exists yet

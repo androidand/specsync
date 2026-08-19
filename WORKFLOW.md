@@ -223,7 +223,7 @@ If `specsync verify` warns about a PR missing a reference, add one before mergin
 
 This should not happen. If it does:
 1. Check if `.specsync/board.json` exists and is readable
-2. Verify human-move detection ran: `specsync sync --dry-run` should show StatusSkipped
+2. Verify human-move detection ran: `specsync sync -dry-run` should show StatusSkipped
 3. If not skipping, the prior base state may be stale; delete `.specsync/board.json` and re-sync
 
 ### "My priority/stage isn't being used"

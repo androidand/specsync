@@ -88,7 +88,7 @@ func runDoctor(args []string) {
 	fs := flag.NewFlagSet("doctor", flag.ExitOnError)
 	jsonFlag := fs.Bool("json", false, "emit machine-readable JSON output")
 	skipUpdate := fs.Bool("skip-skill-update", false, "skip auto-updating skill files")
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(reorderFlagsFirst(args)); err != nil {
 		fail(err)
 	}
 
