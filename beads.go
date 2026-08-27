@@ -254,7 +254,7 @@ func (p *BeadsProvider) create(ctx context.Context, title, description, parent s
 // epicDescription is the proposal body with the identity marker appended — the
 // inverse of what splitBody strips on the way back in.
 func (p *BeadsProvider) epicDescription(item WorkItem) string {
-	proposal, _, _, _, _ := splitBody(item.Body, item.Title)
+	proposal, _, _, _, _, _ := splitBody(item.Body, item.Title)
 	return strings.TrimSpace(proposal) + "\n\n" + marker(item.Slug)
 }
 
@@ -269,7 +269,7 @@ type taskState struct {
 // WorkItem body, reusing the same body splitter and task-line parser the
 // reconcile path uses so child-bead titles match exactly what reconcile keys on.
 func itemTasks(item WorkItem) []taskState {
-	_, tasks, _, _, _ := splitBody(item.Body, item.Title)
+	_, tasks, _, _, _, _ := splitBody(item.Body, item.Title)
 	var out []taskState
 	for _, line := range strings.Split(tasks, "\n") {
 		if text, checked, ok := parseTaskLine(line); ok {

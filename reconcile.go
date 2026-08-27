@@ -296,7 +296,7 @@ func externalTaskStates(ctx context.Context, prov WorkProvider, slug string, ref
 // keyed by normalized task text. It reuses splitBody so it sees exactly the
 // managed Tasks section specsync renders; only [ ]/[x] lines are recorded.
 func parseIssueTaskStates(body string) map[string]bool {
-	_, tasks, _, _, _ := splitBody(body, "")
+	_, tasks, _, _, _, _ := splitBody(body, "")
 	states := map[string]bool{}
 	for _, line := range strings.Split(tasks, "\n") {
 		if text, checked, ok := parseTaskLine(line); ok {

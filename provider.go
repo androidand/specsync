@@ -46,6 +46,11 @@ type WorkItem struct {
 	Closed       bool     // desired state when ManageClosed is true
 	ManageClosed bool     // provider must enforce the desired open/closed state
 	Labels       []string // explicit labels (when non-nil, overrides Stage/Priority)
+
+	// DesignNotes is design.md's raw content, already folded into Body's
+	// "## Design notes" section. Carried separately so a provider with a body
+	// size limit (GitHub) can move it to a linked comment instead.
+	DesignNotes string
 }
 
 // IsComplete reports whether the work item is fully done: either archived
@@ -124,6 +129,15 @@ type IssueMarkerWriter interface {
 	// given its current body. It reports whether a write occurred and is
 	// idempotent: a body already carrying the marker triggers no write.
 	EnsureMarker(ctx context.Context, id, slug, body string) (bool, error)
+}
+
+// DesignNotesCommentReader is an optional, type-asserted provider capability:
+// reading back a design-notes overflow comment's content by issue id, so
+// `pull` can reconstitute design.md when the issue body carries only a
+// linked stub. found is false when no such comment exists or it's marked
+// stale; providers without comment overflow simply don't implement it.
+type DesignNotesCommentReader interface {
+	ReadDesignNotesComment(ctx context.Context, issueID, slug string) (content string, found bool, err error)
 }
 
 // TaskStateReader is an optional, type-asserted provider capability: report the
