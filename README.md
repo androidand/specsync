@@ -719,6 +719,16 @@ WorkItem                          ->  issue       (via a pluggable provider)
   saved as `original-ask.md` (write-once, never overwritten). It renders as
   `## Original ask` in the issue body, providing a stable reference to what was
   requested before scope evolved.
+- **Design notes** — a `design.md` renders as `## Design notes` in the issue
+  body, between `## Original ask` and `## Discoveries`, so decisions made
+  while planning survive even if the local worktree is lost. Pull is
+  write-once like `original-ask.md`: local `design.md` can be richer than
+  what's synced (mid-edit, not yet pushed), so a pull never clobbers it. When
+  design.md is large enough to push the body over GitHub's size limit, sync
+  posts it as a linked issue comment instead of inlining it, and keeps that
+  comment up to date on every re-sync; if design.md later shrinks back under
+  the limit, sync moves it back into the body and marks the old comment
+  stale rather than deleting it.
 - **Stage** — each issue gets a `stage:<stage>` label, derived automatically:
   `active` while any task is unchecked, `complete` once every task is checked
   (before archiving), and `archived` once the change moves under

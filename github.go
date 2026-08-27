@@ -176,6 +176,151 @@ func (p *GitHubProvider) renderBody(item WorkItem) string {
 	return marker(item.Slug) + "\n\n" + item.Body
 }
 
+// GitHubBodyLimit is GitHub's issue/PR body size limit, in characters.
+const GitHubBodyLimit = 65536
+
+// designCommentMarker is the identity anchor for design.md's overflow
+// comment, distinct from the issue-body marker so an idempotent upsert can
+// find the same comment again instead of duplicating it.
+func designCommentMarker(slug string) string {
+	return fmt.Sprintf("<!-- specsync:change=%s:design -->", slug)
+}
+
+// designNotesSection is the exact substring WorkItemFor inlines into Body
+// when design.md is non-empty, so Push's overflow check is a plain replace.
+func designNotesSection(designNotes string) string {
+	return "\n\n## Design notes\n\n" + designNotes
+}
+
+// designNotesStub replaces designNotesSection when it overflows to a
+// comment. url is "" until the comment exists (the create-new-issue path
+// renders it once without a link, then edits the issue again once known).
+func designNotesStub(url string) string {
+	if url == "" {
+		return "\n\n## Design notes\n\n_Too large to inline — design notes comment pending._"
+	}
+	return "\n\n## Design notes\n\n_Too large to inline — see [design notes comment](" + url + ")._"
+}
+
+// designCommentStaleBody is what an overflow comment is rewritten to once
+// design.md moves back inline — marked stale, not deleted.
+func designCommentStaleBody(slug string) string {
+	return designCommentMarker(slug) + "\n\n_Design notes moved back into the issue body; this comment is no longer current._"
+}
+
+const designCommentStaleNote = "moved back into the issue body"
+
+const designNotesStubMarker = "Too large to inline"
+
+func isDesignNotesStub(text string) bool {
+	return strings.Contains(text, designNotesStubMarker)
+}
+
+// ReadDesignNotesComment reads back design.md's overflow comment for
+// issueID, satisfying DesignNotesCommentReader. found is false when no such
+// comment exists, or it's marked stale (content already moved into the body).
+func (p *GitHubProvider) ReadDesignNotesComment(ctx context.Context, issueID, slug string) (string, bool, error) {
+	_, _, body, found, err := p.findDesignComment(ctx, issueID, slug)
+	if err != nil || !found {
+		return "", false, err
+	}
+	if strings.Contains(body, designCommentStaleNote) {
+		return "", false, nil
+	}
+	content := strings.TrimSpace(strings.TrimPrefix(body, designCommentMarker(slug)))
+	if content != "" {
+		content += "\n"
+	}
+	return content, true, nil
+}
+
+// findDesignComment locates the marked design-notes comment on issue num,
+// returning its GraphQL node id (for in-place edits), URL, and body.
+func (p *GitHubProvider) findDesignComment(ctx context.Context, num, slug string) (id, url, body string, found bool, err error) {
+	args := append([]string{"issue", "view", num}, p.repoFlag()...)
+	args = append(args, "--json", "comments")
+	out, err := p.run(ctx, args...)
+	if err != nil {
+		return "", "", "", false, err
+	}
+	var v struct {
+		Comments []struct {
+			ID   string `json:"id"`
+			URL  string `json:"url"`
+			Body string `json:"body"`
+		} `json:"comments"`
+	}
+	if err := json.Unmarshal([]byte(out), &v); err != nil {
+		return "", "", "", false, fmt.Errorf("parse issue comments: %w", err)
+	}
+	want := designCommentMarker(slug)
+	for _, c := range v.Comments {
+		if strings.Contains(c.Body, want) {
+			return c.ID, c.URL, c.Body, true, nil
+		}
+	}
+	return "", "", "", false, nil
+}
+
+// upsertDesignComment creates or updates the marked design-notes comment on
+// issue num, returning its URL. Idempotent: a re-sync with the same content
+// finds and edits the same comment via its marker rather than creating a
+// duplicate.
+func (p *GitHubProvider) upsertDesignComment(ctx context.Context, num, slug, content string) (string, error) {
+	body := designCommentMarker(slug) + "\n\n" + content
+	id, url, _, found, err := p.findDesignComment(ctx, num, slug)
+	if err != nil {
+		return "", err
+	}
+	if found {
+		if err := p.updateIssueComment(ctx, id, body); err != nil {
+			return "", err
+		}
+		return url, nil
+	}
+	args := append([]string{"issue", "comment", num}, p.repoFlag()...)
+	args = append(args, "--body", body)
+	return p.run(ctx, args...)
+}
+
+// markDesignCommentStale rewrites an overflow comment once to note that
+// design.md moved back inline; a no-op if already marked.
+func (p *GitHubProvider) markDesignCommentStale(ctx context.Context, num, slug string) error {
+	id, _, body, found, err := p.findDesignComment(ctx, num, slug)
+	if err != nil || !found {
+		return err
+	}
+	if strings.Contains(body, designCommentStaleNote) {
+		return nil
+	}
+	return p.updateIssueComment(ctx, id, designCommentStaleBody(slug))
+}
+
+// updateIssueComment edits an existing issue comment in place by its GraphQL
+// node id.
+func (p *GitHubProvider) updateIssueComment(ctx context.Context, nodeID, body string) error {
+	mutation := `
+		mutation($id: ID!, $body: String!) {
+			updateIssueComment(input: {id: $id, body: $body}) {
+				clientMutationId
+			}
+		}
+	`
+	return p.graphql(ctx, "updateIssueComment", mutation, nil, "-f", "id="+nodeID, "-f", "body="+body)
+}
+
+// syncDesignComment upserts the design-notes overflow comment on issue num
+// and patches the placeholder stub in *body with the comment's real link,
+// now that its URL is known.
+func (p *GitHubProvider) syncDesignComment(ctx context.Context, num string, item WorkItem, body *string) error {
+	url, err := p.upsertDesignComment(ctx, num, item.Slug, item.DesignNotes)
+	if err != nil {
+		return err
+	}
+	*body = strings.Replace(*body, designNotesStub(""), designNotesStub(url), 1)
+	return nil
+}
+
 // EnsureMarker upserts the identity marker into issue id's body so the link
 // survives loss of the local ref cache: a later sync rediscovers the issue via
 // Find. Idempotent — a body already carrying the marker is left untouched and no
@@ -198,6 +343,12 @@ func (p *GitHubProvider) Push(ctx context.Context, item WorkItem, existing *Ref)
 		return Ref{}, err
 	}
 	body := p.renderBody(item)
+
+	// Oversized design.md moves to a linked comment instead of the body.
+	designOverflow := strings.TrimSpace(item.DesignNotes) != "" && len(body) > GitHubBodyLimit
+	if designOverflow {
+		body = strings.Replace(body, designNotesSection(item.DesignNotes), designNotesStub(""), 1)
+	}
 
 	// Defend against duplicates: if we have no cached ref, look one up by
 	// marker, retrying briefly in case a very-recently-created issue (by
@@ -222,6 +373,16 @@ func (p *GitHubProvider) Push(ctx context.Context, item WorkItem, existing *Ref)
 			return Ref{}, err
 		}
 		ref := Ref{Provider: p.Name(), ID: numberFromURL(url), URL: url}
+		if designOverflow {
+			if err := p.syncDesignComment(ctx, ref.ID, item, &body); err != nil {
+				return Ref{}, err
+			}
+			editArgs := append([]string{"issue", "edit", ref.ID}, p.repoFlag()...)
+			editArgs = append(editArgs, "--body", body)
+			if _, err := p.run(ctx, editArgs...); err != nil {
+				return Ref{}, err
+			}
+		}
 		if item.Closed {
 			ref.BaseClosed = boolPtr(true)
 			return ref, p.close(ctx, ref.ID)
@@ -233,6 +394,16 @@ func (p *GitHubProvider) Push(ctx context.Context, item WorkItem, existing *Ref)
 	}
 
 	num := existing.ID
+	if designOverflow {
+		if err := p.syncDesignComment(ctx, num, item, &body); err != nil {
+			return Ref{}, err
+		}
+	} else if strings.TrimSpace(item.DesignNotes) != "" {
+		// Fits inline again; mark any leftover overflow comment stale.
+		if err := p.markDesignCommentStale(ctx, num, item.Slug); err != nil {
+			return Ref{}, err
+		}
+	}
 	args := append([]string{"issue", "edit", num}, p.repoFlag()...)
 	args = append(args, "--title", item.Title, "--body", body)
 	add, remove, currentlyClosed, err := p.labelDelta(ctx, num, labels)

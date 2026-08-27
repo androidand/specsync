@@ -29,6 +29,7 @@ type PullResult struct {
 	Tasks       string
 	Links       []string // URLs from the ## Related section, for dry-run display
 	OriginalAsk string   // from ## Original ask section of the issue
+	DesignNotes string   // from ## Design notes section of the issue
 	Discoveries string   // from ## Discoveries section of the issue
 	Marker      string   // identity marker upserted into the source issue
 	// MarkerPresent reports whether the source issue already carried the marker,
@@ -95,7 +96,16 @@ func Pull(ctx context.Context, opts PullOptions) (PullResult, error) {
 		return PullResult{}, fmt.Errorf("could not derive a change name from issue %s; pass -change", opts.IssueID)
 	}
 
-	proposal, tasks, relatedURLs, origAsk, disc := splitBody(item.Body, item.Title)
+	proposal, tasks, relatedURLs, origAsk, design, disc := splitBody(item.Body, item.Title)
+	// The body may carry only a linked stub for an overflowed design.md;
+	// recover the real content from the comment when supported.
+	if isDesignNotesStub(design) {
+		if reader, ok := opts.Provider.(DesignNotesCommentReader); ok {
+			if content, found, rerr := reader.ReadDesignNotesComment(ctx, issueID, slug); rerr == nil && found {
+				design = content
+			}
+		}
+	}
 	res := PullResult{
 		Slug:            slug,
 		Dir:             filepath.Join(opts.OpenSpecDir, "changes", slug),
@@ -105,6 +115,7 @@ func Pull(ctx context.Context, opts PullOptions) (PullResult, error) {
 		Tasks:           tasks,
 		Links:           relatedURLs,
 		OriginalAsk:     origAsk,
+		DesignNotes:     design,
 		Discoveries:     disc,
 		Marker:          marker(slug),
 		MarkerPresent:   strings.Contains(item.Body, marker(slug)),
@@ -180,6 +191,18 @@ func Pull(ctx context.Context, opts PullOptions) (PullResult, error) {
 			return PullResult{}, fmt.Errorf("write original-ask: %w", err)
 		}
 	}
+	// Write-once, like original-ask.md, unlike discoveries.md: local
+	// design.md may already be richer than what synced (mid-edit), so a
+	// pull must never clobber it once it exists. Unlike original-ask.md,
+	// it's not seeded from the proposal — most changes have no design.md.
+	if res.DesignNotes != "" {
+		designPath := filepath.Join(res.Dir, "design.md")
+		if _, err := os.Stat(designPath); os.IsNotExist(err) {
+			if err := os.WriteFile(designPath, []byte(res.DesignNotes), 0o644); err != nil {
+				return PullResult{}, fmt.Errorf("write design notes: %w", err)
+			}
+		}
+	}
 	// Save discoveries from the issue (appended, not overwritten, to preserve local notes).
 	if res.Discoveries != "" {
 		discPath := filepath.Join(res.Dir, "discoveries.md")
@@ -241,17 +264,27 @@ func Pull(ctx context.Context, opts PullOptions) (PullResult, error) {
 }
 
 // splitBody separates an issue body into proposal, tasks, related-issue URLs,
-// original ask, and discoveries. It drops the specsync identity marker and the
-// managed sections (## Tasks, ## Related, ## Original ask, ## Discoveries,
-// ## Plan changes), and guarantees the proposal opens with an H1 derived from
-// the issue title. This is the inverse of WorkItemFor rendering.
-func splitBody(body, title string) (proposal, tasks string, relatedURLs []string, originalAsk, discoveries string) {
-	var prop, tsk, ask, disc []string
+// original ask, design notes, and discoveries. It drops the specsync identity
+// marker and the managed sections (## Tasks, ## Related, ## Original ask,
+// ## Design notes, ## Discoveries, ## Plan changes), and guarantees the
+// proposal opens with an H1 derived from the issue title. This is the inverse
+// of WorkItemFor rendering.
+func splitBody(body, title string) (proposal, tasks string, relatedURLs []string, originalAsk, designNotes, discoveries string) {
+	var prop, tsk, ask, design, disc []string
 	inTasks := false
 	inRelated := false
 	inOriginalAsk := false
+	inDesignNotes := false
 	inDiscoveries := false
 	inPlanChanges := false
+	resetSections := func() {
+		inTasks = false
+		inRelated = false
+		inOriginalAsk = false
+		inDesignNotes = false
+		inDiscoveries = false
+		inPlanChanges = false
+	}
 	for _, line := range strings.Split(body, "\n") {
 		if strings.HasPrefix(strings.TrimSpace(line), "<!-- specsync:change=") {
 			continue
@@ -261,49 +294,34 @@ func splitBody(body, title string) (proposal, tasks string, relatedURLs []string
 		// inside another managed section (e.g. ## Tasks after ## Original ask).
 		switch trimmed {
 		case "## Tasks":
+			resetSections()
 			inTasks = true
-			inRelated = false
-			inOriginalAsk = false
-			inDiscoveries = false
-			inPlanChanges = false
 			continue
 		case "## Related":
-			inTasks = false
+			resetSections()
 			inRelated = true
-			inOriginalAsk = false
-			inDiscoveries = false
-			inPlanChanges = false
 			continue
 		case "## Original ask":
-			inTasks = false
-			inRelated = false
+			resetSections()
 			inOriginalAsk = true
-			inDiscoveries = false
-			inPlanChanges = false
+			continue
+		case "## Design notes":
+			resetSections()
+			inDesignNotes = true
 			continue
 		case "## Discoveries":
-			inTasks = false
-			inRelated = false
-			inOriginalAsk = false
+			resetSections()
 			inDiscoveries = true
-			inPlanChanges = false
 			continue
 		case "## Plan changes":
-			inTasks = false
-			inRelated = false
-			inOriginalAsk = false
-			inDiscoveries = false
+			resetSections()
 			inPlanChanges = true
 			continue
 		}
 		// A new (non-managed) H2 ends the current managed section and returns
 		// to proposal content.
 		if strings.HasPrefix(trimmed, "## ") {
-			inTasks = false
-			inRelated = false
-			inOriginalAsk = false
-			inDiscoveries = false
-			inPlanChanges = false
+			resetSections()
 			prop = append(prop, line)
 			continue
 		}
@@ -320,6 +338,8 @@ func splitBody(body, title string) (proposal, tasks string, relatedURLs []string
 			}
 		case inOriginalAsk:
 			ask = append(ask, line)
+		case inDesignNotes:
+			design = append(design, line)
 		case inDiscoveries:
 			disc = append(disc, line)
 		case inPlanChanges:
@@ -348,11 +368,15 @@ func splitBody(body, title string) (proposal, tasks string, relatedURLs []string
 	if originalAsk != "" {
 		originalAsk += "\n"
 	}
+	designNotes = strings.TrimSpace(strings.Join(design, "\n"))
+	if designNotes != "" {
+		designNotes += "\n"
+	}
 	discoveries = strings.TrimSpace(strings.Join(disc, "\n"))
 	if discoveries != "" {
 		discoveries += "\n"
 	}
-	return proposal, tasks, relatedURLs, originalAsk, discoveries
+	return proposal, tasks, relatedURLs, originalAsk, designNotes, discoveries
 }
 
 // extractURL pulls the href out of "[label](url)" or returns the string as-is

@@ -150,6 +150,7 @@ type Change struct {
 	Blocks        []Ref  // resolved blocks refs from links.md (## Blocks)
 	OriginalAsk   string // original-ask.md contents, may be ""
 	Discoveries   string // discoveries.md contents, may be ""
+	DesignNotes   string // design.md contents, may be ""
 	Archived      bool
 	Significant   bool         // true when the change has a significant marker, design.md, or >5 tasks
 	Progress      TaskProgress // what the task checklist says
@@ -236,6 +237,9 @@ func LoadChange(dir string, archived bool, openspecDir string) (*Change, error) 
 	}
 	if disc, err := os.ReadFile(filepath.Join(dir, "discoveries.md")); err == nil {
 		c.Discoveries = string(disc)
+	}
+	if design, err := os.ReadFile(filepath.Join(dir, "design.md")); err == nil {
+		c.DesignNotes = string(design)
 	}
 	// Load baseline task count from metadata.json (set on pull).
 	if meta, err := LoadChangeMetadata(dir); err == nil && meta != nil && meta.BaselineTaskCount != nil {

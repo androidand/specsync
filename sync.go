@@ -342,8 +342,12 @@ func Sync(ctx context.Context, opts Options) (Result, error) {
 	return res, nil
 }
 
-// WorkItemFor renders a Change into the provider-agnostic WorkItem. tasks.md
-// is folded in as a checklist; links.md becomes a ## Related section using
+// WorkItemFor renders a Change into the provider-agnostic WorkItem. Sections
+// fold in, oldest authoring context to newest, as: Body (proposal) -> ##
+// Original ask (historical context) -> ## Design notes (decisions made while
+// planning) -> ## Discoveries (findings made while implementing) -> ## Tasks
+// -> ## Plan changes -> dependency sections. tasks.md is folded in as a
+// checklist; links.md becomes a ## Related section using
 // "[owner/repo#N](url)" GitHub autolink format. When closeCompleted is set, a
 // change in the complete stage (every task checked, not yet archived) also
 // projects as closed, so finishing the last task can retire the issue.
@@ -351,6 +355,9 @@ func WorkItemFor(c Change, closeCompleted bool) WorkItem {
 	body := c.Body
 	if strings.TrimSpace(c.OriginalAsk) != "" {
 		body = body + "\n\n## Original ask\n\n" + c.OriginalAsk
+	}
+	if strings.TrimSpace(c.DesignNotes) != "" {
+		body = body + "\n\n## Design notes\n\n" + c.DesignNotes
 	}
 	if strings.TrimSpace(c.Discoveries) != "" {
 		body = body + "\n\n## Discoveries\n\n" + c.Discoveries
@@ -390,6 +397,7 @@ func WorkItemFor(c Change, closeCompleted bool) WorkItem {
 		Slug:         c.Slug,
 		Title:        c.Title,
 		Body:         body,
+		DesignNotes:  c.DesignNotes,
 		Stage:        c.Stage,
 		Priority:     priority,
 		Closed:       c.Archived || (closeCompleted && c.Stage == StageComplete),

@@ -60,6 +60,35 @@ func TestLoadChanges(t *testing.T) {
 	}
 }
 
+// TestLoadChangeDesignNotes pins design.md loading into Change.DesignNotes,
+// the same treatment as original-ask.md/discoveries.md: present when the
+// file exists, "" when it doesn't.
+func TestLoadChangeDesignNotes(t *testing.T) {
+	root := t.TempDir()
+	withDesign := filepath.Join(root, "changes", "with-design")
+	mustWrite(t, filepath.Join(withDesign, "proposal.md"), "# With design\n")
+	mustWrite(t, filepath.Join(withDesign, "design.md"), "Picked approach A over B because...\n")
+
+	withoutDesign := filepath.Join(root, "changes", "without-design")
+	mustWrite(t, filepath.Join(withoutDesign, "proposal.md"), "# Without design\n")
+
+	changes, err := LoadChanges(root)
+	if err != nil {
+		t.Fatalf("LoadChanges: %v", err)
+	}
+	byslug := map[string]Change{}
+	for _, c := range changes {
+		byslug[c.Slug] = c
+	}
+
+	if got := byslug["with-design"].DesignNotes; !strings.Contains(got, "Picked approach A over B") {
+		t.Errorf("DesignNotes = %q, want design.md content", got)
+	}
+	if got := byslug["without-design"].DesignNotes; got != "" {
+		t.Errorf("DesignNotes = %q, want \"\" when no design.md exists", got)
+	}
+}
+
 func TestGitHubPushCreate(t *testing.T) {
 	var calls [][]string
 	p := &GitHubProvider{run: func(_ context.Context, args ...string) (string, error) {

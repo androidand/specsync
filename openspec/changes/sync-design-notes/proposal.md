@@ -94,24 +94,25 @@ the durable, recoverable copy. For `design.md`, today it silently isn't.
 
 ## Open Questions
 
-1. Pull semantics: is `## Design notes` write-once (like `original-ask.md`)
-   or overwritten every pull (like `discoveries.md`)? A user may have
-   written local design.md content richer than what made it into the issue
-   (e.g. mid-edit, not yet synced) — overwriting it on pull would lose that.
-   Leaning write-once/merge-don't-clobber, but needs a real decision and a
-   test that pins it.
-2. Comment-overflow: on by default, or behind a flag (e.g.
-   `-large-sections-as-comments`)? Default-on is less surprising for the
-   common case this is meant to fix, but changes sync's behavior for anyone
-   already near the size limit without them asking for it.
-3. When local design.md later shrinks enough to fit inline again, does sync
-   move it back into the body and mark the old comment stale ("moved into
-   the issue body"), or leave the comment as-is indefinitely? Leaning
-   toward marking it stale rather than deleting — comments are part of the
-   audit trail.
-4. Does `-dry-run` need to preview the comment write too, the way it already
-   previews body/marker writes? (Almost certainly yes — just naming it so
-   it isn't missed.)
+Resolved during implementation:
+
+1. **Pull semantics: write-once**, like `original-ask.md`, not overwritten
+   every pull like `discoveries.md`. design.md is actively written and
+   edited while a change is being planned, often ahead of the next push, so
+   local content can legitimately be richer than what's synced — a pull
+   must never clobber it once it exists. Unlike `original-ask.md`, it's not
+   seeded from the proposal when the issue has no `## Design notes` section
+   — most changes don't have a design.md, and pull shouldn't invent one.
+2. **Comment-overflow: on by default**, no flag. It only activates when a
+   design.md would otherwise push the body over GitHub's limit, so it can't
+   change behavior for anyone who isn't already hitting that limit.
+3. **Shrink-back: mark the old comment stale, don't delete it.** Once
+   design.md fits inline again, it moves back into the body and the
+   overflow comment is rewritten to note that, once — a later sync with
+   design.md still fitting makes no further write to it.
+4. **`-dry-run` previews the comment write: yes**, via the same runner
+   substitution that already previews every other write — no
+   special-casing needed.
 
 ## Release Notes
 

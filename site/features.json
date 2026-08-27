@@ -7,6 +7,12 @@
   },
   {
     "group": "plan",
+    "icon": "flow",
+    "title": "Design notes survive the worktree",
+    "body": "A <code>design.md</code> renders as <code>## Design notes</code> in the synced issue, so decisions made while planning aren't lost if the local worktree is force-removed. Oversized notes overflow to a linked issue comment instead of getting truncated."
+  },
+  {
+    "group": "plan",
     "icon": "scan",
     "title": "Planning scan",
     "body": "<code>specsync scan</code> shows what already exists for an area — in-flight changes, loose issues, recent commits — before you plan."

@@ -333,6 +333,7 @@ func TestWorkItemForSectionOrder(t *testing.T) {
 		Slug:          "test",
 		Body:          "# Test\n\nBody.\n",
 		OriginalAsk:   "Original ask.",
+		DesignNotes:   "Design decision.",
 		Discoveries:   "Discovery.",
 		TasksMarkdown: "- [ ] one\n",
 		Links:         []Ref{{ID: "1", URL: "https://example.com/o/r/1"}},
@@ -340,12 +341,39 @@ func TestWorkItemForSectionOrder(t *testing.T) {
 	wi := WorkItemFor(c, false)
 
 	oa := strings.Index(wi.Body, "## Original ask")
+	dn := strings.Index(wi.Body, "## Design notes")
 	di := strings.Index(wi.Body, "## Discoveries")
 	ti := strings.Index(wi.Body, "## Tasks")
 	ri := strings.Index(wi.Body, "## Related")
 
-	if oa >= di || di >= ti || ti >= ri {
-		t.Errorf("sections not in order (Original ask < Discoveries < Tasks < Related):\n%s", wi.Body)
+	if oa >= dn || dn >= di || di >= ti || ti >= ri {
+		t.Errorf("sections not in order (Original ask < Design notes < Discoveries < Tasks < Related):\n%s", wi.Body)
+	}
+}
+
+func TestWorkItemForRendersDesignNotes(t *testing.T) {
+	c := Change{
+		Slug:        "test",
+		Body:        "# Test\n\nBody.\n",
+		DesignNotes: "Picked the picker pattern over a modal.",
+	}
+	wi := WorkItemFor(c, false)
+	if !strings.Contains(wi.Body, "## Design notes") {
+		t.Errorf("expected '## Design notes' in body, got:\n%s", wi.Body)
+	}
+	if !strings.Contains(wi.Body, "Picked the picker pattern over a modal") {
+		t.Errorf("expected design notes content in body, got:\n%s", wi.Body)
+	}
+	if wi.DesignNotes != c.DesignNotes {
+		t.Errorf("WorkItem.DesignNotes = %q, want %q", wi.DesignNotes, c.DesignNotes)
+	}
+}
+
+func TestWorkItemForOmitsDesignNotesWhenEmpty(t *testing.T) {
+	c := Change{Slug: "test", Body: "# Test\n\nBody.\n"}
+	wi := WorkItemFor(c, false)
+	if strings.Contains(wi.Body, "## Design notes") {
+		t.Errorf("expected no '## Design notes' section, got:\n%s", wi.Body)
 	}
 }
 
@@ -377,6 +405,100 @@ func TestPullSavesOriginalAsk(t *testing.T) {
 	}
 	if !strings.Contains(string(ask), "The original request") {
 		t.Fatalf("original-ask.md missing content: %s", ask)
+	}
+}
+
+// TestDesignNotesWriteOnceOnPull: design.md is write-once like
+// original-ask.md, not overwritten-every-pull like discoveries.md.
+func TestDesignNotesWriteOnceOnPull(t *testing.T) {
+	dir := t.TempDir()
+	issue := fakeIssue{
+		Number: 42,
+		URL:    "https://github.com/o/r/issues/42",
+		Title:  "Design write-once",
+		State:  "open",
+		Body:   "# Design write-once\n\nbody\n\n## Design notes\n\nSynced decision.\n",
+	}
+	var calls [][]string
+	prov := NewGitHubProviderFunc(ghRunner(issue, &calls))
+
+	res, err := Pull(context.Background(), PullOptions{OpenSpecDir: dir, Provider: prov, IssueID: "42"})
+	if err != nil {
+		t.Fatalf("Pull: %v", err)
+	}
+	designPath := filepath.Join(dir, "changes", res.Slug, "design.md")
+	design, err := os.ReadFile(designPath)
+	if err != nil {
+		t.Fatalf("read design.md: %v", err)
+	}
+	if !strings.Contains(string(design), "Synced decision") {
+		t.Fatalf("design.md missing synced content: %s", design)
+	}
+
+	richer := "Synced decision, plus a locally-written follow-up not yet pushed.\n"
+	if err := os.WriteFile(designPath, []byte(richer), 0o644); err != nil {
+		t.Fatalf("write richer design.md: %v", err)
+	}
+
+	if _, err := Pull(context.Background(), PullOptions{OpenSpecDir: dir, Provider: prov, IssueID: "42"}); err != nil {
+		t.Fatalf("re-Pull: %v", err)
+	}
+	design, err = os.ReadFile(designPath)
+	if err != nil {
+		t.Fatalf("read design.md after re-pull: %v", err)
+	}
+	if string(design) != richer {
+		t.Fatalf("re-pull clobbered local design.md: got %q, want %q", design, richer)
+	}
+}
+
+func TestPullSavesDesignNotes(t *testing.T) {
+	dir := t.TempDir()
+	issue := fakeIssue{
+		Number: 99,
+		URL:    "https://github.com/o/r/issues/99",
+		Title:  "Feature",
+		State:  "open",
+		Body:   "# Feature\n\nbody\n\n## Design notes\n\nPicked approach A.\n\n## Tasks\n\n- [ ] one\n",
+	}
+	var calls [][]string
+	prov := NewGitHubProviderFunc(ghRunner(issue, &calls))
+
+	res, err := Pull(context.Background(), PullOptions{OpenSpecDir: dir, Provider: prov, IssueID: "99"})
+	if err != nil {
+		t.Fatalf("Pull: %v", err)
+	}
+
+	designPath := filepath.Join(dir, "changes", res.Slug, "design.md")
+	design, err := os.ReadFile(designPath)
+	if err != nil {
+		t.Fatalf("read design.md: %v", err)
+	}
+	if !strings.Contains(string(design), "Picked approach A") {
+		t.Fatalf("design.md missing content: %s", design)
+	}
+}
+
+// TestPullNoDesignNotesWritesNoDesignFile: pull must not invent a design.md
+// for a change whose issue has no "## Design notes" section.
+func TestPullNoDesignNotesWritesNoDesignFile(t *testing.T) {
+	dir := t.TempDir()
+	issue := fakeIssue{
+		Number: 100,
+		URL:    "https://github.com/o/r/issues/100",
+		Title:  "No design notes",
+		State:  "open",
+		Body:   "# No design notes\n\nbody\n",
+	}
+	var calls [][]string
+	prov := NewGitHubProviderFunc(ghRunner(issue, &calls))
+
+	res, err := Pull(context.Background(), PullOptions{OpenSpecDir: dir, Provider: prov, IssueID: "100"})
+	if err != nil {
+		t.Fatalf("Pull: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "changes", res.Slug, "design.md")); !os.IsNotExist(err) {
+		t.Fatalf("design.md should not exist when the issue has no Design notes section")
 	}
 }
 
