@@ -213,6 +213,12 @@ func LoadChange(dir string, archived bool, openspecDir string) (*Change, error) 
 	}
 
 	slug := filepath.Base(dir)
+	if archived {
+		// `openspec archive` prepends a "YYYY-MM-DD-" date to the folder
+		// name; strip it so a change's logical Slug stays the same value it
+		// had while active. Dir keeps the real (date-prefixed) path.
+		slug = stripArchiveDatePrefix(slug)
+	}
 	// Detect significance: marker file, design.md, or task count > 5.
 	significant := IsSignificant(dir)
 
@@ -257,6 +263,10 @@ func LoadChange(dir string, archived bool, openspecDir string) (*Change, error) 
 }
 
 // LoadChangeBySlug finds a change by slug, checking active then archived dirs.
+// An archived change may live under a date-prefixed folder name
+// (`changes/archive/<YYYY-MM-DD>-<slug>`, `openspec archive`'s own
+// convention), so the archived lookup falls back to a glob when the exact
+// path doesn't exist.
 func LoadChangeBySlug(openspecDir, slug string) (*Change, error) {
 	dir := filepath.Join(openspecDir, "changes", slug)
 	c, err := LoadChange(dir, false, openspecDir)
@@ -271,9 +281,51 @@ func LoadChangeBySlug(openspecDir, slug string) (*Change, error) {
 		}
 	}
 	if c == nil {
+		c, err = loadArchivedChangeByDatedSlug(openspecDir, slug)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if c == nil {
 		return nil, fmt.Errorf("no change found for slug %q", slug)
 	}
 	return c, nil
+}
+
+// archiveDatePrefixRE matches the "YYYY-MM-DD-" prefix `openspec archive`
+// prepends to a change's folder name on archive.
+var archiveDatePrefixRE = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}-`)
+
+// stripArchiveDatePrefix removes a leading archive date prefix from slug, if
+// present. A folder archived without one (this repo's older convention) is
+// returned unchanged.
+func stripArchiveDatePrefix(slug string) string {
+	return archiveDatePrefixRE.ReplaceAllString(slug, "")
+}
+
+// archivedDatedSlugGlob is the glob pattern matching a date-prefixed archive
+// folder for slug, e.g. "changes/archive/2026-08-27-sync-design-notes".
+func archivedDatedSlugGlob(openspecDir, slug string) string {
+	return filepath.Join(openspecDir, "changes", "archive",
+		"[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-"+slug)
+}
+
+// loadArchivedChangeByDatedSlug finds an archived change whose folder was
+// renamed with an `openspec archive` date prefix, searched for by its
+// original (pre-archive) slug. Multiple matches is an error naming the
+// candidates rather than silently picking one.
+func loadArchivedChangeByDatedSlug(openspecDir, slug string) (*Change, error) {
+	matches, err := filepath.Glob(archivedDatedSlugGlob(openspecDir, slug))
+	if err != nil {
+		return nil, fmt.Errorf("glob archived change %q: %w", slug, err)
+	}
+	if len(matches) == 0 {
+		return nil, nil
+	}
+	if len(matches) > 1 {
+		return nil, fmt.Errorf("ambiguous archived slug %q: matches %s", slug, strings.Join(matches, ", "))
+	}
+	return LoadChange(matches[0], true, openspecDir)
 }
 
 // reShorthand matches "owner/repo#N" GitHub shorthand references.
@@ -351,11 +403,18 @@ func resolveEntry(entry, openspecDir string) *Ref {
 		return nil // can't resolve slugs without knowing where siblings live
 	}
 
-	// Try to resolve via the sibling's ref cache.
-	for _, dir := range []string{
+	// Try to resolve via the sibling's ref cache. A sibling archived after
+	// this link.md entry was written may live under a date-prefixed folder
+	// (openspec archive's own convention); fall back to that glob when the
+	// exact archive path doesn't exist.
+	candidates := []string{
 		filepath.Join(openspecDir, "changes", slug),
 		filepath.Join(openspecDir, "changes", "archive", slug),
-	} {
+	}
+	if matches, _ := filepath.Glob(archivedDatedSlugGlob(openspecDir, slug)); len(matches) == 1 {
+		candidates = append(candidates, matches[0])
+	}
+	for _, dir := range candidates {
 		refs, err := LoadRefs(dir)
 		if err != nil || len(refs) == 0 {
 			continue
