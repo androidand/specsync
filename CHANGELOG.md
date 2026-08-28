@@ -4,6 +4,15 @@ All notable changes to this project are documented here. One entry per shipped
 OpenSpec change — see the linked issues for the full spec and discussion.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.13.1] - 2026-08-28
+
+### Changed
+
+- Fixed: `specsync -change <slug>` (and slug-based links.md entries) failed to resolve a change after `openspec archive` renamed its folder with a date prefix. Archived changes now resolve by their original slug — locally, across links.md, and via live GitHub lookup with no ref cache — so a sync run after archiving correctly projects the terminal `archived` stage instead of erroring or, worse, silently missing the issue and creating a duplicate. (#128)
+- Fixed: `specsync -change <slug>` (and slug-based links.md entries) failed to resolve a change after `openspec archive` renamed its folder with a date prefix. Archived changes now resolve by their original slug — locally, across links.md, and via live GitHub lookup with no ref cache — so a sync run after archiving correctly projects the terminal `archived` stage instead of erroring or, worse, silently missing the issue and creating a duplicate. (#128)
+
+<!-- 4 internal commit(s) omitted (chore/docs/ci/...) -->
+
 ## [0.13.0] - 2026-08-27
 
 ### Changed
