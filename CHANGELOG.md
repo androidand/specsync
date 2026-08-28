@@ -6,7 +6,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [0.13.0] - 2026-08-27
 
-<!-- 2 internal commit(s) omitted (chore/docs/ci/...) -->
+### Changed
+
+- `design.md` now syncs into the issue body as `## Design notes`, with automatic overflow to a linked issue comment when the combined body would exceed GitHub's size limit — no more silently-unsynced design decisions. (#139)
+
+<!-- 1 internal commit(s) omitted (chore/docs/ci/...) -->
 
 ## [0.12.1] - 2026-08-19
 
