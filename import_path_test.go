@@ -2,14 +2,24 @@ package specsync
 
 import (
 	"go/build"
-	"strings"
+	"os"
 	"testing"
 )
 
 // TestImportPath guards the documented import path: the package must live at
 // the module root so that the path in doc.go (github.com/androidand/specsync)
-// always resolves. If the package is ever relocated, this test fails until
-// the documentation is updated to match.
+// always resolves, not nested under pkg/ or similar. If the package is ever
+// relocated, this test fails until the documentation is updated to match.
+//
+// The check compares against the test binary's own working directory (which
+// `go test` always sets to the package's source directory) rather than a
+// literal "specsync" folder-name check: a checkout or git worktree can be
+// named anything (this repo's own worktree convention names them after the
+// branch, e.g. "specsync-<change>"), so asserting on the basename would fail
+// outside the one clone happening to be named "specsync" — checking that the
+// canonical import path resolves back to wherever the package's own files
+// actually are is the real invariant, and it holds regardless of the
+// directory's name.
 func TestImportPath(t *testing.T) {
 	// Import the module by its canonical path; this resolves to the actual
 	// directory regardless of where the test is run from.
@@ -17,8 +27,12 @@ func TestImportPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("import specsync: %v", err)
 	}
-	if !strings.HasSuffix(pkg.Dir, "specsync") {
-		t.Errorf("package directory %q does not match module root", pkg.Dir)
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if pkg.Dir != wd {
+		t.Errorf("package directory %q does not match the module root %q", pkg.Dir, wd)
 	}
 }
 
