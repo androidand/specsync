@@ -8,7 +8,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- Fixed: `specsync -change <slug>` (and slug-based links.md entries) failed to resolve a change after `openspec archive` renamed its folder with a date prefix. Archived changes now resolve by their original slug — locally, across links.md, and via live GitHub lookup with no ref cache — so a sync run after archiving correctly projects the terminal `archived` stage instead of erroring or, worse, silently missing the issue and creating a duplicate. (#128)
 - Fixed `TestImportPath` failing in any git worktree not literally named "specsync" (e.g. this repo's own `specsync-<change>` worktree convention) — it now checks the actual module-root invariant instead of a folder-name string match. (#150)
 
 <!-- 1 internal commit(s) omitted (chore/docs/ci/...) -->
