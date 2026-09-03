@@ -729,6 +729,14 @@ WorkItem                          ->  issue       (via a pluggable provider)
   comment up to date on every re-sync; if design.md later shrinks back under
   the limit, sync moves it back into the body and marks the old comment
   stale rather than deleting it.
+- **Collapsed by default** — a synced issue shows title and task checklist
+  first: the Proposal, Original ask, Design notes, and Discoveries sections
+  render inside native `<details>` blocks, collapsed in GitHub's UI. Nothing
+  is removed — each is one click away — and pull recovers their content via
+  an HTML-comment marker inside the block, independent of the visible
+  label, so re-labeling a section doesn't break round-tripping. A design
+  notes section that has overflowed to a linked comment (above) has no
+  marker of its own — its content lives in the comment, not the body.
 - **Stage** — each issue gets a `stage:<stage>` label, derived automatically:
   `active` while any task is unchecked, `complete` once every task is checked
   (before archiving), and `archived` once the change moves under

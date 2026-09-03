@@ -1,12 +1,13 @@
 # change-body-composition Specification
 
 ## Purpose
-Define what sections a synced issue body contains, in what order, and how a
-section that would push the body over the tracker's size limit overflows to a
-linked comment instead of being dropped, truncated, or causing the sync to
-fail outright. This formalizes behavior that otherwise lives only as implicit
-logic in `WorkItemFor`, giving contributors something to check a new section
-against instead of reverse-engineering `sync.go`.
+Define what sections a synced issue body contains, in what order, which of
+them render collapsed vs. visible by default, and how a section that would
+push the body over the tracker's size limit overflows to a linked comment
+instead of being dropped, truncated, or causing the sync to fail outright.
+This formalizes behavior that otherwise lives only as implicit logic in
+`WorkItemFor`, giving contributors something to check a new section against
+instead of reverse-engineering `sync.go`.
 
 ## Requirements
 ### Requirement: Section set and ordering
@@ -86,3 +87,48 @@ deleting it, once a change's rendered body no longer exceeds the size limit.
 #### Scenario: No stale rewrite once already marked
 - **WHEN** a design-notes overflow comment has already been marked stale on a prior sync
 - **THEN** a later sync with design.md still fitting inline makes no further write to that comment
+
+### Requirement: Proposal, Original ask, Design notes, and Discoveries render collapsed
+`WorkItemFor` SHALL wrap the Proposal, Original ask, Design notes, and
+Discoveries sections in a native `<details><summary>{Label}</summary>`
+block, collapsed by default in GitHub's rendering. Tasks, Plan changes, and
+dependency sections SHALL render visible, outside any `<details>` block.
+
+#### Scenario: Reader opens a synced issue
+- **WHEN** a reader opens an issue synced by this capability
+- **THEN** they see the title and the task checklist without expanding anything
+- **AND** the proposal, original ask, design notes, and discoveries are present but collapsed
+
+### Requirement: Proposal renders without its redundant leading H1
+The Proposal section SHALL have its leading `# Title` line (and the blank
+line after it) stripped before rendering, since the issue title already
+carries it.
+
+#### Scenario: proposal.md starts with an H1
+- **WHEN** a change's proposal.md begins with `# <title>`
+- **THEN** the rendered Proposal section's content does not repeat that line
+
+### Requirement: Section markers make collapsed sections round-trip
+Each collapsed section SHALL carry an HTML-comment marker
+(`<!-- specsync:section={id} -->`, with `id` one of `proposal`,
+`original-ask`, `design-notes`, `discoveries`) inside its `<details>` block.
+Pulling an issue SHALL locate a section's content by this marker,
+independent of the visible `<summary>` label text. A design-notes section
+that has overflowed to a linked comment (see the overflow requirement above)
+carries no marker — its content lives in the comment, read back via
+`ReadDesignNotesComment`, not via the body.
+
+#### Scenario: Pull recovers collapsed content
+- **WHEN** an issue rendered with this capability is pulled
+- **THEN** the recovered proposal.md / original-ask.md / design.md / discoveries.md content matches what was originally synced, with no `<details>`/marker markup leaked into it
+
+### Requirement: Legacy bare-heading bodies still pull correctly
+An issue body synced by a specsync version that predates collapsed
+rendering — plain `## Original ask` / `## Design notes` / `## Discoveries`
+headings, no `<details>` wrapper — SHALL still parse correctly on pull.
+Re-syncing such an issue upgrades it to the collapsed format.
+
+#### Scenario: Pulling an issue not yet re-synced
+- **WHEN** an issue's body has bare `## Original ask` / `## Design notes` / `## Discoveries` headings instead of `<details>` blocks
+- **THEN** pull still recovers their content correctly
+- **AND** the next sync of that change renders it in the collapsed format going forward

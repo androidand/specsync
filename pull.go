@@ -263,13 +263,54 @@ func Pull(ctx context.Context, opts PullOptions) (PullResult, error) {
 	return res, nil
 }
 
+// extractSection pulls a WorkItemFor-rendered <details> block out of body by
+// its "<!-- specsync:section=ID -->" marker, returning the block's inner
+// content and body with the whole <details>...</details> block (including
+// its wrapper tags) removed. found is false when the marker isn't present —
+// the section was rendered by an older specsync as a bare "## Heading"
+// instead, which the caller falls back to parsing the legacy way.
+func extractSection(body, id string) (content, remainder string, found bool) {
+	marker := "<!-- specsync:section=" + id + " -->"
+	mi := strings.Index(body, marker)
+	if mi < 0 {
+		return "", body, false
+	}
+	open := strings.LastIndex(body[:mi], "<details>")
+	if open < 0 {
+		open = mi
+	}
+	closeRel := strings.Index(body[mi:], "</details>")
+	if closeRel < 0 {
+		return "", body, false
+	}
+	closeIdx := mi + closeRel
+	content = strings.TrimSpace(body[mi+len(marker) : closeIdx])
+	remainder = body[:open] + body[closeIdx+len("</details>"):]
+	return content, remainder, true
+}
+
 // splitBody separates an issue body into proposal, tasks, related-issue URLs,
 // original ask, design notes, and discoveries. It drops the specsync identity
 // marker and the managed sections (## Tasks, ## Related, ## Original ask,
 // ## Design notes, ## Discoveries, ## Plan changes), and guarantees the
 // proposal opens with an H1 derived from the issue title. This is the inverse
 // of WorkItemFor rendering.
+//
+// Proposal, Original ask, Design notes, and Discoveries are extracted
+// primarily by their "<!-- specsync:section=X -->" marker (the collapsed
+// <details> format); bodies synced by an older specsync — bare "## Original
+// ask" etc. headings, no <details> — fall back to the legacy line-based parse
+// below, so pulling an issue that hasn't been re-synced yet still works. A
+// design-notes section that overflowed to a linked comment renders as a
+// short stub with neither the marker nor real content, so it naturally
+// yields an empty designNotes here — callers needing the overflowed content
+// use the comment-reading path (ReadDesignNotesComment) instead.
 func splitBody(body, title string) (proposal, tasks string, relatedURLs []string, originalAsk, designNotes, discoveries string) {
+	propNew, body, haveProp := extractSection(body, "proposal")
+	askNew, body, haveAsk := extractSection(body, "original-ask")
+	designNew, body, haveDesign := extractSection(body, "design-notes")
+	discNew, body, haveDisc := extractSection(body, "discoveries")
+
 	var prop, tsk, ask, design, disc []string
 	inTasks := false
 	inRelated := false
@@ -349,7 +390,11 @@ func splitBody(body, title string) (proposal, tasks string, relatedURLs []string
 		}
 	}
 
-	proposal = strings.TrimSpace(strings.Join(prop, "\n"))
+	if haveProp {
+		proposal = strings.TrimSpace(propNew)
+	} else {
+		proposal = strings.TrimSpace(strings.Join(prop, "\n"))
+	}
 	if !startsWithH1(proposal) {
 		h1 := "# " + strings.TrimSpace(title)
 		if proposal == "" {
@@ -364,15 +409,27 @@ func splitBody(body, title string) (proposal, tasks string, relatedURLs []string
 	if tasks != "" {
 		tasks += "\n"
 	}
-	originalAsk = strings.TrimSpace(strings.Join(ask, "\n"))
+	if haveAsk {
+		originalAsk = strings.TrimSpace(askNew)
+	} else {
+		originalAsk = strings.TrimSpace(strings.Join(ask, "\n"))
+	}
 	if originalAsk != "" {
 		originalAsk += "\n"
 	}
-	designNotes = strings.TrimSpace(strings.Join(design, "\n"))
+	if haveDesign {
+		designNotes = strings.TrimSpace(designNew)
+	} else {
+		designNotes = strings.TrimSpace(strings.Join(design, "\n"))
+	}
 	if designNotes != "" {
 		designNotes += "\n"
 	}
-	discoveries = strings.TrimSpace(strings.Join(disc, "\n"))
+	if haveDisc {
+		discoveries = strings.TrimSpace(discNew)
+	} else {
+		discoveries = strings.TrimSpace(strings.Join(disc, "\n"))
+	}
 	if discoveries != "" {
 		discoveries += "\n"
 	}

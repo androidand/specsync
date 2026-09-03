@@ -342,6 +342,37 @@ func Sync(ctx context.Context, opts Options) (Result, error) {
 	return res, nil
 }
 
+// wrapSection renders a managed body section inside a native GitHub
+// <details> block, collapsed by default, with an HTML-comment marker
+// delimiting its content so splitBody can extract it back on pull without
+// depending on the visible <summary> label (which is free to change).
+// designNotesSection (github.go) reuses this directly so the overflow-to-
+// comment string replace stays byte-for-byte in sync with what this renders.
+func wrapSection(label, sectionID, content string) string {
+	return "<details>\n<summary>" + label + "</summary>\n<!-- specsync:section=" +
+		sectionID + " -->\n\n" + strings.TrimSpace(content) + "\n\n</details>"
+}
+
+// stripLeadingH1 removes a proposal's leading "# Title" line (and the blank
+// line after it), if present. WorkItem.Title already carries the title as
+// the issue title, so repeating it inside the (now collapsed) proposal
+// section is pure redundancy.
+func stripLeadingH1(body string) string {
+	lines := strings.Split(body, "\n")
+	i := 0
+	for i < len(lines) && strings.TrimSpace(lines[i]) == "" {
+		i++
+	}
+	if i >= len(lines) || !strings.HasPrefix(strings.TrimSpace(lines[i]), "# ") {
+		return body
+	}
+	i++
+	for i < len(lines) && strings.TrimSpace(lines[i]) == "" {
+		i++
+	}
+	return strings.Join(lines[i:], "\n")
+}
+
 // WorkItemFor renders a Change into the provider-agnostic WorkItem. Sections
 // fold in, oldest authoring context to newest, as: Body (proposal) -> ##
 // Original ask (historical context) -> ## Design notes (decisions made while
@@ -351,16 +382,22 @@ func Sync(ctx context.Context, opts Options) (Result, error) {
 // "[owner/repo#N](url)" GitHub autolink format. When closeCompleted is set, a
 // change in the complete stage (every task checked, not yet archived) also
 // projects as closed, so finishing the last task can retire the issue.
+//
+// The proposal body, Original ask, Design notes, and Discoveries render
+// collapsed (native <details>) so a synced issue shows title + task
+// checklist by default — nothing is dropped, it's one click away. Tasks,
+// Plan changes, and dependency sections stay visible: they're what a reader
+// actually comes to the issue for.
 func WorkItemFor(c Change, closeCompleted bool) WorkItem {
-	body := c.Body
+	body := wrapSection("Proposal", "proposal", stripLeadingH1(c.Body))
 	if strings.TrimSpace(c.OriginalAsk) != "" {
-		body = body + "\n\n## Original ask\n\n" + c.OriginalAsk
+		body = body + "\n\n" + wrapSection("Original ask", "original-ask", c.OriginalAsk)
 	}
 	if strings.TrimSpace(c.DesignNotes) != "" {
-		body = body + "\n\n## Design notes\n\n" + c.DesignNotes
+		body = body + "\n\n" + wrapSection("Design notes", "design-notes", c.DesignNotes)
 	}
 	if strings.TrimSpace(c.Discoveries) != "" {
-		body = body + "\n\n## Discoveries\n\n" + c.Discoveries
+		body = body + "\n\n" + wrapSection("Discoveries", "discoveries", c.Discoveries)
 	}
 	if strings.TrimSpace(c.TasksMarkdown) != "" {
 		body = body + "\n\n## Tasks\n\n" + c.TasksMarkdown

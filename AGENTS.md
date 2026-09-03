@@ -129,6 +129,26 @@ sync and pull when the title carries scope detail that belongs in the body.
 Treat that as review feedback: fix the H1 at the source. Tight prefixes
 (`refactor:`, `fix:`, `ci:`) are fine.
 
+### Body conventions
+
+**Why and Design notes state the current decision, present tense — not a
+narrated history of how you got there.** That history has its own place:
+`## Discoveries` exists specifically to hold it. A proposal that reads like a
+timeline of reconsiderations is harder to act on than one that just states
+where things landed.
+
+- Bad: "We initially considered X, but after discussion decided Y, then later
+  realized Z wouldn't work, so we're going with Y after all."
+- Good: "Uses Y because Z."
+
+If the reasoning behind a discarded approach is worth keeping, it belongs in
+Discoveries (or Non-Goals, if it's a boundary worth naming), not narrated
+inline in Why. A synced issue also renders Proposal/Original ask/Discoveries
+collapsed by default (see `change-body-composition`) specifically so this
+prose can stay as long as it needs to without burying the task checklist —
+that's not license to pad it; it's still read in full by anyone who expands
+it.
+
 ## Commit Messages
 
 - Brief, concise, informative — describe the change and why.

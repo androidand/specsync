@@ -188,8 +188,10 @@ func designCommentMarker(slug string) string {
 
 // designNotesSection is the exact substring WorkItemFor inlines into Body
 // when design.md is non-empty, so Push's overflow check is a plain replace.
+// Delegates to wrapSection (sync.go) rather than duplicating its format, so
+// the two can never drift out of byte-for-byte sync with each other.
 func designNotesSection(designNotes string) string {
-	return "\n\n## Design notes\n\n" + designNotes
+	return "\n\n" + wrapSection("Design notes", "design-notes", designNotes)
 }
 
 // designNotesStub replaces designNotesSection when it overflows to a
