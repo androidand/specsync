@@ -33,7 +33,7 @@ func TestGitHubPushDesignNotesOverflowsToComment(t *testing.T) {
 
 	notes := bigDesignNotes()
 	_, err := p.Push(context.Background(), WorkItem{
-		Slug: "my-change", Title: "T", Body: "B\n\n## Design notes\n\n" + notes,
+		Slug: "my-change", Title: "T", Body: "B\n\n" + wrapSection("Design notes", "design-notes", notes),
 		DesignNotes: notes, Stage: "planned",
 	}, &Ref{Provider: "github", ID: "7"})
 	if err != nil {
@@ -85,7 +85,7 @@ func TestGitHubPushDesignNotesResyncUpdatesSameComment(t *testing.T) {
 
 	notes := bigDesignNotes()
 	_, err := p.Push(context.Background(), WorkItem{
-		Slug: "my-change", Title: "T", Body: "B\n\n## Design notes\n\n" + notes,
+		Slug: "my-change", Title: "T", Body: "B\n\n" + wrapSection("Design notes", "design-notes", notes),
 		DesignNotes: notes, Stage: "planned",
 	}, &Ref{Provider: "github", ID: "7"})
 	if err != nil {
@@ -114,7 +114,7 @@ func TestGitHubPushDesignNotesShrinkBackMarksStale(t *testing.T) {
 
 	small := "Now a short design note."
 	_, err := p.Push(context.Background(), WorkItem{
-		Slug: "my-change", Title: "T", Body: "B\n\n## Design notes\n\n" + small,
+		Slug: "my-change", Title: "T", Body: "B\n\n" + wrapSection("Design notes", "design-notes", small),
 		DesignNotes: small, Stage: "planned",
 	}, &Ref{Provider: "github", ID: "7"})
 	if err != nil {
@@ -155,7 +155,7 @@ func TestGitHubPushDesignNotesStaleIsIdempotent(t *testing.T) {
 
 	small := "Still a short design note."
 	_, err := p.Push(context.Background(), WorkItem{
-		Slug: "my-change", Title: "T", Body: "B\n\n## Design notes\n\n" + small,
+		Slug: "my-change", Title: "T", Body: "B\n\n" + wrapSection("Design notes", "design-notes", small),
 		DesignNotes: small, Stage: "planned",
 	}, &Ref{Provider: "github", ID: "7"})
 	if err != nil {
@@ -186,7 +186,7 @@ func TestGitHubPushDesignNotesCreateNewIssueOverflow(t *testing.T) {
 
 	notes := bigDesignNotes()
 	ref, err := p.Push(context.Background(), WorkItem{
-		Slug: "my-change", Title: "T", Body: "B\n\n## Design notes\n\n" + notes,
+		Slug: "my-change", Title: "T", Body: "B\n\n" + wrapSection("Design notes", "design-notes", notes),
 		DesignNotes: notes, Stage: "planned",
 	}, nil)
 	if err != nil {

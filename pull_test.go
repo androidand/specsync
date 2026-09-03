@@ -298,6 +298,89 @@ func TestOriginalAskRoundTrip(t *testing.T) {
 	}
 }
 
+func TestSplitBodyParsesCollapsedSections(t *testing.T) {
+	body := "<!-- specsync:change=test -->\n\n" +
+		"<details>\n<summary>Proposal</summary>\n<!-- specsync:section=proposal -->\n\n" +
+		"# Test\n\nWhy this matters.\n\n</details>\n\n" +
+		"<details>\n<summary>Original ask</summary>\n<!-- specsync:section=original-ask -->\n\n" +
+		"The original request.\n\n</details>\n\n" +
+		"<details>\n<summary>Design notes</summary>\n<!-- specsync:section=design-notes -->\n\n" +
+		"Picked plan A.\n\n</details>\n\n" +
+		"<details>\n<summary>Discoveries</summary>\n<!-- specsync:section=discoveries -->\n\n" +
+		"Found a bug.\n\n</details>\n\n" +
+		"## Tasks\n\n- [ ] one\n"
+
+	proposal, tasks, _, ask, design, disc := splitBody(body, "Test")
+
+	if !strings.Contains(proposal, "Why this matters") {
+		t.Errorf("expected proposal content, got:\n%s", proposal)
+	}
+	if strings.Contains(proposal, "<details>") || strings.Contains(proposal, "specsync:section") {
+		t.Errorf("expected no leaked markup in proposal, got:\n%s", proposal)
+	}
+	if strings.TrimSpace(ask) != "The original request." {
+		t.Errorf("expected original ask 'The original request.', got %q", ask)
+	}
+	if strings.TrimSpace(design) != "Picked plan A." {
+		t.Errorf("expected design notes 'Picked plan A.', got %q", design)
+	}
+	if strings.TrimSpace(disc) != "Found a bug." {
+		t.Errorf("expected discoveries 'Found a bug.', got %q", disc)
+	}
+	if !strings.Contains(tasks, "- [ ] one") {
+		t.Errorf("expected tasks content, got:\n%s", tasks)
+	}
+}
+
+func TestSplitBodyFallsBackToLegacyHeadings(t *testing.T) {
+	// A body synced by an older specsync: bare headings, no <details>/markers.
+	body := "<!-- specsync:change=test -->\n\n# Test\n\nWhy this matters.\n\n" +
+		"## Original ask\n\nThe original request.\n\n" +
+		"## Design notes\n\nPicked plan A.\n\n" +
+		"## Discoveries\n\nFound a bug.\n\n" +
+		"## Tasks\n\n- [ ] one\n"
+
+	proposal, tasks, _, ask, design, disc := splitBody(body, "Test")
+
+	if strings.TrimSpace(design) != "Picked plan A." {
+		t.Errorf("expected design notes 'Picked plan A.', got %q", design)
+	}
+	if !strings.Contains(proposal, "Why this matters") {
+		t.Errorf("expected proposal content, got:\n%s", proposal)
+	}
+	if strings.TrimSpace(ask) != "The original request." {
+		t.Errorf("expected original ask 'The original request.', got %q", ask)
+	}
+	if strings.TrimSpace(disc) != "Found a bug." {
+		t.Errorf("expected discoveries 'Found a bug.', got %q", disc)
+	}
+	if !strings.Contains(tasks, "- [ ] one") {
+		t.Errorf("expected tasks content, got:\n%s", tasks)
+	}
+}
+
+func TestWorkItemForIsIdempotentAcrossRepeatedSyncs(t *testing.T) {
+	c := Change{
+		Slug:          "test",
+		Body:          "# Test\n\nWhy this matters.\n",
+		OriginalAsk:   "Original ask.",
+		DesignNotes:   "Picked plan A.",
+		Discoveries:   "Discovery.",
+		TasksMarkdown: "- [ ] one\n",
+	}
+	first := WorkItemFor(c, false)
+	second := WorkItemFor(c, false)
+	if first.Body != second.Body {
+		t.Errorf("expected re-rendering the same Change to produce an identical body (no double-wrapping), got:\nfirst:\n%s\nsecond:\n%s", first.Body, second.Body)
+	}
+	if n := strings.Count(second.Body, "<!-- specsync:section=proposal -->"); n != 1 {
+		t.Errorf("expected exactly one proposal section marker, got %d", n)
+	}
+	if n := strings.Count(second.Body, "<!-- specsync:section=design-notes -->"); n != 1 {
+		t.Errorf("expected exactly one design-notes section marker, got %d", n)
+	}
+}
+
 func TestWorkItemForRendersOriginalAsk(t *testing.T) {
 	c := Change{
 		Slug:        "test",
@@ -305,8 +388,8 @@ func TestWorkItemForRendersOriginalAsk(t *testing.T) {
 		OriginalAsk: "This was the original request.",
 	}
 	wi := WorkItemFor(c, false)
-	if !strings.Contains(wi.Body, "## Original ask") {
-		t.Errorf("expected '## Original ask' in body, got:\n%s", wi.Body)
+	if !strings.Contains(wi.Body, "<!-- specsync:section=original-ask -->") {
+		t.Errorf("expected original-ask section marker in body, got:\n%s", wi.Body)
 	}
 	if !strings.Contains(wi.Body, "This was the original request") {
 		t.Errorf("expected original ask content in body, got:\n%s", wi.Body)
@@ -320,8 +403,8 @@ func TestWorkItemForRendersDiscoveries(t *testing.T) {
 		Discoveries: "Found a bug in the auth flow.",
 	}
 	wi := WorkItemFor(c, false)
-	if !strings.Contains(wi.Body, "## Discoveries") {
-		t.Errorf("expected '## Discoveries' in body, got:\n%s", wi.Body)
+	if !strings.Contains(wi.Body, "<!-- specsync:section=discoveries -->") {
+		t.Errorf("expected discoveries section marker in body, got:\n%s", wi.Body)
 	}
 	if !strings.Contains(wi.Body, "Found a bug in the auth flow") {
 		t.Errorf("expected discoveries content in body, got:\n%s", wi.Body)
@@ -340,9 +423,9 @@ func TestWorkItemForSectionOrder(t *testing.T) {
 	}
 	wi := WorkItemFor(c, false)
 
-	oa := strings.Index(wi.Body, "## Original ask")
-	dn := strings.Index(wi.Body, "## Design notes")
-	di := strings.Index(wi.Body, "## Discoveries")
+	oa := strings.Index(wi.Body, "<!-- specsync:section=original-ask -->")
+	dn := strings.Index(wi.Body, "<!-- specsync:section=design-notes -->")
+	di := strings.Index(wi.Body, "<!-- specsync:section=discoveries -->")
 	ti := strings.Index(wi.Body, "## Tasks")
 	ri := strings.Index(wi.Body, "## Related")
 
@@ -358,8 +441,8 @@ func TestWorkItemForRendersDesignNotes(t *testing.T) {
 		DesignNotes: "Picked the picker pattern over a modal.",
 	}
 	wi := WorkItemFor(c, false)
-	if !strings.Contains(wi.Body, "## Design notes") {
-		t.Errorf("expected '## Design notes' in body, got:\n%s", wi.Body)
+	if !strings.Contains(wi.Body, "<!-- specsync:section=design-notes -->") {
+		t.Errorf("expected design-notes section marker in body, got:\n%s", wi.Body)
 	}
 	if !strings.Contains(wi.Body, "Picked the picker pattern over a modal") {
 		t.Errorf("expected design notes content in body, got:\n%s", wi.Body)
@@ -372,8 +455,35 @@ func TestWorkItemForRendersDesignNotes(t *testing.T) {
 func TestWorkItemForOmitsDesignNotesWhenEmpty(t *testing.T) {
 	c := Change{Slug: "test", Body: "# Test\n\nBody.\n"}
 	wi := WorkItemFor(c, false)
-	if strings.Contains(wi.Body, "## Design notes") {
-		t.Errorf("expected no '## Design notes' section, got:\n%s", wi.Body)
+	if strings.Contains(wi.Body, "specsync:section=design-notes") {
+		t.Errorf("expected no design-notes section, got:\n%s", wi.Body)
+	}
+}
+
+func TestWorkItemForCollapsesProposalAndKeepsTasksVisible(t *testing.T) {
+	c := Change{
+		Slug:          "test",
+		Body:          "# Test\n\nWhy this matters.\n",
+		OriginalAsk:   "Original ask.",
+		Discoveries:   "Discovery.",
+		TasksMarkdown: "- [ ] one\n",
+	}
+	wi := WorkItemFor(c, false)
+
+	if strings.Contains(wi.Body, "# Test\n") {
+		t.Errorf("expected the redundant leading H1 to be stripped from the proposal section, got:\n%s", wi.Body)
+	}
+	if !strings.Contains(wi.Body, "<!-- specsync:section=proposal -->") {
+		t.Errorf("expected a proposal section marker, got:\n%s", wi.Body)
+	}
+	// Tasks must not be inside any <details> block: find the last </details>
+	// before ## Tasks and make sure ## Tasks comes after it, not before.
+	ti := strings.Index(wi.Body, "## Tasks")
+	if ti < 0 {
+		t.Fatalf("expected '## Tasks' in body, got:\n%s", wi.Body)
+	}
+	if strings.Count(wi.Body[:ti], "<details>") != strings.Count(wi.Body[:ti], "</details>") {
+		t.Errorf("expected ## Tasks to be outside any <details> block, got:\n%s", wi.Body)
 	}
 }
 

@@ -817,7 +817,7 @@ a:focus-visible {
     </svg>
     specsync
     <span class="nav-badge"><!-- VERSION:start -->
-v0.12.1
+v0.13.2
 <!-- VERSION:end --></span>
   </a>
   <div class="nav-links">
@@ -899,8 +899,8 @@ v0.12.1
         <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h6"/><path d="M4 18h6"/><path d="M10 6l3 6"/><path d="M10 18l3-6"/><path d="M13 12h7"/><path d="M18 9l3 3-3 3"/><circle cx="4" cy="6" r="1.5"/><circle cx="4" cy="18" r="1.5"/></svg></span><span class="feature-title">Spec-first or issue-first</span></h4>
           <p>Start from local <code>proposal.md</code>/<code>tasks.md</code> or pull an existing issue tracker issue with <code>specsync pull</code>.</p>
         </div>
-        <div class="feature is-soon">
-        <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h6"/><path d="M4 18h6"/><path d="M10 6l3 6"/><path d="M10 18l3-6"/><path d="M13 12h7"/><path d="M18 9l3 3-3 3"/><circle cx="4" cy="6" r="1.5"/><circle cx="4" cy="18" r="1.5"/></svg></span><span class="feature-title">Design notes survive the worktree</span> <span class="soon">soon</span></h4>
+        <div class="feature">
+        <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h6"/><path d="M4 18h6"/><path d="M10 6l3 6"/><path d="M10 18l3-6"/><path d="M13 12h7"/><path d="M18 9l3 3-3 3"/><circle cx="4" cy="6" r="1.5"/><circle cx="4" cy="18" r="1.5"/></svg></span><span class="feature-title">Design notes survive the worktree</span></h4>
           <p>A <code>design.md</code> renders as <code>## Design notes</code> in the synced issue, so decisions made while planning aren't lost if the local worktree is force-removed. Oversized notes overflow to a linked issue comment instead of getting truncated.</p>
         </div>
         <div class="feature">
@@ -963,6 +963,10 @@ v0.12.1
         <div class="feature">
         <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h6"/><path d="M4 18h6"/><path d="M10 6l3 6"/><path d="M10 18l3-6"/><path d="M13 12h7"/><path d="M18 9l3 3-3 3"/><circle cx="4" cy="6" r="1.5"/><circle cx="4" cy="18" r="1.5"/></svg></span><span class="feature-title">Any MCP-connected tracker</span></h4>
           <p><code>-provider mcp</code> projects changes through any external MCP server instead of <code>gh</code> — Linear, Jira, GitHub, or in-house. Speaks the current MCP spec with automatic fallback to legacy handshake-based servers.</p>
+        </div>
+        <div class="feature">
+        <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h5"/><path d="M5 12h9"/><path d="M5 17h13"/><circle cx="4" cy="7" r="1.2"/><circle cx="4" cy="12" r="1.2"/><circle cx="4" cy="17" r="1.2"/><path d="M19 17l1.8 1.8L23 16.6"/></svg></span><span class="feature-title">Collapsed by default</span></h4>
+          <p>A synced issue shows title and task checklist first — Proposal, Original ask, and Discoveries render inside collapsed <code>&lt;details&gt;</code> blocks, one click away, nothing removed.</p>
         </div>
         </div>
       </div>
@@ -1066,29 +1070,27 @@ v0.12.1
   <!-- CHANGELOG:start -->
         <div class="release">
           <div class="release-header">
-            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.12.1" target="_blank" rel="noopener">v0.12.1</a>
-            <span class="release-date">Aug 19, 2026</span>
+            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.13.2" target="_blank" rel="noopener">v0.13.2</a>
+            <span class="release-date">Aug 28, 2026</span>
           </div>
-          <div class="release-body"><h5>Changed</h5><ul><li>Fixed <code>specsync relate</code> silently running a live sync instead of erroring (it was already unwired; now it fails loudly like any other unknown subcommand). Fixed <code>agent-help</code>/<code>doctor</code> ignoring <code>--json</code> when placed after the subcommand name. Added <code>agent-help</code> entries for <code>doctor</code>, <code>epic</code>, <code>idea</code>, <code>ideas</code>, <code>archive</code>, <code>set-priority</code>, and <code>note</code>. Standardized CLI help text and docs on single-dash flag style throughout. <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/135" target="_blank" rel="noopener">#135</a></span></li></ul></div>
-          <a class="release-full-link" href="https://github.com/androidand/specsync/releases/tag/v0.12.1" target="_blank" rel="noopener">View complete release details on GitHub →</a>
+          <div class="release-body"><h5>Changed</h5><ul><li>Fixed <code>TestImportPath</code> failing in any git worktree not literally named "specsync" (e.g. this repo's own <code>specsync-&lt;change&gt;</code> worktree convention) — it now checks the actual module-root invariant instead of a folder-name string match. <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/150" target="_blank" rel="noopener">#150</a></span></li></ul></div>
+          <a class="release-full-link" href="https://github.com/androidand/specsync/releases/tag/v0.13.2" target="_blank" rel="noopener">View complete release details on GitHub →</a>
         </div>
         <div class="release">
           <div class="release-header">
-            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.12.0" target="_blank" rel="noopener">v0.12.0</a>
-            <span class="release-date">Aug 19, 2026</span>
+            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.13.1" target="_blank" rel="noopener">v0.13.1</a>
+            <span class="release-date">Aug 28, 2026</span>
           </div>
-          <div class="release-body"><h5>Added</h5><ul><li><code>specsync doctor</code> now checks that the <code>openspec</code> binary is installed and reachable, reporting its path/version or a fix recommendation when missing; <code>doctor install --json</code> now also emits structured JSON. <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/132" target="_blank" rel="noopener">#132</a></span></li>
-<li>Idea intake command <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/101" target="_blank" rel="noopener">#101</a></span></li>
-<li><code>specsync epic &lt;title&gt; --repo owner/name --child ...</code> mints a <code>type:epic</code> coordination issue and wires cross-repo children to it — local change slugs or existing issue references — idempotently. <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/100" target="_blank" rel="noopener">#100</a></span></li></ul></div>
-          <a class="release-full-link" href="https://github.com/androidand/specsync/releases/tag/v0.12.0" target="_blank" rel="noopener">View complete release details on GitHub →</a>
+          <div class="release-body"><h5>Changed</h5><ul><li>Fixed: <code>specsync -change &lt;slug&gt;</code> (and slug-based links.md entries) failed to resolve a change after <code>openspec archive</code> renamed its folder with a date prefix. Archived changes now resolve by their original slug — locally, across links.md, and via live GitHub lookup with no ref cache — so a sync run after archiving correctly projects the terminal <code>archived</code> stage instead of erroring or, worse, silently missing the issue and creating a duplicate. <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/128" target="_blank" rel="noopener">#128</a></span></li></ul></div>
+          <a class="release-full-link" href="https://github.com/androidand/specsync/releases/tag/v0.13.1" target="_blank" rel="noopener">View complete release details on GitHub →</a>
         </div>
         <div class="release">
           <div class="release-header">
-            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.11.2" target="_blank" rel="noopener">v0.11.2</a>
-            <span class="release-date">Aug 13, 2026</span>
+            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.13.0" target="_blank" rel="noopener">v0.13.0</a>
+            <span class="release-date">Aug 27, 2026</span>
           </div>
-          <div class="release-body"><h5>Added</h5><ul><li>Idea intake command <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/101" target="_blank" rel="noopener">#101</a></span></li></ul></div>
-          <a class="release-full-link" href="https://github.com/androidand/specsync/releases/tag/v0.11.2" target="_blank" rel="noopener">View complete release details on GitHub →</a>
+          <div class="release-body"><h5>Changed</h5><ul><li><code>design.md</code> now syncs into the issue body as <code>## Design notes</code>, with automatic overflow to a linked issue comment when the combined body would exceed GitHub's size limit — no more silently-unsynced design decisions. <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/139" target="_blank" rel="noopener">#139</a></span></li></ul></div>
+          <a class="release-full-link" href="https://github.com/androidand/specsync/releases/tag/v0.13.0" target="_blank" rel="noopener">View complete release details on GitHub →</a>
         </div>
 <!-- CHANGELOG:end -->
 </section>

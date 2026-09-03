@@ -114,5 +114,11 @@
     "icon": "flow",
     "title": "Any MCP-connected tracker",
     "body": "<code>-provider mcp</code> projects changes through any external MCP server instead of <code>gh</code> — Linear, Jira, GitHub, or in-house. Speaks the current MCP spec with automatic fallback to legacy handshake-based servers."
+  },
+  {
+    "group": "collaborate",
+    "icon": "state",
+    "title": "Collapsed by default",
+    "body": "A synced issue shows title and task checklist first — Proposal, Original ask, and Discoveries render inside collapsed <code>&lt;details&gt;</code> blocks, one click away, nothing removed."
   }
 ]
