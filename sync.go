@@ -400,7 +400,9 @@ func WorkItemFor(c Change, closeCompleted bool) WorkItem {
 		body = body + "\n\n" + wrapSection("Discoveries", "discoveries", c.Discoveries)
 	}
 	if strings.TrimSpace(c.TasksMarkdown) != "" {
-		body = body + "\n\n## Tasks\n\n" + c.TasksMarkdown
+		// tasks.md conventionally opens with its own "# Tasks" H1; stripped
+		// here so it doesn't duplicate the "## Tasks" heading this renders.
+		body = body + "\n\n## Tasks\n\n" + stripLeadingH1(c.TasksMarkdown)
 		// Plan changes footer
 		tc := countTaskStates(c.TasksMarkdown)
 		if tc.Total() > 0 {

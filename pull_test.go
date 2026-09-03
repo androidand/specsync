@@ -487,6 +487,21 @@ func TestWorkItemForCollapsesProposalAndKeepsTasksVisible(t *testing.T) {
 	}
 }
 
+func TestWorkItemForStripsRedundantTasksH1(t *testing.T) {
+	c := Change{
+		Slug:          "test",
+		Body:          "# Test\n\nBody.\n",
+		TasksMarkdown: "# Tasks\n\n- [ ] one\n",
+	}
+	wi := WorkItemFor(c, false)
+	if n := strings.Count(wi.Body, "Tasks"); n != 1 {
+		t.Errorf("expected exactly one 'Tasks' heading, got %d, body:\n%s", n, wi.Body)
+	}
+	if !strings.Contains(wi.Body, "## Tasks\n\n- [ ] one") {
+		t.Errorf("expected '## Tasks' directly followed by the checklist, got:\n%s", wi.Body)
+	}
+}
+
 func TestPullSavesOriginalAsk(t *testing.T) {
 	dir := t.TempDir()
 	issue := fakeIssue{
