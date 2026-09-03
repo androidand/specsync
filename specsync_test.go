@@ -105,6 +105,7 @@ func TestGitHubPushCreate(t *testing.T) {
 
 	ref, err := p.Push(context.Background(), WorkItem{
 		Slug: "my-change", Title: "T", Body: "B", Stage: "planned", Priority: 2,
+		ManagedLabels: true,
 	}, nil)
 	if err != nil {
 		t.Fatalf("Push: %v", err)
@@ -126,6 +127,39 @@ func TestGitHubPushCreate(t *testing.T) {
 	}
 }
 
+// TestGitHubPushOmitsManagedLabelsByDefault pins the opt-in default: neither
+// "specsync" nor "stage:<stage>" is read back by specsync itself (identity
+// is the body marker; stage for board users is the Projects Status field),
+// so they're noise unless explicitly requested. priority:<n> is unaffected.
+func TestGitHubPushOmitsManagedLabelsByDefault(t *testing.T) {
+	var calls [][]string
+	p := &GitHubProvider{run: func(_ context.Context, args ...string) (string, error) {
+		calls = append(calls, args)
+		switch {
+		case args[0] == "issue" && args[1] == "list":
+			return "[]", nil
+		case args[0] == "issue" && args[1] == "create":
+			return "https://github.com/o/r/issues/7", nil
+		default:
+			return "", nil
+		}
+	}}
+
+	_, err := p.Push(context.Background(), WorkItem{
+		Slug: "my-change", Title: "T", Body: "B", Stage: "planned", Priority: 2,
+	}, nil)
+	if err != nil {
+		t.Fatalf("Push: %v", err)
+	}
+	create := findCall(calls, "issue", "create")
+	if hasLabel(create, "specsync") || hasLabel(create, "stage:planned") {
+		t.Errorf("expected no specsync/stage labels by default, got: %v", create)
+	}
+	if !hasLabel(create, "priority:2") {
+		t.Errorf("expected priority:2 regardless of ManagedLabels, got: %v", create)
+	}
+}
+
 func TestGitHubPushUpdateReconcilesLabels(t *testing.T) {
 	var editArgs []string
 	p := &GitHubProvider{run: func(_ context.Context, args ...string) (string, error) {
@@ -143,6 +177,7 @@ func TestGitHubPushUpdateReconcilesLabels(t *testing.T) {
 
 	_, err := p.Push(context.Background(), WorkItem{
 		Slug: "my-change", Title: "T", Body: "B", Stage: "planned",
+		ManagedLabels: true,
 	}, &Ref{Provider: "github", ID: "7"})
 	if err != nil {
 		t.Fatalf("Push: %v", err)
@@ -152,6 +187,42 @@ func TestGitHubPushUpdateReconcilesLabels(t *testing.T) {
 	}
 	if !hasFlagValue(editArgs, "--remove-label", "stage:triaged") {
 		t.Errorf("expected remove stale stage:triaged, got %v", editArgs)
+	}
+}
+
+// TestGitHubPushWithoutManagedLabelsCleansStaleOnes covers the self-cleaning
+// behavior: an issue that already carries "specsync"/"stage:x" from before
+// this opt-in existed gets them *removed* on a sync that doesn't ask for
+// them, not just held steady — they're still in specsync's managed
+// namespace (managedLabel), just no longer desired.
+func TestGitHubPushWithoutManagedLabelsCleansStaleOnes(t *testing.T) {
+	var editArgs []string
+	p := &GitHubProvider{run: func(_ context.Context, args ...string) (string, error) {
+		switch {
+		case args[0] == "issue" && args[1] == "view":
+			return `{"labels":[{"name":"specsync"},{"name":"stage:active"}]}`, nil
+		case args[0] == "issue" && args[1] == "edit":
+			editArgs = args
+			return "", nil
+		default:
+			return "", nil
+		}
+	}}
+
+	_, err := p.Push(context.Background(), WorkItem{
+		Slug: "my-change", Title: "T", Body: "B", Stage: "active",
+	}, &Ref{Provider: "github", ID: "7"})
+	if err != nil {
+		t.Fatalf("Push: %v", err)
+	}
+	if !hasFlagValue(editArgs, "--remove-label", "specsync") {
+		t.Errorf("expected stale specsync label removed, got %v", editArgs)
+	}
+	if !hasFlagValue(editArgs, "--remove-label", "stage:active") {
+		t.Errorf("expected stale stage:active label removed, got %v", editArgs)
+	}
+	if hasFlagValue(editArgs, "--add-label", "specsync") || hasFlagValue(editArgs, "--add-label", "stage:active") {
+		t.Errorf("expected no managed labels re-added without opt-in, got %v", editArgs)
 	}
 }
 
@@ -310,6 +381,43 @@ func TestDryRunDoesNotWriteCache(t *testing.T) {
 	}
 	if _, err := os.Stat(refCachePath(cdir)); err != nil {
 		t.Fatalf("real run should write the ref cache: %v", err)
+	}
+}
+
+// capturingProvider records the last WorkItem passed to Push, so a test can
+// assert on how Sync's Options translated into it.
+type capturingProvider struct {
+	ref  Ref
+	last *WorkItem
+}
+
+func (c *capturingProvider) Name() string { return "github" }
+func (c *capturingProvider) Push(_ context.Context, item WorkItem, _ *Ref) (Ref, error) {
+	c.last = &item
+	return c.ref, nil
+}
+func (c *capturingProvider) Find(context.Context, string) (*Ref, error) { return nil, nil }
+
+func TestSyncWiresLabelsOption(t *testing.T) {
+	root := t.TempDir()
+	mustWrite(t, filepath.Join(root, "changes", "c1", "proposal.md"), "# C1\n")
+	prov := &capturingProvider{ref: Ref{Provider: "github", ID: "1"}}
+
+	if _, err := Sync(context.Background(), Options{OpenSpecDir: root, Provider: prov}); err != nil {
+		t.Fatalf("Sync (Labels unset): %v", err)
+	}
+	if prov.last == nil {
+		t.Fatal("Push was never called")
+	}
+	if prov.last.ManagedLabels {
+		t.Errorf("expected ManagedLabels false when Options.Labels is unset")
+	}
+
+	if _, err := Sync(context.Background(), Options{OpenSpecDir: root, Provider: prov, Labels: true}); err != nil {
+		t.Fatalf("Sync (Labels: true): %v", err)
+	}
+	if !prov.last.ManagedLabels {
+		t.Errorf("expected ManagedLabels true when Options.Labels is true")
 	}
 }
 

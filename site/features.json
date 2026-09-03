@@ -120,5 +120,11 @@
     "icon": "state",
     "title": "Collapsed by default",
     "body": "A synced issue shows title and task checklist first — Proposal, Original ask, and Discoveries render inside collapsed <code>&lt;details&gt;</code> blocks, one click away, nothing removed."
+  },
+  {
+    "group": "collaborate",
+    "icon": "idempotent",
+    "title": "No label noise by default",
+    "body": "<code>specsync</code> and <code>stage:&lt;stage&gt;</code> labels are opt-in via <code>-labels</code> — neither is read back by specsync itself, so they aren't added unless you actually want native-label filtering."
   }
 ]

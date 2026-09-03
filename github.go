@@ -649,7 +649,10 @@ func desiredLabels(item WorkItem) []string {
 	if item.Labels != nil {
 		return item.Labels
 	}
-	labels := []string{"specsync", "stage:" + string(item.Stage)}
+	var labels []string
+	if item.ManagedLabels {
+		labels = append(labels, "specsync", "stage:"+string(item.Stage))
+	}
 	if item.Priority > 0 {
 		labels = append(labels, fmt.Sprintf("priority:%d", item.Priority))
 	}
