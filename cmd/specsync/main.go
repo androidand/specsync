@@ -220,6 +220,7 @@ func runSync(args []string) {
 	dryRun := fs.Bool("dry-run", false, "print the provider commands and rendered body without executing")
 	reconcile := fs.Bool("reconcile", true, "merge external task state back into tasks.md before pushing")
 	closeCompleted := fs.Bool("close-completed", false, "close the tracker item once every task in a change is checked")
+	labels := fs.Bool("labels", false, "add specsync/stage:<stage> labels to synced issues (off by default: neither is read back by specsync; a sync without this flag also removes them from issues that already carry them)")
 	project := fs.String("project", "", "target GitHub Projects board as owner/number (default: openspec/specsync.yml board; unset = no board)")
 	assignee := fs.String("assignee", "", "board assignee login (default: the acting viewer, \"me\")")
 	statusMap := fs.String("status-map", "", "stage→Status overrides as stage=Name pairs, e.g. \"active=In Progress,archived=Done\" (default: $SPECSYNC_STATUS_MAP)")
@@ -334,6 +335,7 @@ func runSync(args []string) {
 		Reconcile:      *reconcile,
 		CloseCompleted: *closeCompleted,
 		Project:        target,
+		Labels:         *labels,
 		Linker:         buildSyncLinker(*repo, providers),
 	})
 	if err != nil {

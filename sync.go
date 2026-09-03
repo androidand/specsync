@@ -76,6 +76,11 @@ type Options struct {
 	CloseCompleted bool          // when true, a change whose every task is checked projects as closed
 	Project BoardTarget // optional GitHub Projects board; unset = no board operations
 	Linker         Linker        // optional linker to resolve issue refs; nil = cache-only
+	// Labels controls whether synced issues get the decorative "specsync"
+	// and "stage:<stage>" labels. Off by default (neither is read back by
+	// specsync itself); pass true (the -labels flag) to restore them for
+	// repos that want native-label triage. priority:<n> is unaffected.
+	Labels bool
 }
 
 // Result reports what a sync run did.
@@ -233,6 +238,7 @@ func Sync(ctx context.Context, opts Options) (Result, error) {
 			}
 
 			item := WorkItemFor(c, opts.CloseCompleted)
+			item.ManagedLabels = opts.Labels
 			ref, perr := prov.Push(ctx, item, existingPtr)
 			if perr != nil {
 				providerResults = append(providerResults, ProviderResult{

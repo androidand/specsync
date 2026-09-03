@@ -136,6 +136,7 @@ func TestSyncClosesCompletedIssue(t *testing.T) {
 		Provider:       prov,
 		Slug:           "done-change",
 		CloseCompleted: true,
+		Labels:         true,
 	})
 	if err != nil {
 		t.Fatalf("Sync: %v", err)

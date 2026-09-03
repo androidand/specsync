@@ -47,6 +47,15 @@ type WorkItem struct {
 	ManageClosed bool     // provider must enforce the desired open/closed state
 	Labels       []string // explicit labels (when non-nil, overrides Stage/Priority)
 
+	// ManagedLabels controls whether desiredLabels adds the decorative
+	// "specsync" and "stage:<stage>" labels. Off by default: neither is read
+	// back by specsync itself (issue identity is the body marker; stage for
+	// board users comes from the Projects Status field), so unconditionally
+	// adding them is pure noise in a repo where every issue is already
+	// specsync's. Set via Options.Labels / the -labels flag for repos that
+	// want native-label triage. priority:<n> is unaffected either way.
+	ManagedLabels bool
+
 	// DesignNotes is design.md's raw content, already folded into Body's
 	// "## Design notes" section. Carried separately so a provider with a body
 	// size limit (GitHub) can move it to a linked comment instead.

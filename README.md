@@ -737,15 +737,23 @@ WorkItem                          ->  issue       (via a pluggable provider)
   label, so re-labeling a section doesn't break round-tripping. A design
   notes section that has overflowed to a linked comment (above) has no
   marker of its own — its content lives in the comment, not the body.
-- **Stage** — each issue gets a `stage:<stage>` label, derived automatically:
-  `active` while any task is unchecked, `complete` once every task is checked
-  (before archiving), and `archived` once the change moves under
-  `changes/archive/`. So finishing the last task flips the issue out of
-  `stage:active` on the next sync — no manual bookkeeping. Add `-close-completed`
-  to keep the issue's open/closed state aligned too: completion closes it and
+- **Stage** — derived automatically: `active` while any task is unchecked,
+  `complete` once every task is checked (before archiving), and `archived`
+  once the change moves under `changes/archive/`. Add `-close-completed` to
+  keep the issue's open/closed state aligned too: completion closes it and
   new unchecked work reopens it. Write a richer stage name into
   `<change>/.status` to override the derived value; an explicit `complete`
   closes with the flag, while any other explicit stage remains open.
+- **Managed labels are opt-in, off by default** — `specsync` and
+  `stage:<stage>` are not added unless you pass `-labels`. Neither is read
+  back by specsync itself: issue identity is the body marker, and stage for
+  board users is the Projects Status field, so adding them unconditionally
+  was pure noise in a repo where every issue is already specsync's.
+  `priority:<n>` is unaffected — it's always added when a priority is set.
+  Pass `-labels` for a mixed-source repo where native-label filtering
+  ("show me only the specsync issues") is actually useful. Turning it off
+  after having it on cleans up: the next sync removes `specsync`/`stage:*`
+  from issues that already carry them, not just stops adding more.
 - **Local cache** — projection ids live in a gitignored `<change>/.specsync/`
   directory, never in git.
 
