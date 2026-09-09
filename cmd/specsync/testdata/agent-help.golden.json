@@ -1001,11 +1001,32 @@
           "description": "alias for -agents"
         },
         {
+          "name": "drift",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "report drift for every known agent directory (no install)"
+        },
+        {
           "name": "opencode",
           "type": "boolean",
           "required": false,
           "default": false,
           "description": "alias for -agents"
+        },
+        {
+          "name": "rollback",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "restore canonical content to all selected targets, overwriting local overrides"
+        },
+        {
+          "name": "temp",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "install to a temporary directory for testing (isolated)"
         }
       ],
       "safety_rules": [
@@ -1013,7 +1034,8 @@
       ],
       "examples": [
         "specsync install-skill -claude-code",
-        "specsync install-skill -all"
+        "specsync install-skill -all",
+        "specsync install-skill -drift"
       ]
     },
     "link": {

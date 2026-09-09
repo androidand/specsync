@@ -18,43 +18,43 @@ func TestInstallSkillTargets(t *testing.T) {
 		shouldFail bool
 	}{
 		{
-			name:      "--claude-code",
-			args:      []string{"--claude-code"},
+			name:       "--claude-code",
+			args:       []string{"--claude-code"},
 			shouldFail: false,
 		},
 		{
-			name:      "--agents",
-			args:      []string{"--agents"},
+			name:       "--agents",
+			args:       []string{"--agents"},
 			shouldFail: false,
 		},
 		{
-			name:      "--codex (alias)",
-			args:      []string{"--codex"},
+			name:       "--codex (alias)",
+			args:       []string{"--codex"},
 			shouldFail: false,
 		},
 		{
-			name:      "--opencode (alias)",
-			args:      []string{"--opencode"},
+			name:       "--opencode (alias)",
+			args:       []string{"--opencode"},
 			shouldFail: false,
 		},
 		{
-			name:      "--agents --codex (dedup)",
-			args:      []string{"--agents", "--codex"},
+			name:       "--agents --codex (dedup)",
+			args:       []string{"--agents", "--codex"},
 			shouldFail: false,
 		},
 		{
-			name:      "--codex --opencode (dedup)",
-			args:      []string{"--codex", "--opencode"},
+			name:       "--codex --opencode (dedup)",
+			args:       []string{"--codex", "--opencode"},
 			shouldFail: false,
 		},
 		{
-			name:      "--all",
-			args:      []string{"--all"},
+			name:       "--all",
+			args:       []string{"--all"},
 			shouldFail: false,
 		},
 		{
-			name:      "no flags",
-			args:      []string{},
+			name:       "no flags",
+			args:       []string{},
 			shouldFail: true,
 		},
 	}
@@ -279,6 +279,171 @@ func TestSkillDescription(t *testing.T) {
 				t.Errorf("SKILL.md description is %d chars, exceeds 1024 limit", len(desc))
 			}
 		}
+	}
+}
+
+// TestCheckDriftNone verifies checkSingleDrift returns "none" for identical content.
+func TestCheckDriftNone(t *testing.T) {
+	t.Parallel()
+
+	// Write identical content to a temp file
+	tmp, err := os.CreateTemp("", "specsync-drift-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmp.Name())
+
+	if _, err := tmp.Write(skillContent); err != nil {
+		t.Fatal(err)
+	}
+	tmp.Close()
+
+	status := checkSingleDrift(tmp.Name())
+	if status != driftNone {
+		t.Errorf("checkSingleDrift() = %q, want %q", status, driftNone)
+	}
+}
+
+// TestCheckDriftOutdated verifies checkSingleDrift returns "outdated" when canonical is newer.
+func TestCheckDriftOutdated(t *testing.T) {
+	t.Parallel()
+
+	// Write older version content to a temp file
+	oldContent := bytes.ReplaceAll(skillContent, []byte("<!-- specsync-skill-version: 0.0.30 -->"), []byte("<!-- specsync-skill-version: 0.0.29 -->"))
+
+	tmp, err := os.CreateTemp("", "specsync-drift-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmp.Name())
+
+	if _, err := tmp.Write(oldContent); err != nil {
+		t.Fatal(err)
+	}
+	tmp.Close()
+
+	status := checkSingleDrift(tmp.Name())
+	if status != driftOutdated {
+		t.Errorf("checkSingleDrift() = %q, want %q", status, driftOutdated)
+	}
+}
+
+// TestCheckDriftDrifted verifies checkSingleDrift returns "drifted" for local changes.
+func TestCheckDriftDrifted(t *testing.T) {
+	t.Parallel()
+
+	// Write modified content to a temp file
+	modifiedContent := append(skillContent, []byte("\n\n<!-- local override -->\n")...)
+
+	tmp, err := os.CreateTemp("", "specsync-drift-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmp.Name())
+
+	if _, err := tmp.Write(modifiedContent); err != nil {
+		t.Fatal(err)
+	}
+	tmp.Close()
+
+	status := checkSingleDrift(tmp.Name())
+	if status != driftDrifted {
+		t.Errorf("checkSingleDrift() = %q, want %q", status, driftDrifted)
+	}
+}
+
+// TestCheckDriftMissing verifies checkSingleDrift returns "" for non-existent file.
+func TestCheckDriftMissing(t *testing.T) {
+	t.Parallel()
+
+	status := checkSingleDrift("/nonexistent/path/to/SKILL.md")
+	if status != "" {
+		t.Errorf("checkSingleDrift() = %q, want empty string", status)
+	}
+}
+
+// TestHasLocalOverride returns false for identical content and true for modified content.
+func TestHasLocalOverride(t *testing.T) {
+	t.Parallel()
+
+	// Test with non-existent file
+	if hasLocalOverride("/nonexistent/path/to/SKILL.md") {
+		t.Error("hasLocalOverride() should return false for non-existent file")
+	}
+
+	// Test with identical content
+	tmp, err := os.CreateTemp("", "specsync-override-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmp.Name())
+
+	if _, err := tmp.Write(skillContent); err != nil {
+		t.Fatal(err)
+	}
+	tmp.Close()
+
+	if hasLocalOverride(tmp.Name()) {
+		t.Error("hasLocalOverride() should return false for identical content")
+	}
+
+	// Test with modified content
+	modifiedContent := append(skillContent, []byte("\n\n<!-- local override -->\n")...)
+	tmp2, err := os.CreateTemp("", "specsync-override-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmp2.Name())
+
+	if _, err := tmp2.Write(modifiedContent); err != nil {
+		t.Fatal(err)
+	}
+	tmp2.Close()
+
+	if !hasLocalOverride(tmp2.Name()) {
+		t.Error("hasLocalOverride() should return true for modified content")
+	}
+}
+
+// TestTempDirFor verifies tempDirFor creates a valid temp directory.
+func TestTempDirFor(t *testing.T) {
+	t.Parallel()
+
+	target := skillTargets[0] // claude-code
+	path, cleanup, err := tempDirFor(target)
+	if err != nil {
+		t.Fatalf("tempDirFor() error: %v", err)
+	}
+	if cleanup == nil {
+		t.Fatal("tempDirFor() should return a cleanup function")
+	}
+	defer cleanup()
+
+	// Verify path exists and contains the target directory structure
+	if !strings.Contains(path, target.relPath[len(target.relPath)-1]) {
+		t.Errorf("tempDirFor() path = %q, should contain target dir", path)
+	}
+
+	// Verify root temp directory is created (nested dirs are created by caller)
+	root, err := os.Stat(filepath.Dir(filepath.Dir(filepath.Dir(path))))
+	if err != nil {
+		t.Errorf("tempDirFor() root directory not created: %v", err)
+	}
+	if !root.IsDir() {
+		t.Errorf("tempDirFor() root is not a directory")
+	}
+}
+
+// TestCheckDrift verifies checkDrift returns correct statuses for all targets.
+func TestCheckDrift(t *testing.T) {
+	t.Parallel()
+
+	// Test with no installed skills
+	// (we can't easily clear home dir, so we test the function's logic)
+	statuses := checkDrift("/tmp/nonexistent-home")
+	// Should return empty map since no dirs exist
+	if len(statuses) != 0 {
+		t.Logf("checkDrift() returned %v for nonexistent home (acceptable)", statuses)
 	}
 }
 

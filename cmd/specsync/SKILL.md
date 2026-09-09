@@ -175,3 +175,5 @@ specsync install-skill --agents           # Codex, OpenCode, and other Agent Ski
 This file is the entire installed skill — kept compact so it costs little context; its command list is generated from the binary. Detailed reference material lives in `specsync agent-help` (on-demand, per command) rather than in extra files bundled with the install.
 
 For diagnostics: `specsync doctor`
+
+<!-- specsync-skill-version: 0.0.30 -->
