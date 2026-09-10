@@ -131,10 +131,25 @@ var commandMetadata = map[string]AgentCommandHelp{
 				Default:     "auto-detect",
 				Description: "Target repo as owner/name",
 			},
+			{
+				Name:        "worktree",
+				Type:        "boolean",
+				Required:    false,
+				Default:     false,
+				Description: "Create (or reuse) a git worktree for this issue and run the pull inside it, instead of the current directory — one issue, one branch, one worktree",
+			},
+			{
+				Name:        "worktree-dir",
+				Type:        "string",
+				Required:    false,
+				Default:     "../worktrees (or $SPECSYNC_WORKTREE_DIR)",
+				Description: "Base directory for -worktree",
+			},
 		},
 		SafetyRules: []string{
 			"Use -dry-run to preview before pulling",
 			"Verify the issue number is correct",
+			"Work each issue in its own branch (feat/<n>-<slug>) and, ideally, its own worktree — pass -worktree to have pull set both up automatically, rather than accumulating unrelated changes on whatever branch happens to be checked out",
 		},
 		Examples: []string{
 			"specsync pull -issue 42 -dry-run",
@@ -935,6 +950,7 @@ func renderAgentHelpOverview(asJSON bool) {
 				"Use `specsync agent-help <command> -json` for machine-readable output",
 				"All output formats support -json for automation",
 				"Always use -dry-run before making changes",
+				"One issue, one branch, one worktree: before starting work on a change, create a branch named after its issue (e.g. feat/<n>-<slug>) — a dedicated worktree (`git worktree add ../worktrees/<slug> -b feat/<n>-<slug>`) keeps concurrent changes from colliding in the same working directory. `specsync pull -issue <n> -worktree` does this for you on the issue-first path.",
 			},
 		}
 		data, _ := json.MarshalIndent(overview, "", "  ")
@@ -964,7 +980,20 @@ Available commands:`)
 - Always use -dry-run before making changes
 - Many commands support -json for machine-readable output
 - See agent-help <command> for full details and flags
-- Read AGENTS.md for workflow patterns
+- If the project has an AGENTS.md, read it for local workflow patterns
+
+## Branch & worktree per issue
+
+Before starting work on a change, create a branch named after its issue
+(e.g. feat/42-my-change) — do not commit directly to the main branch or mix
+two issues' work in one branch. A dedicated worktree keeps concurrent
+changes from colliding in the same working directory:
+
+  git worktree add ../worktrees/my-change -b feat/42-my-change
+
+On the issue-first path, 'specsync pull -issue 42 -worktree' does this for
+you (see 'specsync agent-help pull'). Clean up when merged:
+'git worktree remove ../worktrees/my-change'.
 `)
 	}
 }
