@@ -54,6 +54,28 @@ When starting from an existing GitHub issue:
 
 4. Proceed with implementation
 
+## Adopting an Already-Existing Pair
+
+When a change and its issue both already exist independently — someone filed
+the tracker issue by hand while someone else wrote the OpenSpec change — and
+nothing links them:
+
+1. Bind them explicitly:
+   ```bash
+   specsync adopt -issue 3691 -change my-change
+   ```
+   Writes `.specsync/refs.json` *before* touching the issue body, so the link
+   holds immediately.
+
+2. Never hand-edit the `<!-- specsync:change=<slug> -->` marker into the issue
+   body and hope the next sync finds it — marker search lags writes by
+   seconds to minutes, and a sync inside that window creates a *duplicate*
+   issue instead of finding the real one.
+
+3. If `sync` reports an ambiguous-marker or closed-issue error, that is the
+   guard doing its job (not a bug): resolve it with `specsync adopt` rather
+   than `-force`, unless you're certain the cached ref is right.
+
 ## Implementation Phase
 
 During active work:
@@ -181,6 +203,15 @@ Before starting new work:
    ```bash
    specsync changes --json | jq 'group_by(.stage)'
    ```
+
+4. Scanning across sibling repos checked out locally (not a remote fetch):
+   ```bash
+   specsync scan -openspecs ../backend/openspec,../frontend/openspec src/auth/
+   specsync scan -references src/auth/   # also show declared openspec/config.yaml references
+   ```
+   specsync has no concept of one shared spec repo that other projects pull
+   from instead of keeping their own `openspec/` — every directory named here
+   must be a real local checkout.
 
 ## Handling Blockers
 

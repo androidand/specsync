@@ -2,6 +2,7 @@ package specsync
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -350,6 +351,188 @@ func TestGitHubFindReturnsNilWithoutExactMarker(t *testing.T) {
 	}
 	if ref != nil {
 		t.Fatalf("Find returned ref %#v, want nil without exact marker", ref)
+	}
+}
+
+// TestGitHubFindAmbiguousMarker pins the duplicate-detection guard: marker
+// search returning more than one exact match must stop rather than pick a
+// first hit — silently choosing is exactly how a sync started writing to the
+// wrong issue of the FusionHub #3691/#3692 pair.
+func TestGitHubFindAmbiguousMarker(t *testing.T) {
+	p := &GitHubProvider{run: func(_ context.Context, args ...string) (string, error) {
+		if args[0] == "issue" && args[1] == "list" {
+			return `[
+				{"number":1,"url":"https://github.com/o/r/issues/1","body":"<!-- specsync:change=dup -->\n\nfirst"},
+				{"number":2,"url":"https://github.com/o/r/issues/2","body":"<!-- specsync:change=dup -->\n\nsecond"}
+			]`, nil
+		}
+		return "", nil
+	}}
+
+	ref, err := p.Find(context.Background(), "dup")
+	if ref != nil {
+		t.Fatalf("Find returned a ref %#v, want nil on ambiguous match", ref)
+	}
+	var ambig *AmbiguousMarkerError
+	if !errors.As(err, &ambig) {
+		t.Fatalf("err = %v, want *AmbiguousMarkerError", err)
+	}
+	if len(ambig.Candidates) != 2 {
+		t.Errorf("Candidates = %v, want 2", ambig.Candidates)
+	}
+	if !strings.Contains(err.Error(), "adopt") {
+		t.Errorf("error should point at adopt to disambiguate, got: %v", err)
+	}
+}
+
+// TestSyncStopsOnAmbiguousMarker: Sync must surface the ambiguity as an error
+// on that provider result rather than creating a new (third) issue.
+func TestSyncStopsOnAmbiguousMarker(t *testing.T) {
+	root := t.TempDir()
+	mustWrite(t, filepath.Join(root, "changes", "dup", "proposal.md"), "# Dup\n")
+
+	var sawCreate bool
+	p := NewGitHubProviderFuncWithRepo("o/r", func(_ context.Context, args ...string) (string, error) {
+		switch {
+		case args[0] == "issue" && args[1] == "list":
+			return `[
+				{"number":1,"url":"https://github.com/o/r/issues/1","body":"<!-- specsync:change=dup -->"},
+				{"number":2,"url":"https://github.com/o/r/issues/2","body":"<!-- specsync:change=dup -->"}
+			]`, nil
+		case args[0] == "issue" && args[1] == "create":
+			sawCreate = true
+			return "https://github.com/o/r/issues/3", nil
+		default:
+			return "", nil
+		}
+	})
+
+	res, err := Sync(context.Background(), Options{OpenSpecDir: root, Provider: p})
+	if err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	if sawCreate {
+		t.Fatal("Sync created a new issue instead of stopping on the ambiguous match")
+	}
+	if len(res.Items) != 1 || len(res.Items[0].Providers) != 1 || res.Items[0].Providers[0].Error == nil {
+		t.Fatalf("expected the provider result to carry the ambiguity error, got: %#v", res.Items)
+	}
+	var ambig *AmbiguousMarkerError
+	if !errors.As(res.Items[0].Providers[0].Error, &ambig) {
+		t.Errorf("provider error = %v, want *AmbiguousMarkerError", res.Items[0].Providers[0].Error)
+	}
+}
+
+// TestGitHubPushRefusesClosedIssueWithoutForce pins the second guard: a
+// cached/found ref pointing at a closed issue is the strongest signal the
+// ref is stale, so Push must refuse rather than edit it — this is what let a
+// sync silently write to FusionHub's closed duplicate #3692.
+func TestGitHubPushRefusesClosedIssueWithoutForce(t *testing.T) {
+	var editCalled bool
+	p := &GitHubProvider{run: func(_ context.Context, args ...string) (string, error) {
+		switch {
+		case args[0] == "issue" && args[1] == "view":
+			return `{"state":"CLOSED","labels":[]}`, nil
+		case args[0] == "issue" && args[1] == "edit":
+			editCalled = true
+			return "", nil
+		default:
+			return "", nil
+		}
+	}}
+
+	_, err := p.Push(context.Background(), WorkItem{Slug: "my-change", Title: "T", Body: "B"}, &Ref{Provider: "github", ID: "7", URL: "https://github.com/o/r/issues/7"})
+	if err == nil {
+		t.Fatal("Push succeeded against a closed issue without -force")
+	}
+	var closedErr *ClosedIssueError
+	if !errors.As(err, &closedErr) {
+		t.Fatalf("err = %v, want *ClosedIssueError", err)
+	}
+	if editCalled {
+		t.Error("Push edited the closed issue before refusing")
+	}
+}
+
+// TestGitHubPushClosedIssueProceedsWithForce: -force (WorkItem.Force) is the
+// intended override, including for the legitimate reopen flow.
+func TestGitHubPushClosedIssueProceedsWithForce(t *testing.T) {
+	var editCalled bool
+	p := &GitHubProvider{run: func(_ context.Context, args ...string) (string, error) {
+		switch {
+		case args[0] == "issue" && args[1] == "view":
+			return `{"state":"CLOSED","labels":[]}`, nil
+		case args[0] == "issue" && args[1] == "edit":
+			editCalled = true
+			return "", nil
+		default:
+			return "", nil
+		}
+	}}
+
+	_, err := p.Push(context.Background(), WorkItem{Slug: "my-change", Title: "T", Body: "B", Force: true}, &Ref{Provider: "github", ID: "7", URL: "https://github.com/o/r/issues/7"})
+	if err != nil {
+		t.Fatalf("Push with Force: %v", err)
+	}
+	if !editCalled {
+		t.Error("Push with Force should still edit the issue")
+	}
+}
+
+// TestSyncWiresForceOption mirrors TestSyncWiresLabelsOption for the -force flag.
+func TestSyncWiresForceOption(t *testing.T) {
+	root := t.TempDir()
+	mustWrite(t, filepath.Join(root, "changes", "c1", "proposal.md"), "# C1\n")
+	prov := &capturingProvider{ref: Ref{Provider: "github", ID: "1"}}
+
+	if _, err := Sync(context.Background(), Options{OpenSpecDir: root, Provider: prov, Force: true}); err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	if prov.last == nil || !prov.last.Force {
+		t.Error("expected WorkItem.Force true when Options.Force is set")
+	}
+}
+
+// TestSyncRefusesClosedIssueThenProceedsWithForce covers the guard end to
+// end through Sync, and that -force is the way past it.
+func TestSyncRefusesClosedIssueThenProceedsWithForce(t *testing.T) {
+	root := t.TempDir()
+	mustWrite(t, filepath.Join(root, "changes", "c1", "proposal.md"), "# C1\n")
+	cdir := filepath.Join(root, "changes", "c1")
+	if err := saveRef(cdir, "github:o/r", Ref{Provider: "github:o/r", ID: "7", URL: "https://github.com/o/r/issues/7"}); err != nil {
+		t.Fatalf("saveRef: %v", err)
+	}
+
+	var editCalled bool
+	p := NewGitHubProviderFuncWithRepo("o/r", func(_ context.Context, args ...string) (string, error) {
+		switch {
+		case args[0] == "issue" && args[1] == "view":
+			return `{"state":"CLOSED","labels":[]}`, nil
+		case args[0] == "issue" && args[1] == "edit":
+			editCalled = true
+			return "", nil
+		default:
+			return "", nil
+		}
+	})
+
+	res, err := Sync(context.Background(), Options{OpenSpecDir: root, Provider: p})
+	if err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	if editCalled {
+		t.Fatal("Sync edited a closed issue without -force")
+	}
+	if res.Items[0].Providers[0].Error == nil {
+		t.Fatal("expected the closed-issue refusal surfaced as a provider error")
+	}
+
+	editCalled = false
+	if _, err := Sync(context.Background(), Options{OpenSpecDir: root, Provider: p, Force: true}); err != nil {
+		t.Fatalf("Sync with Force: %v", err)
+	}
+	if !editCalled {
+		t.Error("Sync with -force should still edit the closed issue")
 	}
 }
 

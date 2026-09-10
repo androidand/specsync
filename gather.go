@@ -2,6 +2,7 @@ package specsync
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -316,6 +317,13 @@ func issueIDFromRef(r Ref) string {
 // a checkout that has no cache at all (e.g. CI) and would otherwise report
 // every one of that change's commits as an unlinked gap. Changes that already
 // have cached IssueIDs are left untouched — no live call is made for them.
+//
+// An ambiguous marker match (AmbiguousMarkerError) is treated the same as "no
+// ref found" rather than propagated: unlike sync's write path, this call
+// never touches an issue, so there's nothing unsafe about degrading a
+// duplicate-marker change to the same "unresolved, falls back to a loose
+// commit line" outcome as a change with no marker at all. A real error from
+// any other cause still aborts, matching the existing behavior.
 func ResolveLiveRefs(ctx context.Context, in *TraceInput, resolver WorkProvider) error {
 	for i := range in.Changes {
 		if len(in.Changes[i].IssueIDs) > 0 {
@@ -324,6 +332,10 @@ func ResolveLiveRefs(ctx context.Context, in *TraceInput, resolver WorkProvider)
 		slug := in.Changes[i].Change.Slug
 		ref, err := resolver.Find(ctx, slug)
 		if err != nil {
+			var ambig *AmbiguousMarkerError
+			if errors.As(err, &ambig) {
+				continue
+			}
 			return fmt.Errorf("resolve %s: %w", slug, err)
 		}
 		if ref == nil {

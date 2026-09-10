@@ -169,8 +169,8 @@ func doctorClaude(asJSON bool) {
 			result.Message = "Skill is larger than optimal"
 			result.Recommendations = []string{
 				fmt.Sprintf("Current: ~%d tokens", tokens),
-				"Consider installing with --profile minimal for 60% reduction",
-				"Run: specsync install-skill --claude-code --profile minimal",
+				"Reinstall to pick up the current canonical skill (there is only one profile; no --profile flag exists): specsync install-skill --claude-code",
+				"Detailed reference material belongs in `specsync agent-help`, not the skill file itself — if this file has grown beyond the router content, that's worth trimming upstream",
 			}
 		}
 	}

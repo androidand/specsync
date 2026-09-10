@@ -47,6 +47,12 @@ type WorkItem struct {
 	ManageClosed bool     // provider must enforce the desired open/closed state
 	Labels       []string // explicit labels (when non-nil, overrides Stage/Priority)
 
+	// Force overrides a provider's stale-ref guards (e.g. GitHubProvider's
+	// refusal to write to a closed issue). Off by default: those guards exist
+	// specifically to stop a write that would otherwise silently "succeed"
+	// against the wrong issue.
+	Force bool
+
 	// ManagedLabels controls whether desiredLabels adds the decorative
 	// "specsync" and "stage:<stage>" labels. Off by default: neither is read
 	// back by specsync itself (issue identity is the body marker; stage for

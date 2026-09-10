@@ -39,6 +39,42 @@
    - `Part of #N` while work remains
    - `Closes #N` only when all tasks complete
 
+7. **Use `adopt` to bind an existing change to an existing issue — never hand-edit the marker**
+   - See [Adopting an existing issue](#adopting-an-existing-issue) below
+
+## Adopting an existing issue
+
+A change and its issue can both already exist independently — someone files the
+tracker issue by hand while someone else writes the OpenSpec change — with
+nothing linking them. Hand-editing the `<!-- specsync:change=<slug> -->` marker
+into the issue body and hoping the next sync finds it has a real race: marker
+discovery goes through the tracker's search index, which lags behind writes by
+seconds to minutes. A sync inside that window finds nothing and creates a
+*duplicate* issue — precisely the outcome the marker was meant to prevent. This
+happened for real: a hand-added marker raced GitHub's index, a sync seconds
+later created a duplicate issue, and a later sync then wrote to the closed
+duplicate, reporting success.
+
+```bash
+specsync adopt -issue <N> [-change <slug>] [-dry-run] [-force]
+```
+
+`adopt` writes `.specsync/refs.json` *before* touching the issue body, so the
+link holds immediately regardless of indexing. It refuses when the change is
+already bound to a different issue, or the issue already carries a marker for
+a different change, unless `-force`.
+
+Two related guards protect `sync` itself, and both can now reject a flow that
+previously appeared to "succeed" — because it was succeeding while writing to
+the wrong issue:
+
+- **Ambiguous marker match**: if marker search returns more than one issue,
+  `sync` stops and names `adopt` instead of silently picking the first hit.
+- **Closed issue**: `sync` refuses to write to a closed issue unless `-force`
+  — a closed issue is the strongest available signal that a cached ref is
+  stale. (This guard only applies to a plain content push; `-close-completed`'s
+  own reopen/defer logic is unaffected.)
+
 ## Task State Reference
 
 specsync recognizes four task states in `tasks.md`:
@@ -135,3 +171,4 @@ These gates prevent quality decay.
 | Missing PR issue references | Use `specsync pr-body -change <slug>` in PR body |
 | Forgetting to archive completed changes | `openspec archive <slug> -y` at end |
 | Putting secrets in issues | Never; use env vars or vaults |
+| Hand-editing the marker into an issue body | Use `specsync adopt -issue <N> -change <slug>` instead |

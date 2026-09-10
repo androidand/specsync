@@ -31,6 +31,23 @@ specsync pull -issue <N> [-change <slug>] [-dry-run] [-repo owner/name]
 - `-dry-run` — Preview without writing files
 - `-repo owner/name` — Override auto-detected repo
 
+## adopt
+
+Bind an existing local change to an existing tracker issue, when neither one knows about the other.
+
+```
+specsync adopt -issue <N> [-change <slug>] [-repo owner/name] [-dry-run] [-force]
+```
+
+**Flags:**
+- `-issue <N>` (required) — Issue number to bind the change to
+- `-change <slug>` — Change slug (default: derived from the current branch name, e.g. `feat/42-change`)
+- `-dry-run` — Preview without writing anything
+- `-force` — Rebind despite an existing, conflicting binding on either side
+- `-repo owner/name` — Override auto-detected repo
+
+Writes `.specsync/refs.json` *before* touching the issue body, so the link holds immediately and does not depend on search-index lag; then adds the identity marker to the issue body for durability. This is the missing third verb: `pull` is issue-first, `sync` is change-first, `adopt` declares that an already-existing pair are the same work. Never hand-edit the marker into an issue body yourself — see [safety.md](safety.md#adopting-an-existing-issue).
+
 ## link
 
 Cross-link two or more OpenSpec changes.
@@ -63,12 +80,16 @@ The epic's body is fully regenerated on every run — it is not a spec, so there
 Scan for existing work in a code area or topic.
 
 ```
-specsync scan [-json] <path...> [topic words]
+specsync scan [-json] [-openspecs dir1,dir2,...] [-references] <path...> [topic words]
 ```
 
 Positional arguments split automatically:
 - **Paths**: contain `/`, `*`, `?`, `[`; start with `.`; or exist as files/directories
 - **Topics**: joined into search keywords
+
+**Flags:**
+- `-openspecs dir1,dir2,...` — Scan multiple local `openspec/` directories at once (e.g. sibling repos checked out side by side), instead of just this repo's own. Each entry is a path on disk; specsync does not fetch or clone anything remote.
+- `-references` — Also show OpenSpec's own reference/workset relationships (sibling repos this project's `openspec/config.yaml` declares a dependency on via `references:`), as reported by `openspec context --json` / `openspec workset list --json`. Requires the `openspec` CLI and each sibling to be a real local checkout — specsync has no concept of a single shared spec repo that other projects consume instead of keeping their own `openspec/`.
 
 ## changes
 

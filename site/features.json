@@ -39,6 +39,14 @@
   },
   {
     "group": "collaborate",
+    "icon": "idempotent",
+    "title": "Adopt an existing issue",
+    "body": "<code>specsync adopt -issue 3691 -change my-change</code> binds a change and an issue that already exist independently, writing the ref cache before touching the issue body so the link holds immediately instead of racing search indexing.",
+    "status": "soon",
+    "issue": 160
+  },
+  {
+    "group": "collaborate",
     "icon": "state",
     "title": "Workflow state management",
     "body": "Set stage explicitly with <code>specsync set-stage my-change [active|blocked|in-review|complete]</code> so progress is visible and committed in metadata."

@@ -66,16 +66,19 @@ var _ SpecSource = BeadsSource{}
 
 // Options configures a sync run.
 type Options struct {
-	OpenSpecDir    string        // path to the spec root (openspec/, beads/, etc.)
-	SpecSource     SpecSource    // spec loader; defaults to FileSpecSource when nil
-	Provider       WorkProvider  // target tracker (deprecated: use Providers)
+	OpenSpecDir    string         // path to the spec root (openspec/, beads/, etc.)
+	SpecSource     SpecSource     // spec loader; defaults to FileSpecSource when nil
+	Provider       WorkProvider   // target tracker (deprecated: use Providers)
 	Providers      []WorkProvider // set of providers to fan-out to; Provider is used when Providers is nil
-	Slug           string        // if set, only this change is synced
-	DryRun         bool          // when true, never persist refs to the cache
-	Reconcile      bool          // when true, merge issue checkbox state into tasks.md before pushing
-	CloseCompleted bool          // when true, a change whose every task is checked projects as closed
-	Project BoardTarget // optional GitHub Projects board; unset = no board operations
-	Linker         Linker        // optional linker to resolve issue refs; nil = cache-only
+	Slug           string         // if set, only this change is synced
+	DryRun         bool           // when true, never persist refs to the cache
+	Reconcile      bool           // when true, merge issue checkbox state into tasks.md before pushing
+	CloseCompleted bool           // when true, a change whose every task is checked projects as closed
+	Project        BoardTarget    // optional GitHub Projects board; unset = no board operations
+	Linker         Linker         // optional linker to resolve issue refs; nil = cache-only
+	// Force overrides provider stale-ref guards (e.g. refusing to write to a
+	// closed issue). Off by default; see WorkItem.Force.
+	Force bool
 	// Labels controls whether synced issues get the decorative "specsync"
 	// and "stage:<stage>" labels. Off by default (neither is read back by
 	// specsync itself); pass true (the -labels flag) to restore them for
@@ -205,7 +208,7 @@ func Sync(ctx context.Context, opts Options) (Result, error) {
 				existingPtr = linkerResult.Ref
 			}
 
-		// For providers with an existing issue: reconcile inbound before
+			// For providers with an existing issue: reconcile inbound before
 			// rendering, so the push carries the merged state.
 			if opts.Reconcile && !opts.DryRun && existingPtr != nil {
 				resolved, flips, rerr := reconcileTaskState(ctx, prov, &c, existingPtr)
@@ -239,6 +242,7 @@ func Sync(ctx context.Context, opts Options) (Result, error) {
 
 			item := WorkItemFor(c, opts.CloseCompleted)
 			item.ManagedLabels = opts.Labels
+			item.Force = opts.Force
 			ref, perr := prov.Push(ctx, item, existingPtr)
 			if perr != nil {
 				providerResults = append(providerResults, ProviderResult{

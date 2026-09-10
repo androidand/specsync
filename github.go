@@ -396,6 +396,28 @@ func (p *GitHubProvider) Push(ctx context.Context, item WorkItem, existing *Ref)
 	}
 
 	num := existing.ID
+
+	// Look up label/state before touching anything else, so the closed-issue
+	// guard below runs ahead of every write (title, body, labels, design
+	// comment) rather than just the last one.
+	add, remove, currentlyClosed, err := p.labelDelta(ctx, num, labels)
+	if err != nil {
+		return Ref{}, err
+	}
+
+	// Refuse to write to a closed issue without -force — but only when this
+	// push has no explicit opinion about open/closed state at all
+	// (!ManageClosed). A plain content/task sync has no reason to touch a
+	// closed issue, so a closed state there is the strongest available
+	// signal that the ref is stale: this is what let a sync go on writing to
+	// FusionHub's closed duplicate #3692 and report success while updating
+	// something nobody reads. When ManageClosed is true, the three-way merge
+	// below already decides reopen-vs-defer deliberately and safely; gating
+	// that on -force too would just make -close-completed unusable.
+	if currentlyClosed && !item.ManageClosed && !item.Force {
+		return Ref{}, &ClosedIssueError{Slug: item.Slug, ID: num, URL: existing.URL}
+	}
+
 	if designOverflow {
 		if err := p.syncDesignComment(ctx, num, item, &body); err != nil {
 			return Ref{}, err
@@ -408,10 +430,6 @@ func (p *GitHubProvider) Push(ctx context.Context, item WorkItem, existing *Ref)
 	}
 	args := append([]string{"issue", "edit", num}, p.repoFlag()...)
 	args = append(args, "--title", item.Title, "--body", body)
-	add, remove, currentlyClosed, err := p.labelDelta(ctx, num, labels)
-	if err != nil {
-		return Ref{}, err
-	}
 	for _, l := range add {
 		args = append(args, "--add-label", l)
 	}
@@ -464,6 +482,44 @@ func (p *GitHubProvider) Push(ctx context.Context, item WorkItem, existing *Ref)
 
 func boolPtr(b bool) *bool { return &b }
 
+// AmbiguousMarkerError reports that marker search matched more than one
+// issue for a change's slug. This is the exact shape of the observed
+// FusionHub failure: a hand-added marker raced GitHub's search index, a sync
+// found nothing and created a duplicate, and a *later* sync's marker search
+// then had two candidates to choose between — silently taking the first was
+// how it kept writing to the wrong one. Find refuses to pick; the caller
+// (sync) surfaces this error instead of pushing, and points at `adopt` to
+// bind the right issue explicitly.
+type AmbiguousMarkerError struct {
+	Slug       string
+	Candidates []Ref // every issue whose body carries the marker, for display
+}
+
+func (e *AmbiguousMarkerError) Error() string {
+	urls := make([]string, len(e.Candidates))
+	for i, c := range e.Candidates {
+		urls[i] = c.URL
+	}
+	return fmt.Sprintf("ambiguous marker: %d issues carry the marker for %q (%s) — run `specsync adopt -change %s -issue <n>` to bind the right one",
+		len(e.Candidates), e.Slug, strings.Join(urls, ", "), e.Slug)
+}
+
+// ClosedIssueError reports refusal to write to a closed issue without
+// -force. See AmbiguousMarkerError for the sibling guard on marker search;
+// both exist because a stale ref can point at an issue that no longer
+// represents the change, and writing to it anyway is how a sync used to
+// report success while updating something nobody reads.
+type ClosedIssueError struct {
+	Slug string
+	ID   string
+	URL  string
+}
+
+func (e *ClosedIssueError) Error() string {
+	return fmt.Sprintf("issue %s is closed; refusing to write to it (stale ref?) — pass -force to override, or run `specsync adopt -change %s -issue %s` if this is genuinely the right issue",
+		e.URL, e.Slug, e.ID)
+}
+
 func (p *GitHubProvider) Find(ctx context.Context, slug string) (*Ref, error) {
 	// Search the inner token (not the full HTML comment) for friendlier indexing.
 	search := fmt.Sprintf("specsync:change=%s in:body", slug)
@@ -485,12 +541,20 @@ func (p *GitHubProvider) Find(ctx context.Context, slug string) (*Ref, error) {
 		return nil, fmt.Errorf("parse gh issue list: %w", err)
 	}
 	want := marker(slug)
+	var matches []Ref
 	for _, it := range items {
 		if strings.Contains(it.Body, want) {
-			return &Ref{Provider: p.Name(), ID: fmt.Sprintf("%d", it.Number), URL: it.URL}, nil
+			matches = append(matches, Ref{Provider: p.Name(), ID: fmt.Sprintf("%d", it.Number), URL: it.URL})
 		}
 	}
-	return nil, nil
+	switch len(matches) {
+	case 0:
+		return nil, nil
+	case 1:
+		return &matches[0], nil
+	default:
+		return nil, &AmbiguousMarkerError{Slug: slug, Candidates: matches}
+	}
 }
 
 // SearchOpenIssues finds open issues matching a free-text query, satisfying the

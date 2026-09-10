@@ -26,14 +26,14 @@ type AgentCommandWorkflow struct {
 
 // AgentCommandHelp is the complete help metadata for a command.
 type AgentCommandHelp struct {
-	Command      string                `json:"command"`
-	Description  string                `json:"description"`
-	Mutates      bool                  `json:"mutates"`
-	Workflow     AgentCommandWorkflow  `json:"workflow"`
-	Flags        []AgentCommandFlag    `json:"flags"`
-	SafetyRules  []string              `json:"safety_rules"`
-	JSONOutput   map[string]interface{} `json:"json_output,omitempty"`
-	Examples     []string              `json:"examples"`
+	Command     string                 `json:"command"`
+	Description string                 `json:"description"`
+	Mutates     bool                   `json:"mutates"`
+	Workflow    AgentCommandWorkflow   `json:"workflow"`
+	Flags       []AgentCommandFlag     `json:"flags"`
+	SafetyRules []string               `json:"safety_rules"`
+	JSONOutput  map[string]interface{} `json:"json_output,omitempty"`
+	Examples    []string               `json:"examples"`
 }
 
 // commandMetadata is the registry of all command help.
@@ -140,6 +140,61 @@ var commandMetadata = map[string]AgentCommandHelp{
 			"specsync pull -issue 42 -dry-run",
 			"specsync pull -issue 42",
 			"specsync pull -issue 42 -json",
+		},
+	},
+	"adopt": {
+		Command:     "adopt",
+		Description: "Bind an existing local change to an existing tracker issue, when neither one knows about the other.",
+		Mutates:     true,
+		Workflow: AgentCommandWorkflow{
+			Position:      "plan",
+			RelatedBefore: []string{"changes", "scan"},
+			RelatedAfter:  []string{"sync"},
+		},
+		Flags: []AgentCommandFlag{
+			{
+				Name:        "issue",
+				Type:        "number",
+				Required:    true,
+				Description: "Issue number to bind the change to (required)",
+			},
+			{
+				Name:        "change",
+				Type:        "string",
+				Required:    false,
+				Description: "Change slug (default: derived from the current branch name, e.g. feat/42-change)",
+			},
+			{
+				Name:        "dry-run",
+				Type:        "boolean",
+				Required:    false,
+				Default:     false,
+				Description: "Preview what would be written without writing anything",
+			},
+			{
+				Name:        "force",
+				Type:        "boolean",
+				Required:    false,
+				Default:     false,
+				Description: "Rebind despite an existing, conflicting binding on either side",
+			},
+			{
+				Name:        "repo",
+				Type:        "string",
+				Required:    false,
+				Default:     "auto-detect",
+				Description: "Target repo as owner/name",
+			},
+		},
+		SafetyRules: []string{
+			"Never hand-edit the marker into an issue body and hope the next sync finds it — marker discovery goes through search indexing, which lags writes by seconds to minutes, and a sync inside that window creates a duplicate issue instead. Use adopt: it writes the ref cache before touching the issue body, so the link holds immediately.",
+			"Use -dry-run to preview before adopting",
+			"A change already bound to a different issue, or an issue already marked for a different change, is refused without -force",
+		},
+		Examples: []string{
+			"specsync adopt -issue 3691 -dry-run",
+			"specsync adopt -issue 3691 -change my-change",
+			"specsync adopt -issue 3691 -change my-change -force",
 		},
 	},
 	"link": {
