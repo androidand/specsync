@@ -4,6 +4,17 @@ All notable changes to this project are documented here. One entry per shipped
 OpenSpec change — see the linked issues for the full spec and discussion.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.14.0] - 2026-09-10
+
+### Changed
+
+- Adopt an existing issue into an existing change (#160)
+- Fixed a duplicated "Tasks" heading in synced issue bodies. (#155)
+- `specsync` and `stage:<stage>` labels are no longer added by default — issue identity was never based on them (the body marker is), and stage duplicates the Projects board Status column wherever a board is used. Pass `-labels` to `sync` to restore the previous always-on behavior. A sync without the flag also removes these labels from issues that already carry them from before this change. (#157)
+- Synced issues now show title and task checklist by default; the proposal, original ask, design notes, and discoveries are one click away in collapsed sections instead of pushing the tasks down the page. No content is removed or moved out of the issue. (#152)
+
+<!-- 6 internal commit(s) omitted (chore/docs/ci/...) -->
+
 ## [0.13.2] - 2026-08-28
 
 ### Changed
