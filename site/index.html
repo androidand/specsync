@@ -924,6 +924,10 @@ v0.13.2
         <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M6 10a6 6 0 0 1 10-4"/><path d="M16 6h4v4"/><path d="M18 14a6 6 0 0 1-10 4"/><path d="M8 18H4v-4"/></svg></span><span class="feature-title">Idempotent</span></h4>
           <p>Run <code>specsync -change my-change</code> as often as needed. If the issue tracker issue already exists, specsync updates it (same identity marker) instead of creating a duplicate.</p>
         </div>
+        <div class="feature is-soon">
+        <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M6 10a6 6 0 0 1 10-4"/><path d="M16 6h4v4"/><path d="M18 14a6 6 0 0 1-10 4"/><path d="M8 18H4v-4"/></svg></span><span class="feature-title">Adopt an existing issue</span> <span class="soon">soon</span></h4>
+          <p><code>specsync adopt -issue 3691 -change my-change</code> binds a change and an issue that already exist independently, writing the ref cache before touching the issue body so the link holds immediately instead of racing search indexing.</p>
+        </div>
         <div class="feature">
         <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h5"/><path d="M5 12h9"/><path d="M5 17h13"/><circle cx="4" cy="7" r="1.2"/><circle cx="4" cy="12" r="1.2"/><circle cx="4" cy="17" r="1.2"/><path d="M19 17l1.8 1.8L23 16.6"/></svg></span><span class="feature-title">Workflow state management</span></h4>
           <p>Set stage explicitly with <code>specsync set-stage my-change [active|blocked|in-review|complete]</code> so progress is visible and committed in metadata.</p>
@@ -967,6 +971,10 @@ v0.13.2
         <div class="feature">
         <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h5"/><path d="M5 12h9"/><path d="M5 17h13"/><circle cx="4" cy="7" r="1.2"/><circle cx="4" cy="12" r="1.2"/><circle cx="4" cy="17" r="1.2"/><path d="M19 17l1.8 1.8L23 16.6"/></svg></span><span class="feature-title">Collapsed by default</span></h4>
           <p>A synced issue shows title and task checklist first — Proposal, Original ask, and Discoveries render inside collapsed <code>&lt;details&gt;</code> blocks, one click away, nothing removed.</p>
+        </div>
+        <div class="feature">
+        <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M6 10a6 6 0 0 1 10-4"/><path d="M16 6h4v4"/><path d="M18 14a6 6 0 0 1-10 4"/><path d="M8 18H4v-4"/></svg></span><span class="feature-title">No label noise by default</span></h4>
+          <p><code>specsync</code> and <code>stage:&lt;stage&gt;</code> labels are opt-in via <code>-labels</code> — neither is read back by specsync itself, so they aren't added unless you actually want native-label filtering.</p>
         </div>
         </div>
       </div>

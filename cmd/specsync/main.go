@@ -33,7 +33,7 @@ var knownSubcommands = map[string]bool{
 	"sync": true, "audit": true, "audit-tasks": true, "validate": true,
 	"spinoff": true, "pr-body": true, "verify": true,
 	"agent-help": true, "doctor": true, "idea": true, "ideas": true, "archive": true,
-	"epic": true,
+	"epic": true, "adopt": true,
 }
 
 // knownConfusions maps a word someone might reach for by habit (e.g. git's
@@ -94,7 +94,7 @@ func deprecatedSlugFlag(args []string) error {
 func main() {
 	cmd, rest, err := resolveSubcommand(os.Args[1:])
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "specsync: %v\n\nRun with no subcommand (optionally with flags) to sync, or use one of: pull, link, scan, trace, release-plan, changelog, install-skill, changes, set-stage, set-priority, note, audit, audit-tasks, validate, spinoff, pr-body, verify, idea, ideas, archive, epic\n", err)
+		fmt.Fprintf(os.Stderr, "specsync: %v\n\nRun with no subcommand (optionally with flags) to sync, or use one of: pull, adopt, link, scan, trace, release-plan, changelog, install-skill, changes, set-stage, set-priority, note, audit, audit-tasks, validate, spinoff, pr-body, verify, idea, ideas, archive, epic\n", err)
 		os.Exit(2)
 	}
 
@@ -103,6 +103,8 @@ func main() {
 		fmt.Println("specsync " + versionString())
 	case "pull":
 		runPull(rest)
+	case "adopt":
+		runAdopt(rest)
 	case "link":
 		runLink(rest)
 	case "scan":
@@ -221,6 +223,7 @@ func runSync(args []string) {
 	reconcile := fs.Bool("reconcile", true, "merge external task state back into tasks.md before pushing")
 	closeCompleted := fs.Bool("close-completed", false, "close the tracker item once every task in a change is checked")
 	labels := fs.Bool("labels", false, "add specsync/stage:<stage> labels to synced issues (off by default: neither is read back by specsync; a sync without this flag also removes them from issues that already carry them)")
+	force := fs.Bool("force", false, "write to a closed issue instead of refusing (a closed issue is the strongest signal a cached ref is stale; an ambiguous marker match is never overridden here — use `specsync adopt` to disambiguate)")
 	project := fs.String("project", "", "target GitHub Projects board as owner/number (default: openspec/specsync.yml board; unset = no board)")
 	assignee := fs.String("assignee", "", "board assignee login (default: the acting viewer, \"me\")")
 	statusMap := fs.String("status-map", "", "stage→Status overrides as stage=Name pairs, e.g. \"active=In Progress,archived=Done\" (default: $SPECSYNC_STATUS_MAP)")
@@ -336,6 +339,7 @@ func runSync(args []string) {
 		CloseCompleted: *closeCompleted,
 		Project:        target,
 		Labels:         *labels,
+		Force:          *force,
 		Linker:         buildSyncLinker(*repo, providers),
 	})
 	if err != nil {
@@ -488,6 +492,63 @@ func runPull(args []string) {
 	}
 	if res.BoardConfigured {
 		printBoardPlan(res.Board, false)
+	}
+}
+
+// runAdopt binds an existing local change to an existing tracker issue —
+// the missing third verb: pull is issue-first, sync is change-first, adopt
+// declares that an already-existing pair are the same work.
+func runAdopt(args []string) {
+	fs := flag.NewFlagSet("adopt", flag.ExitOnError)
+	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	issue := fs.String("issue", "", "issue number to bind the change to (required)")
+	change := fs.String("change", "", "change slug (default: derived from the current branch name, e.g. feat/42-change)")
+	repo := fs.String("repo", "", "target repo as owner/name (default: auto-detect from git remote)")
+	dryRun := fs.Bool("dry-run", false, "show what would be written without writing anything")
+	force := fs.Bool("force", false, "rebind despite an existing, conflicting binding on either side")
+	if err := deprecatedSlugFlag(args); err != nil {
+		fail(err)
+	}
+	_ = fs.Parse(args)
+
+	if *issue == "" {
+		fail(fmt.Errorf("-issue is required"))
+	}
+
+	abs, err := filepath.Abs(*openspec)
+	if err != nil {
+		fail(err)
+	}
+
+	res, err := specsync.Adopt(context.Background(), specsync.AdoptOptions{
+		OpenSpecDir: abs,
+		Provider:    makeProvider(*repo, false, "github", ""),
+		IssueID:     *issue,
+		Slug:        *change,
+		DryRun:      *dryRun,
+		Force:       *force,
+	})
+	if err != nil {
+		fail(err)
+	}
+
+	if *dryRun {
+		fmt.Printf("DRY RUN — would bind change %q to issue %s (%s)\n", res.Slug, res.IssueID, res.IssueURL)
+		fmt.Printf("  would write .specsync/refs.json in %s\n", res.Dir)
+		if res.MarkerAdded {
+			fmt.Printf("  would add marker to issue %s body\n", res.IssueID)
+		} else {
+			fmt.Printf("  issue %s already carries the marker (no body edit needed)\n", res.IssueID)
+		}
+		return
+	}
+
+	fmt.Printf("specsync: adopted issue %s -> %s\n", res.IssueURL, res.Slug)
+	fmt.Println("  + .specsync/refs.json")
+	if res.MarkerAdded {
+		fmt.Println("  + marker added to issue body")
+	} else {
+		fmt.Println("  marker already present on issue body")
 	}
 }
 

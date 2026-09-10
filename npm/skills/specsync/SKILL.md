@@ -29,6 +29,16 @@ specsync -change <slug>             # push to GitHub
 specsync pull -issue N [-change <slug>]
 ```
 
+**Bind an already-existing change to an already-existing issue:**
+```bash
+specsync adopt -issue N [-change <slug>]
+```
+Use this — never hand-edit the `<!-- specsync:change=<slug> -->` marker into an
+issue body yourself. Marker discovery goes through search indexing, which lags
+writes by seconds to minutes; a sync inside that window finds nothing and
+creates a duplicate issue. `adopt` writes the ref cache first, so the link
+holds immediately regardless of indexing.
+
 **Find related work:**
 ```bash
 specsync scan <path...> [topic]
@@ -60,26 +70,17 @@ specsync agent-help                # overview
 
 ## More Information
 
-For detailed guidance on any command, use `specsync agent-help`. This CLI is self-documenting.
+For detailed guidance on any command, use `specsync agent-help` — this CLI is self-documenting, so reach for it instead of guessing at flags.
 
-For workflow patterns, see `AGENTS.md` in the repository.
-
-For reference material (command flags, detailed examples, edge cases), see the optional reference files that may be installed alongside this skill.
+For workflow patterns, see `AGENTS.md` in the repository (if the project has one).
 
 ## Install
 
 ```bash
-specsync install-skill --claude-code              # install for Claude Code
-specsync install-skill --claude-code --profile docs  # with reference docs
-specsync install-skill --claude-code --profile full  # legacy (all docs)
+specsync install-skill --claude-code   # install for Claude Code
+specsync install-skill --all           # every known agent directory: --codex --opencode --copilot --agents
 ```
 
-## Token Efficiency
-
-This skill is optimized for token efficiency. Detailed documentation is available on-demand via `specsync agent-help` rather than loaded by default.
-
-- **Default**: ~280 tokens (minimal profile)
-- **With references**: ~450 tokens (docs profile)
-- **Legacy**: ~700 tokens (full profile)
+This file is the entire installed skill — deliberately small so it costs little context by default. Detailed reference material lives in `specsync agent-help` (on-demand, per command) rather than in extra files bundled with the install.
 
 For diagnostics: `specsync doctor`
