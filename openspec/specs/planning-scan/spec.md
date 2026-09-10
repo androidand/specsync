@@ -1,7 +1,9 @@
 # planning-scan Specification
 
 ## Purpose
-TBD - created by archiving change add-planning-scan. Update Purpose after archive.
+Answers "what already exists here?" before new work is planned — existing
+changes, open issues with no linked change — deterministically and read-only,
+without inferring relationships that were never declared.
 ## Requirements
 ### Requirement: Report what already exists for an area
 specsync SHALL provide a `scan` command that, given an area (path globs and/or a

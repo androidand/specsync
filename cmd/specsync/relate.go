@@ -19,7 +19,7 @@ import (
 // queries gh/git for edge data. It never writes to disk or the tracker.
 func runRelate(args []string) {
 	fs := flag.NewFlagSet("relate", flag.ExitOnError)
-	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	openspec, storeFlag := addRootFlags(fs)
 	change := fs.String("change", "", "change slug to relate")
 	path := fs.String("path", "", "file path to find related changes (alternative to -change)")
 	repo := fs.String("repo", "", "target repo as owner/name (default: auto-detect from git remote)")
@@ -32,10 +32,7 @@ func runRelate(args []string) {
 		fail(fmt.Errorf("relate: specify only one of -change or -path, not both"))
 	}
 
-	abs, err := filepath.Abs(*openspec)
-	if err != nil {
-		fail(err)
-	}
+	abs := resolveRoot(fs, openspec, storeFlag).Dir
 	repoRoot := filepath.Dir(abs)
 
 	// Resolve repo: -repo flag → gh repo view → empty.

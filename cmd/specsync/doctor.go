@@ -114,9 +114,11 @@ func runDoctor(args []string) {
 		doctorContext(*jsonFlag)
 	case "skill":
 		doctorSkill(*jsonFlag)
+	case "store":
+		doctorStore(*jsonFlag)
 	default:
 		fmt.Fprintf(os.Stderr, "specsync doctor: unknown subcommand %q\n", subcommand)
-		fmt.Fprintf(os.Stderr, "Available: claude, install, context, skill\n")
+		fmt.Fprintf(os.Stderr, "Available: claude, install, context, skill, store\n")
 		os.Exit(2)
 	}
 }

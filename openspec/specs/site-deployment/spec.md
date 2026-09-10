@@ -1,7 +1,8 @@
 # site-deployment Specification
 
 ## Purpose
-TBD - created by archiving change deploy-standalone-site. Update Purpose after archive.
+Keeps the product site to one canonical source deployed from main, with the
+legacy route permanently redirected, so documentation cannot silently fork.
 ## Requirements
 ### Requirement: The product site has one canonical source
 

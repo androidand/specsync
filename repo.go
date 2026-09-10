@@ -11,9 +11,10 @@ import (
 type RepoRule string
 
 const (
-	RuleExplicit RepoRule = "explicit"     // -repo flag
-	RuleDefault  RepoRule = "gh-set-default" // gh repo set-default
-	RuleOrigin   RepoRule = "origin"       // git remote origin
+	RuleExplicit     RepoRule = "explicit"       // -repo flag
+	RuleChangeTarget RepoRule = "change-target"  // targets: in the change's specsync.yml
+	RuleDefault      RepoRule = "gh-set-default" // gh repo set-default
+	RuleOrigin       RepoRule = "origin"         // git remote origin
 )
 
 // ResolvedRepo holds the resolved repository and which rule selected it.
@@ -24,8 +25,16 @@ type ResolvedRepo struct {
 
 // RepoResolver resolves the target repository explicitly.
 type RepoResolver struct {
-	Explicit string // -repo flag, empty if not set
+	Explicit string   // -repo flag, empty if not set
+	Targets  []string // repos declared by the change, empty if none
 	run      func(ctx context.Context, args ...string) (string, error)
+}
+
+// WithTargets returns the resolver with the change's declared target repos
+// inserted ahead of git-remote auto-detection.
+func (r *RepoResolver) WithTargets(targets []string) *RepoResolver {
+	r.Targets = targets
+	return r
 }
 
 // NewRepoResolver returns a resolver that shells out to git/gh.
@@ -39,11 +48,18 @@ func NewRepoResolverFunc(explicit string, run func(ctx context.Context, args ...
 }
 
 // Resolve returns the target repo and which rule selected it.
-// Order: explicit flag → gh-set-default → origin.
+// Order: explicit flag → change targets → gh-set-default → origin.
 // Returns an error only if no resolution path succeeds.
+//
+// Change targets precede auto-detection because a store's changes are not
+// bound to the working directory: without them, the repo a change lands in
+// would be whichever repo the shell happens to be standing in.
 func (r *RepoResolver) Resolve(ctx context.Context) (ResolvedRepo, error) {
 	if r.Explicit != "" {
 		return ResolvedRepo{Repo: r.Explicit, Rule: RuleExplicit}, nil
+	}
+	if len(r.Targets) > 0 {
+		return ResolvedRepo{Repo: r.Targets[0], Rule: RuleChangeTarget}, nil
 	}
 
 	// Try gh repo set-default.

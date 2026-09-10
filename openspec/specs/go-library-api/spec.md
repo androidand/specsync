@@ -1,7 +1,9 @@
 # go-library-api Specification
 
 ## Purpose
-TBD - created by archiving change correct-library-import-path. Update Purpose after archive.
+Keeps specsync usable as an imported Go library, not only as a CLI: the
+documented import path resolves and archived records describe what actually
+shipped under it.
 ## Requirements
 ### Requirement: The documented import path resolves
 

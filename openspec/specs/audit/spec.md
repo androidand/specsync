@@ -1,7 +1,9 @@
 # audit Specification
 
 ## Purpose
-TBD - created by archiving change audit-archived-not-merged. Update Purpose after archive.
+Finds work that was archived without ever shipping. Archiving is the step that
+turns a change into an accumulated spec, so an archive with no merged PR behind
+it quietly corrupts the record of what the system does.
 ## Requirements
 ### Requirement: Read PR state from GitHub
 specsync SHALL provide methods on `GitHubProvider` to query open and recently

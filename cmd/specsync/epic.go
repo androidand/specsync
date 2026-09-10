@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"os/exec"
-	"path/filepath"
 	"strings"
 
 	"github.com/androidand/specsync"
@@ -18,7 +17,7 @@ import (
 // openspec/changes/epic-scaffold-command for the full design.
 func runEpic(args []string) {
 	fs := flag.NewFlagSet("epic", flag.ExitOnError)
-	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	openspec, storeFlag := addRootFlags(fs)
 	repo := fs.String("repo", "", "target repo for the epic issue, as owner/name (default: auto-detect from git remote)")
 	var children stringSlice
 	fs.Var(&children, "child", "a child to attach: local change slug, owner/repo#N, bare #N (resolved against --repo), or issue URL (repeatable)")
@@ -41,10 +40,7 @@ func runEpic(args []string) {
 		}
 	}
 
-	abs, err := filepath.Abs(*openspec)
-	if err != nil {
-		fail(err)
-	}
+	abs := resolveRoot(fs, openspec, storeFlag).Dir
 
 	epicProvider := makeProvider(targetRepo, *dryRun, "github", "")
 

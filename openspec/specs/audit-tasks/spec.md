@@ -1,7 +1,9 @@
 # audit-tasks Specification
 
 ## Purpose
-TBD - created by archiving change fix-task-dogfooding. Update Purpose after archive.
+Detects drift between what a change's tasks.md claims and what the repository
+shows, so a task list stays a description of the work rather than an
+aspiration nobody rechecks.
 ## Requirements
 ### Requirement: Scan changes for task-drift
 specsync SHALL provide an `audit-tasks` command that loads all OpenSpec changes,

@@ -1,7 +1,9 @@
 # github-projects-projection Specification
 
 ## Purpose
-TBD - created by archiving change github-projects-compatibility. Update Purpose after archive.
+Projects a change's stage onto a GitHub Projects board: resolving the Status
+field from the project's own schema, respecting human moves, and never
+inferring a board that was not explicitly configured.
 ## Requirements
 ### Requirement: Opt-in target project
 specsync SHALL accept an optional target GitHub ProjectV2 for `sync` and `pull`,

@@ -19,7 +19,7 @@ import (
 // tool unless -force.
 func runChangelog(args []string) {
 	fs := flag.NewFlagSet("changelog", flag.ExitOnError)
-	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	openspec, storeFlag := addRootFlags(fs)
 	since := fs.String("since", "", "range start (default: latest tag)")
 	until := fs.String("until", "", "range end (default: HEAD)")
 	versionFlag := fs.String("version", "", "version label for the section (default: latest tag + advisory bump)")
@@ -34,10 +34,7 @@ func runChangelog(args []string) {
 	failOnUnlinkedCommits := fs.Bool("fail-on-unlinked-commits", false, "exit non-zero when a conventional commit in range isn't linked to its change's issue (would otherwise render as a raw title+hash fallback)")
 	_ = fs.Parse(args)
 
-	abs, err := filepath.Abs(*openspec)
-	if err != nil {
-		fail(err)
-	}
+	abs := resolveRoot(fs, openspec, storeFlag).Dir
 	ctx := context.Background()
 	scope := specsync.Scope{Since: *since, Until: *until}
 
