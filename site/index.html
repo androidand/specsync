@@ -817,7 +817,7 @@ a:focus-visible {
     </svg>
     specsync
     <span class="nav-badge"><!-- VERSION:start -->
-v0.13.2
+v0.14.0
 <!-- VERSION:end --></span>
   </a>
   <div class="nav-links">
@@ -924,8 +924,8 @@ v0.13.2
         <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M6 10a6 6 0 0 1 10-4"/><path d="M16 6h4v4"/><path d="M18 14a6 6 0 0 1-10 4"/><path d="M8 18H4v-4"/></svg></span><span class="feature-title">Idempotent</span></h4>
           <p>Run <code>specsync -change my-change</code> as often as needed. If the issue tracker issue already exists, specsync updates it (same identity marker) instead of creating a duplicate.</p>
         </div>
-        <div class="feature is-soon">
-        <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M6 10a6 6 0 0 1 10-4"/><path d="M16 6h4v4"/><path d="M18 14a6 6 0 0 1-10 4"/><path d="M8 18H4v-4"/></svg></span><span class="feature-title">Adopt an existing issue</span> <span class="soon">soon</span></h4>
+        <div class="feature">
+        <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M6 10a6 6 0 0 1 10-4"/><path d="M16 6h4v4"/><path d="M18 14a6 6 0 0 1-10 4"/><path d="M8 18H4v-4"/></svg></span><span class="feature-title">Adopt an existing issue</span></h4>
           <p><code>specsync adopt -issue 3691 -change my-change</code> binds a change and an issue that already exist independently, writing the ref cache before touching the issue body so the link holds immediately instead of racing search indexing.</p>
         </div>
         <div class="feature">
@@ -1078,6 +1078,17 @@ v0.13.2
   <!-- CHANGELOG:start -->
         <div class="release">
           <div class="release-header">
+            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.14.0" target="_blank" rel="noopener">v0.14.0</a>
+            <span class="release-date">Sep 10, 2026</span>
+          </div>
+          <div class="release-body"><h5>Changed</h5><ul><li>Adopt an existing issue into an existing change <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/160" target="_blank" rel="noopener">#160</a></span></li>
+<li>Fixed a duplicated "Tasks" heading in synced issue bodies. <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/155" target="_blank" rel="noopener">#155</a></span></li>
+<li><code>specsync</code> and <code>stage:&lt;stage&gt;</code> labels are no longer added by default — issue identity was never based on them (the body marker is), and stage duplicates the Projects board Status column wherever a board is used. Pass <code>-labels</code> to <code>sync</code> to restore the previous always-on behavior. A sync without the flag also removes these labels from issues that already carry them from before this change. <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/157" target="_blank" rel="noopener">#157</a></span></li>
+<li>Synced issues now show title and task checklist by default; the proposal, original ask, design notes, and discoveries are one click away in collapsed sections instead of pushing the tasks down the page. No content is removed or moved out of the issue. <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/152" target="_blank" rel="noopener">#152</a></span></li></ul></div>
+          <a class="release-full-link" href="https://github.com/androidand/specsync/releases/tag/v0.14.0" target="_blank" rel="noopener">View complete release details on GitHub →</a>
+        </div>
+        <div class="release">
+          <div class="release-header">
             <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.13.2" target="_blank" rel="noopener">v0.13.2</a>
             <span class="release-date">Aug 28, 2026</span>
           </div>
@@ -1091,14 +1102,6 @@ v0.13.2
           </div>
           <div class="release-body"><h5>Changed</h5><ul><li>Fixed: <code>specsync -change &lt;slug&gt;</code> (and slug-based links.md entries) failed to resolve a change after <code>openspec archive</code> renamed its folder with a date prefix. Archived changes now resolve by their original slug — locally, across links.md, and via live GitHub lookup with no ref cache — so a sync run after archiving correctly projects the terminal <code>archived</code> stage instead of erroring or, worse, silently missing the issue and creating a duplicate. <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/128" target="_blank" rel="noopener">#128</a></span></li></ul></div>
           <a class="release-full-link" href="https://github.com/androidand/specsync/releases/tag/v0.13.1" target="_blank" rel="noopener">View complete release details on GitHub →</a>
-        </div>
-        <div class="release">
-          <div class="release-header">
-            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.13.0" target="_blank" rel="noopener">v0.13.0</a>
-            <span class="release-date">Aug 27, 2026</span>
-          </div>
-          <div class="release-body"><h5>Changed</h5><ul><li><code>design.md</code> now syncs into the issue body as <code>## Design notes</code>, with automatic overflow to a linked issue comment when the combined body would exceed GitHub's size limit — no more silently-unsynced design decisions. <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/139" target="_blank" rel="noopener">#139</a></span></li></ul></div>
-          <a class="release-full-link" href="https://github.com/androidand/specsync/releases/tag/v0.13.0" target="_blank" rel="noopener">View complete release details on GitHub →</a>
         </div>
 <!-- CHANGELOG:end -->
 </section>
