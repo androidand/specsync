@@ -27,7 +27,9 @@ specsync -change <slug>             # push to GitHub
 **Pull issues into specs:**
 ```bash
 specsync pull -issue N [-change <slug>]
+specsync pull -issue N -worktree   # also creates/reuses a dedicated git worktree + branch
 ```
+One issue, one branch, one worktree — don't stack unrelated changes on whatever branch is currently checked out. `-worktree` sets both up for the issue-first path; see `specsync agent-help` for the general convention (also applies spec-first, where you branch/worktree by hand: `git worktree add ../worktrees/<slug> -b feat/<n>-<slug>`).
 
 **Bind an already-existing change to an already-existing issue:**
 ```bash

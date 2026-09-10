@@ -1,5 +1,24 @@
 # Workflow Patterns
 
+## One Issue, One Branch, One Worktree
+
+Before starting *any* change below — spec-first or issue-first — put it on
+its own branch, named after the issue once one exists (`feat/<n>-<slug>`; use
+a working name and rename once `sync`/`pull` mints the issue if starting
+spec-first). Don't commit two unrelated changes to the same branch, and don't
+work directly on the main branch. A dedicated worktree avoids collisions when
+more than one change is in flight at once:
+
+```bash
+git worktree add ../worktrees/my-change -b feat/42-my-change
+# ... implement here ...
+git worktree remove ../worktrees/my-change   # once merged
+```
+
+On the issue-first path, `specsync pull -issue 42 -worktree` sets both up for
+you in one step (see `pull` in [reference.md](reference.md)). There's no
+equivalent flag for spec-first yet — branch/worktree by hand as above.
+
 ## Spec-First (Plan → Issue)
 
 When starting from a spec idea:

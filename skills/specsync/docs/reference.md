@@ -22,7 +22,7 @@ specsync [-dry-run] [-change <slug>] [-reconcile] [-close-completed] [-repo owne
 Pull an issue into a local OpenSpec change.
 
 ```
-specsync pull -issue <N> [-change <slug>] [-dry-run] [-repo owner/name]
+specsync pull -issue <N> [-change <slug>] [-dry-run] [-repo owner/name] [-worktree] [-worktree-dir <dir>]
 ```
 
 **Flags:**
@@ -30,6 +30,8 @@ specsync pull -issue <N> [-change <slug>] [-dry-run] [-repo owner/name]
 - `-change <slug>` — Override auto-derived change name
 - `-dry-run` — Preview without writing files
 - `-repo owner/name` — Override auto-detected repo
+- `-worktree` — Create (or reuse) a dedicated git worktree and branch (`feat/<N>-<slug>`) for this issue, and run the pull inside it, instead of pulling into whatever's currently checked out — one issue, one branch, one worktree
+- `-worktree-dir <dir>` — Base directory for `-worktree` (default: `$SPECSYNC_WORKTREE_DIR` or `../worktrees`)
 
 ## adopt
 
