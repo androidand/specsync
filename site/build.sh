@@ -247,11 +247,22 @@ async function build() {
   // cross-checked against each "soon" feature's `issue` field so its badge
   // clears itself the moment that issue actually ships, instead of relying on
   // someone remembering to hand-edit features.json. Reuses the same fetch as
-  // the changelog above (no extra request, no extra failure mode): if it's
-  // null, "soon" badges are simply left exactly as authored.
+  // the changelog above (no extra request, no extra failure mode).
+  //
+  // Also scanned from local CHANGELOG.md whenever the live releases fetch
+  // isn't available (rate-limited build fleet, network blocked) — the
+  // changelog section above already falls back to CHANGELOG.md in that case,
+  // and without this, a full regeneration under that fallback would
+  // recompute every "soon" badge against an empty set and silently *re-show*
+  // one that had already cleared, even while the changelog on the same page
+  // correctly lists the shipping release. Only truly-unresolvable badges
+  // (issue not mentioned in either source) are left exactly as authored.
   const shipped = new Set();
-  if (releases) {
-    for (const r of releases) for (const m of (r.body || "").matchAll(/#(\d+)/g)) shipped.add(m[1]);
+  for (const r of releases || []) {
+    for (const m of (r.body || "").matchAll(/#(\d+)/g)) shipped.add(m[1]);
+  }
+  for (const e of changelogEntries) {
+    for (const m of (e.body || "").matchAll(/#(\d+)/g)) shipped.add(m[1]);
   }
 
   // 2. Features from features.json, grouped into three themes (Plan /
