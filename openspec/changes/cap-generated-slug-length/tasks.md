@@ -13,22 +13,29 @@
 - [x] Check what `pull` does today when the target change directory already
       exists, and decide whether truncation needs a collision suffix or the
       existing behaviour already covers it.
-      Finding: `pull.go` has **no existing collision guard at all** —
-      `os.MkdirAll` + `os.WriteFile` silently overwrite `proposal.md`/
-      `tasks.md` in place whenever the derived slug matches an existing
-      directory, regardless of whether it's the same issue being re-pulled
-      or a different one that happened to collide. This is a pre-existing
+      Finding: `pull.go` had **no existing collision guard at all** —
+      `os.MkdirAll` + `os.WriteFile` silently overwrote `proposal.md`/
+      `tasks.md` in place whenever the derived slug matched an existing
+      directory, regardless of whether it was the same issue being re-pulled
+      or a different one that happened to collide. This was a pre-existing
       gap independent of slug length: two different issues with literally
-      identical titles already collide today, untruncated. Truncation raises
-      the odds (demonstrated by `TestSlugifyDistinctLongTitlesCanCollideOnTruncation`)
-      but doesn't create a new class of bug, and fixing it needs to
-      distinguish "re-pull of the same issue" (intentional overwrite) from
-      "different issue, same slug" (should not overwrite) — that requires
-      checking the existing dir's ref cache against the issue being pulled,
-      which is a separate, real fix orthogonal to capping slug length.
-      **No collision suffix added here.** `spinoff.go` already errors on an
-      existing child dir (unaffected either way). `epic.go`'s slug is not
-      used as a directory path, so no collision surface there.
+      identical titles already collided, untruncated. Truncation raises the
+      odds (demonstrated by `TestSlugifyDistinctLongTitlesCanCollideOnTruncation`)
+      but doesn't create a new class of bug on its own — it just makes an
+      existing one more likely, so it's fixed here rather than deferred.
+      **Fixed** in `pull.go`: a directory that already exists is only ever
+      overwritten when it's an intentional re-pull of the *same* issue (its
+      ref cache names that issue), or an explicit `-change` into a directory
+      with no ref cache at all (a hand-authored, never-synced local change —
+      the human named that exact directory; this is the normal
+      spec-first-then-pull flow, see `TestPullRecordsTaskBase`). Every other
+      case — a ref cache naming a *different* issue, or an auto-derived slug
+      colliding with an untracked hand-authored directory — gets a numeric
+      suffix (`-2`, `-3`, ...) via `nextAvailableSlug`, or an explicit error
+      for an explicit `-change` conflicting with a different tracked issue
+      (pass a different `-change`, or use `specsync adopt`). `spinoff.go`'s
+      own pre-existing error-on-collision is unaffected. `epic.go`'s slug is
+      not used as a directory path, so no collision surface there.
 
 ## Implement
 
@@ -52,5 +59,13 @@
       should produce something short and readable.
 - [x] Collision-risk case: two distinct long titles that truncate to the same
       stem (`TestSlugifyDistinctLongTitlesCanCollideOnTruncation`) — documents
-      the known, accepted risk rather than papering over it, per the "Decide
-      first" finding above (no suffix logic added).
+      that `slugify` itself doesn't dedupe (it's a pure string function); the
+      directory-level collision this enables is what `pull_collision_test.go`
+      now covers directly (same-issue re-pull overwrites in place;
+      different-issue collision on a generated slug gets suffixed;
+      explicit `-change` collision with a different tracked issue errors;
+      explicit `-change` collision with an untracked hand-authored directory
+      still overwrites; an auto-derived slug colliding with an untracked
+      hand-authored directory gets suffixed; `-dry-run` previews the
+      suffixed slug without writing; `nextAvailableSlug` skips multiple
+      taken suffixes).

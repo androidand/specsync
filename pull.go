@@ -96,6 +96,37 @@ func Pull(ctx context.Context, opts PullOptions) (PullResult, error) {
 		return PullResult{}, fmt.Errorf("could not derive a change name from issue %s; pass -change", opts.IssueID)
 	}
 
+	// A slug collision (two issues landing on the same directory — a
+	// generated slug and, more rarely, an explicit -change) must not
+	// silently overwrite an unrelated change's proposal.md/tasks.md.
+	//
+	// Two cases are left alone (existing behavior): re-pulling the *same*
+	// issue into its own existing directory (the intentional refresh path),
+	// and an explicit -change into a directory with no ref cache at all
+	// (a hand-authored, never-synced local change — the human named this
+	// exact directory, and binding an issue's content into it is the normal
+	// spec-first-then-pull flow; see TestPullRecordsTaskBase).
+	//
+	// A genuine conflict — the directory's ref cache names a *different*
+	// issue — refuses an explicit -change (pass a different one, or
+	// `specsync adopt`) and suffixes an auto-derived one instead of
+	// clobbering the other change. An auto-derived slug colliding with an
+	// untracked hand-authored directory is also suffixed, since nothing
+	// asked for that specific name.
+	if candidateDir := filepath.Join(opts.OpenSpecDir, "changes", slug); dirExists(candidateDir) {
+		existing, _ := LoadRefs(candidateDir)
+		conflictsWithDifferentIssue := len(existing) > 0 && !refsContainIssue(existing, issueID)
+		collidesWithUntrackedDir := len(existing) == 0 && opts.Slug == ""
+		if conflictsWithDifferentIssue {
+			if opts.Slug != "" {
+				return PullResult{}, fmt.Errorf("pull: change %q already exists and is not linked to issue %s; pass a different -change or use `specsync adopt`", slug, issueID)
+			}
+			slug = nextAvailableSlug(opts.OpenSpecDir, slug)
+		} else if collidesWithUntrackedDir {
+			slug = nextAvailableSlug(opts.OpenSpecDir, slug)
+		}
+	}
+
 	proposal, tasks, relatedURLs, origAsk, design, disc := splitBody(item.Body, item.Title)
 	// The body may carry only a linked stub for an overflowed design.md;
 	// recover the real content from the comment when supported.
@@ -522,4 +553,43 @@ func capSlug(s string, max int) string {
 		cut = cut[:i]
 	}
 	return strings.TrimRight(cut, "-")
+}
+
+// dirExists reports whether path exists (any type), for the pull collision
+// guard below.
+func dirExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+// refsContainIssue reports whether any cached ref in refs points at issueID —
+// i.e. the existing directory tracks the very issue being pulled, making this
+// an intentional refresh rather than a collision.
+func refsContainIssue(refs map[string]Ref, issueID string) bool {
+	for _, r := range refs {
+		if r.ID == issueID {
+			return true
+		}
+	}
+	return false
+}
+
+// nextAvailableSlug finds the first "<base>-2", "<base>-3", ... whose change
+// directory doesn't exist yet, trimming base to keep the result within
+// maxSlugLen when the numeric suffix would otherwise push it over.
+func nextAvailableSlug(openspecDir, base string) string {
+	for i := 2; i < 1000; i++ {
+		suffix := fmt.Sprintf("-%d", i)
+		candidate := base + suffix
+		if len(candidate) > maxSlugLen {
+			candidate = capSlug(base, maxSlugLen-len(suffix)) + suffix
+		}
+		if !dirExists(filepath.Join(openspecDir, "changes", candidate)) {
+			return candidate
+		}
+	}
+	// Exhausted a generous range of suffixes — fall back to the last one
+	// tried rather than looping forever; pull will simply overwrite it,
+	// same as today's pre-existing behavior.
+	return fmt.Sprintf("%s-999", base)
 }
