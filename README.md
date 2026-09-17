@@ -103,6 +103,7 @@ All subcommands, at a glance:
 specsync [sync]          # project changes -> issues (default command)
 specsync pull            # pull an issue into a local change
 specsync scan            # what already exists in an area?
+specsync topology        # join change <-> issue <-> branch <-> worktree across stores
 specsync trace           # print the raw spec<->commit<->issue link graph
 specsync link            # cross-link two or more changes
 specsync spinoff         # spawn emergent work as a linked sibling
@@ -115,7 +116,7 @@ specsync version         # print the binary version
 ```
 
 **Dry-run flags** — `sync`, `pull`, `link`, and `spinoff` support `-dry-run`. Beads can be
-previewed through `specsync -dry-run -provider beads`. `scan`, `trace`,
+previewed through `specsync -dry-run -provider beads`. `scan`, `topology`, `trace`,
 `release-plan`, and `changelog` (unless `-apply`) are read-only and do not take
 a dry-run flag.
 

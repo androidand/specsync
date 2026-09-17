@@ -335,6 +335,49 @@ var commandMetadata = map[string]AgentCommandHelp{
 			"specsync changes -json",
 		},
 	},
+	"topology": {
+		Command:     "topology",
+		Description: "Join every change with its tracker issue, git branch, and worktree across coordinated stores — read-only, for an agent to check before starting work.",
+		Mutates:     false,
+		Workflow: AgentCommandWorkflow{
+			Position:      "planning",
+			RelatedBefore: []string{"changes"},
+			RelatedAfter:  []string{"pull", "sync"},
+		},
+		Flags: []AgentCommandFlag{
+			{
+				Name:        "change",
+				Type:        "string",
+				Required:    false,
+				Description: "Scope to one change (default: every change)",
+			},
+			{
+				Name:        "all",
+				Type:        "boolean",
+				Required:    false,
+				Default:     false,
+				Description: "Include archived changes",
+			},
+			{
+				Name:        "json",
+				Type:        "boolean",
+				Required:    false,
+				Default:     false,
+				Description: "Emit machine-readable JSON output",
+			},
+		},
+		SafetyRules: []string{
+			"Read-only operation — mutates nothing, not even the local ref cache",
+			"Every source (openspec, gh, git worktrees) is optional; a missing one narrows a row instead of failing it",
+			"Exits non-zero only when no row could be produced at all",
+		},
+		Examples: []string{
+			"specsync topology",
+			"specsync topology -json",
+			"specsync topology -change my-change",
+			"specsync topology -all",
+		},
+	},
 	"set-stage": {
 		Command:     "set-stage",
 		Description: "Set the workflow stage of a change.",

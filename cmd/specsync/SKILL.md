@@ -11,6 +11,7 @@ specsync handles **tracker sync** (OpenSpec ↔ GitHub/Beads).
 
 ## Basic Workflow
 
+0. **Check before you start**: `specsync topology -json` shows which changes already have an issue, branch, and worktree — so you don't duplicate work another agent has started.
 1. **Create or pull**: `specsync pull -issue N` or create a change in `openspec/changes/<slug>/`
 2. **Implement**: Write code, update `tasks.md`
 3. **Sync**: `specsync -dry-run -change <slug>` then `specsync -change <slug>`
