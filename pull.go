@@ -480,8 +480,17 @@ func slugFromMarker(body string) string {
 	return strings.TrimSpace(rest[:j])
 }
 
+// maxSlugLen caps a generated slug's length. Long enough for
+// add-agent-help-command-style names with room to spare, short enough to
+// type as a -change flag and to keep in every log line and path. Applies to
+// the slug itself, not to a prefix a caller adds afterward (e.g. epic.go's
+// "epic:" marker prefix) — the prefix is fixed overhead, not part of the
+// generated name.
+const maxSlugLen = 48
+
 // slugify turns a title into a kebab-case slug: lowercase, with each run of
-// non-alphanumeric characters collapsed to a single hyphen and trimmed.
+// non-alphanumeric characters collapsed to a single hyphen and trimmed, then
+// capped at maxSlugLen.
 func slugify(s string) string {
 	var b strings.Builder
 	pendingHyphen := false
@@ -497,5 +506,20 @@ func slugify(s string) string {
 			pendingHyphen = true
 		}
 	}
-	return b.String()
+	return capSlug(b.String(), maxSlugLen)
+}
+
+// capSlug truncates s to at most max characters, preferring a word boundary
+// (the last hyphen at or before the cut) so truncation never splits a word.
+// When the first word alone exceeds max, it hard-truncates instead of
+// returning "" — an empty slug is treated as failure by every caller.
+func capSlug(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	cut := s[:max]
+	if i := strings.LastIndexByte(cut, '-'); i > 0 {
+		cut = cut[:i]
+	}
+	return strings.TrimRight(cut, "-")
 }
