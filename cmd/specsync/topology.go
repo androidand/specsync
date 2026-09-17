@@ -17,7 +17,7 @@ import (
 // closed just because one source degraded.
 func runTopology(args []string) {
 	fs := flag.NewFlagSet("topology", flag.ExitOnError)
-	openspec, storeFlag := addRootFlags(fs)
+	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
 	change := fs.String("change", "", "scope to one change (default: every change)")
 	all := fs.Bool("all", false, "include archived changes")
 	asJSON := fs.Bool("json", false, "output as JSON")
@@ -25,11 +25,10 @@ func runTopology(args []string) {
 		fail(err)
 	}
 
-	root := resolveRoot(fs, openspec, storeFlag)
 	ctx := context.Background()
 
 	topo, err := specsync.BuildTopology(ctx, specsync.TopologyOptions{
-		OpenSpecDir: root.Dir,
+		OpenSpecDir: *openspec,
 		Slug:        *change,
 		All:         *all,
 	})

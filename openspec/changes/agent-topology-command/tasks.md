@@ -46,7 +46,11 @@
 ## Phase 3: Surfaces
 
 - [x] 3.1 Wire `specsync topology` with `-json`, `-change`, `-all`, `-openspec`
-      (`-openspec`/`-store` come free from the shared `addRootFlags`)
+      (matching the plain `-openspec` flag pattern `changes` already uses;
+      this repo's checkout does not yet have the store-scoped root-resolution
+      helpers from the unreleased openspec-store-support work, so `topology`
+      targets a single `openspec/` dir like every other current command
+      rather than depending on an API that doesn't exist on `main` yet)
   - Validation: hand-run `specsync topology -json | jq .` parses;
     `specsync topology -json -change agent-topology-command` narrows to one
     row (see Phase 4 dogfood output below)
