@@ -644,12 +644,24 @@ func TestPull_RequiresIssueForNonGithub(t *testing.T) {
 
 type stubNonGithubProvider struct{}
 
-func (s *stubNonGithubProvider) Name() string                                         { return "beads" }
-func (s *stubNonGithubProvider) Find(context.Context, string) (*Ref, error)           { return nil, nil }
-func (s *stubNonGithubProvider) Push(context.Context, WorkItem, *Ref) (Ref, error)    { return Ref{}, nil }
-func (s *stubNonGithubProvider) Get(context.Context, string) (FetchedItem, error)     { return FetchedItem{}, nil }
+func (s *stubNonGithubProvider) Name() string                                      { return "beads" }
+func (s *stubNonGithubProvider) Find(context.Context, string) (*Ref, error)        { return nil, nil }
+func (s *stubNonGithubProvider) Push(context.Context, WorkItem, *Ref) (Ref, error) { return Ref{}, nil }
+func (s *stubNonGithubProvider) Get(context.Context, string) (FetchedItem, error) {
+	return FetchedItem{}, nil
+}
 
 func TestPull_CannotResolveFromBranch(t *testing.T) {
+	// Force a branch name that never matches the feat/<n>-<slug> pattern,
+	// regardless of what branch this test suite actually happens to be
+	// checked out on (e.g. a real feat/<n>-<slug> branch, which would
+	// otherwise make this test try to resolve issue <n> for real and fail
+	// with an unrelated JSON-parse error instead of the branch-mismatch
+	// error it's meant to assert on).
+	prev := currentBranchFn
+	currentBranchFn = func() (string, error) { return "main", nil }
+	defer func() { currentBranchFn = prev }()
+
 	dir := t.TempDir()
 	// On a branch that doesn't match the pattern, Pull should error.
 	_, err := Pull(context.Background(), PullOptions{
