@@ -82,6 +82,7 @@ specsync                     # create/update issues for every change
 specsync -change X             # sync just one change
 specsync -repo owner/name      # target a specific repo (see resolution order below)
 specsync -openspec path/to/openspec   # point at a non-default openspec dir
+```
 
 **Repo resolution order**, first match wins:
 
@@ -95,22 +96,52 @@ name different repositories (fork divergence), specsync targets `origin` and
 reports the divergence. It refuses to write to the upstream parent without an
 explicit `-repo` — a fork user's internal planning content should not silently
 appear on someone else's repository.
+
+### First run, end to end
+
+Say you already have a change at `openspec/changes/dark-mode/` (write one by
+hand, or scaffold it with the OpenSpec CLI — `specsync` doesn't create
+changes, only syncs them):
+
+```bash
+cd your-repo                    # has openspec/ and a gh-authenticated origin
+specsync -dry-run -change dark-mode   # preview: no API calls, no local state touched
+specsync -change dark-mode            # specsync: 1 created, 0 updated
 ```
+
+That's it — an issue now exists with the proposal as its body and the tasks
+as a checklist, linked back to `dark-mode` by an identity marker. Re-run
+`specsync -change dark-mode` any time the change updates; it updates the same
+issue rather than creating a new one. Drop `-change dark-mode` to sync every
+change under `openspec/changes/`.
 
 All subcommands, at a glance:
 
 ```bash
 specsync [sync]          # project changes -> issues (default command)
 specsync pull            # pull an issue into a local change
+specsync adopt           # bind an existing change and an existing issue as the same work
 specsync scan            # what already exists in an area?
 specsync trace           # print the raw spec<->commit<->issue link graph
 specsync link            # cross-link two or more changes
 specsync spinoff         # spawn emergent work as a linked sibling
 specsync epic            # create a coordination issue and wire children
+specsync idea            # capture a thought as a GitHub issue (intake)
+specsync ideas           # list open intake issues
+specsync changes         # list local changes with state and priority
+specsync set-stage       # set/unset a change's explicit workflow stage
+specsync set-priority    # set a change's priority (used by agents to pick next work)
+specsync note            # append a discovery to a change
+specsync validate        # check change folders for structural issues
+specsync verify          # run OpenSpec's Verify phase (acceptance checklist) for a change
+specsync audit-tasks     # flag changes where code shipped but tasks are still unchecked
+specsync pr-body         # emit a PR-body fragment (Closes #N) for a change
 specsync release-plan    # shipped changes + advisory semver bump
 specsync changelog       # Keep a Changelog section from shipped changes
 specsync audit           # archived changes vs. merged PRs
 specsync install-skill   # install the bundled agent skill
+specsync agent-help      # command guidance/schema for agents (--json for machine-readable)
+specsync doctor          # diagnose the local specsync/OpenSpec setup and skill installs
 specsync version         # print the binary version
 ```
 
