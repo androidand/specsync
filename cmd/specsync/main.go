@@ -224,15 +224,37 @@ func checkArgs(fs *flag.FlagSet, rawArgs []string, maxPositional int) {
 // checkArgsErr is checkArgs's testable core: it returns the problem instead
 // of exiting, so tests can assert on it in-process.
 func checkArgsErr(fs *flag.FlagSet, rawArgs []string, maxPositional int) error {
+	shadowed := shadowedFlags(fs, rawArgs)
+	shadowedName := map[string]bool{}
+	for _, s := range shadowed {
+		shadowedName[strings.TrimPrefix(strings.TrimPrefix(s, "-"), "-")] = true
+	}
+
 	var problems []string
-	if shadowed := shadowedFlags(fs, rawArgs); len(shadowed) > 0 {
+	if len(shadowed) > 0 {
 		problems = append(problems, fmt.Sprintf(
 			"flag(s) %s appeared after a positional argument and were not applied — Go's flag parser stops parsing at the first non-flag token; put flags before positional arguments",
 			strings.Join(shadowed, ", ")))
 	}
 	if maxPositional >= 0 && fs.NArg() > maxPositional {
-		extra := fs.Args()[maxPositional:]
-		problems = append(problems, fmt.Sprintf("unexpected argument(s): %s", strings.Join(extra, " ")))
+		// Exclude tokens already named above as shadowed flags — fs.Args()
+		// past the positional boundary contains every leftover token
+		// (Parse never touched any of them), so a shadowed flag would
+		// otherwise be named twice as two separate-looking problems.
+		var extra []string
+		for _, a := range fs.Args()[maxPositional:] {
+			name := strings.TrimPrefix(strings.TrimPrefix(a, "-"), "-")
+			if idx := strings.Index(name, "="); idx != -1 {
+				name = name[:idx]
+			}
+			if shadowedName[name] {
+				continue
+			}
+			extra = append(extra, a)
+		}
+		if len(extra) > 0 {
+			problems = append(problems, fmt.Sprintf("unexpected argument(s): %s", strings.Join(extra, " ")))
+		}
 	}
 	if len(problems) == 0 {
 		return nil
@@ -280,8 +302,14 @@ func shadowedFlags(fs *flag.FlagSet, rawArgs []string) []string {
 			shadowed = append(shadowed, "-"+name)
 			seen[name] = true
 		}
-		if valueFlag[name] && !hasInlineValue && i+1 < len(rawArgs) {
-			i++ // skip this flag's value token — it is not a positional
+		// Only skip a value-flag's value token before the positional
+		// boundary — that's the one region where a value token is real
+		// (Go's flag.Parse actually consumes it there). Once past the
+		// boundary, Parse never looks at any of these tokens at all, so a
+		// registered flag name immediately following another one is
+		// independently shadowed, not "consumed" as the first flag's value.
+		if !seenPositional && valueFlag[name] && !hasInlineValue && i+1 < len(rawArgs) {
+			i++
 		}
 	}
 	return shadowed

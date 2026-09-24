@@ -58,6 +58,11 @@ func TestShadowedFlags(t *testing.T) {
 			args: []string{"some-positional", "-not-a-real-flag"},
 			want: nil,
 		},
+		{
+			name: "value flag immediately followed by another shadowed flag: both reported",
+			args: []string{"some-positional", "-repo", "-dry-run"},
+			want: []string{"-repo", "-dry-run"},
+		},
 	}
 
 	for _, tt := range tests {
@@ -95,6 +100,9 @@ func TestCheckArgs(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "https://github.com/ExopenGitHub/portal/issues/4304") {
 		t.Errorf("error %q does not name the unconsumed URL argument", err.Error())
+	}
+	if strings.Count(err.Error(), "-dry-run") != 1 {
+		t.Errorf("error %q names -dry-run more than once — it should be reported only as shadowed, not also as a separate unexpected argument", err.Error())
 	}
 }
 
