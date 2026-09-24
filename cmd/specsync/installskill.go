@@ -35,6 +35,7 @@ func runInstallSkill(args []string) {
 		flags[i] = fs.Bool(t.flag, false, fmt.Sprintf("install to %s (~/%s)", t.label, filepath.Join(t.relPath...)))
 	}
 	_ = fs.Parse(args)
+	checkArgs(fs, args, 0)
 
 	home, err := os.UserHomeDir()
 	if err != nil {

@@ -202,6 +202,91 @@ func reorderFlagsFirst(args []string) []string {
 	return append(flags, positional...)
 }
 
+// checkArgs fails loudly, naming the exact problem, when args left over
+// after fs.Parse indicate a mistake rather than legitimate input: either a
+// registered flag shadowed by an earlier positional token (see
+// shadowedFlags), or unconsumed positional arguments beyond maxPositional.
+// Pass -1 for maxPositional to skip the positional-count check for
+// subcommands whose positional arguments are free-form and validated
+// elsewhere (e.g. link, scan, set-stage, set-priority, note, epic).
+//
+// This is the fix for the 2026-09-24 incident: `specsync -repo
+// ExopenGitHub/portal <issue-url> -dry-run` silently discarded the URL
+// (leaving -change unset, meaning "sync everything") and never even parsed
+// -dry-run (shadowed by the URL), turning a mistyped single-issue command
+// into a full live sync with zero warning.
+func checkArgs(fs *flag.FlagSet, rawArgs []string, maxPositional int) {
+	if err := checkArgsErr(fs, rawArgs, maxPositional); err != nil {
+		fail(err)
+	}
+}
+
+// checkArgsErr is checkArgs's testable core: it returns the problem instead
+// of exiting, so tests can assert on it in-process.
+func checkArgsErr(fs *flag.FlagSet, rawArgs []string, maxPositional int) error {
+	var problems []string
+	if shadowed := shadowedFlags(fs, rawArgs); len(shadowed) > 0 {
+		problems = append(problems, fmt.Sprintf(
+			"flag(s) %s appeared after a positional argument and were not applied — Go's flag parser stops parsing at the first non-flag token; put flags before positional arguments",
+			strings.Join(shadowed, ", ")))
+	}
+	if maxPositional >= 0 && fs.NArg() > maxPositional {
+		extra := fs.Args()[maxPositional:]
+		problems = append(problems, fmt.Sprintf("unexpected argument(s): %s", strings.Join(extra, " ")))
+	}
+	if len(problems) == 0 {
+		return nil
+	}
+	return fmt.Errorf("%s: %s", fs.Name(), strings.Join(problems, "; "))
+}
+
+// shadowedFlags scans rawArgs — the args exactly as given, before fs.Parse —
+// for any token naming a flag registered on fs that appears after the first
+// non-flag ("positional") token. fs.Parse stops parsing entirely at that
+// first positional token (a well-known stdlib `flag` footgun), so such a
+// flag is never even looked at and silently keeps its zero value instead of
+// erroring or taking effect. Matching is exact-name only — no typo-fuzzing
+// (e.g. -dryrun for -dry-run is not caught; that's a separate, fuzzier
+// problem).
+func shadowedFlags(fs *flag.FlagSet, rawArgs []string) []string {
+	registered := map[string]bool{}
+	valueFlag := map[string]bool{}
+	fs.VisitAll(func(f *flag.Flag) {
+		registered[f.Name] = true
+		if bv, ok := f.Value.(interface{ IsBoolFlag() bool }); !ok || !bv.IsBoolFlag() {
+			valueFlag[f.Name] = true
+		}
+	})
+
+	var shadowed []string
+	seen := map[string]bool{}
+	seenPositional := false
+	for i := 0; i < len(rawArgs); i++ {
+		arg := rawArgs[i]
+		if !strings.HasPrefix(arg, "-") {
+			seenPositional = true
+			continue
+		}
+		name := strings.TrimPrefix(strings.TrimPrefix(arg, "-"), "-")
+		hasInlineValue := false
+		if idx := strings.Index(name, "="); idx != -1 {
+			name = name[:idx]
+			hasInlineValue = true
+		}
+		if !registered[name] {
+			continue
+		}
+		if seenPositional && !seen[name] {
+			shadowed = append(shadowed, "-"+name)
+			seen[name] = true
+		}
+		if valueFlag[name] && !hasInlineValue && i+1 < len(rawArgs) {
+			i++ // skip this flag's value token — it is not a positional
+		}
+	}
+	return shadowed
+}
+
 // stringSlice implements flag.Value for repeatable -provider flags.
 type stringSlice []string
 
@@ -234,6 +319,7 @@ func runSync(args []string) {
 		fail(err)
 	}
 	_ = fs.Parse(args)
+	checkArgs(fs, args, 0)
 
 	abs, err := filepath.Abs(*openspec)
 	if err != nil {
@@ -331,6 +417,50 @@ func runSync(args []string) {
 		fail(err)
 	}
 
+	// Pre-flight summary before any real (non-dry-run) write: a human
+	// skimming this line should be able to catch a mismatched target the
+	// way "target: ExopenGitHub/portal — spec source: ~/dev/specsync/openspec
+	// (81 changes)" would have caught the 2026-09-24 incident. Best-effort
+	// and openspec-source only (no board/API calls beyond what's already
+	// resolved above); a beads spec source or a preflight read failure
+	// silently skips the line rather than blocking the sync.
+	if !*dryRun && *specSource == "openspec" {
+		if allChanges, err := specsync.LoadChanges(abs); err == nil {
+			var toSync []specsync.Change
+			for _, c := range allChanges {
+				if c.Archived {
+					continue
+				}
+				if *change != "" && c.Slug != *change {
+					continue
+				}
+				toSync = append(toSync, c)
+			}
+			linked := 0
+			for _, c := range toSync {
+				if refs, err := specsync.LoadRefs(c.Dir); err == nil && len(refs) > 0 {
+					linked++
+				}
+			}
+			repoLabel := *repo
+			if repoLabel == "" {
+				for _, prov := range providers {
+					if gp, ok := prov.(*specsync.GitHubProvider); ok {
+						if resolved, err := gp.Resolve(context.Background()); err == nil && resolved.Repo != "" {
+							repoLabel = resolved.Repo
+						}
+						break
+					}
+				}
+			}
+			if repoLabel == "" {
+				repoLabel = "(unresolved)"
+			}
+			fmt.Printf("target: %s — spec source: %s (%d changes) — %d already linked, %d new\n\n",
+				repoLabel, abs, len(toSync), linked, len(toSync)-linked)
+		}
+	}
+
 	res, err := specsync.Sync(context.Background(), specsync.Options{
 		OpenSpecDir:    abs,
 		SpecSource:     specSrc,
@@ -423,6 +553,7 @@ func runPull(args []string) {
 		fail(err)
 	}
 	_ = fs.Parse(args)
+	checkArgs(fs, args, 0)
 
 	abs, err := filepath.Abs(*openspec)
 	if err != nil {
@@ -512,6 +643,7 @@ func runAdopt(args []string) {
 		fail(err)
 	}
 	_ = fs.Parse(args)
+	checkArgs(fs, args, 0)
 
 	if *issue == "" {
 		fail(fmt.Errorf("-issue is required"))
@@ -694,6 +826,7 @@ func runLink(args []string) {
 	dryRun := fs.Bool("dry-run", false, "show what would change without writing files or calling GitHub")
 	repo := fs.String("repo", "", "repo (owner/name) for bare issue refs")
 	_ = fs.Parse(args)
+	checkArgs(fs, args, -1)
 
 	args = fs.Args()
 	if len(args) < 2 {
@@ -1131,6 +1264,7 @@ func runChanges(args []string) {
 	if err := fs.Parse(args); err != nil {
 		fail(err)
 	}
+	checkArgs(fs, args, 0)
 
 	if *sortBy != "stage" && *sortBy != "priority" && *sortBy != "slug" {
 		fail(fmt.Errorf("invalid sort value %q: must be stage, priority, or slug", *sortBy))
@@ -1366,6 +1500,7 @@ func runSetStage(args []string) {
 	if err := fs.Parse(args); err != nil {
 		fail(err)
 	}
+	checkArgs(fs, args, -1)
 	if fs.NArg() < 2 {
 		fail(fmt.Errorf("usage: specsync set-stage <change> <stage|auto>"))
 	}
@@ -1400,6 +1535,7 @@ func runSetPriority(args []string) {
 	if err := fs.Parse(args); err != nil {
 		fail(err)
 	}
+	checkArgs(fs, args, -1)
 	if fs.NArg() < 2 {
 		fail(fmt.Errorf("usage: specsync set-priority <change> <1-100|unset>"))
 	}
@@ -1434,6 +1570,7 @@ func runNote(args []string) {
 	if err := fs.Parse(args); err != nil {
 		fail(err)
 	}
+	checkArgs(fs, args, -1)
 	if fs.NArg() < 2 {
 		fail(fmt.Errorf("usage: specsync note <change> <text>"))
 	}
@@ -1478,6 +1615,7 @@ func runSpinoff(args []string) {
 	if err := fs.Parse(args); err != nil {
 		fail(err)
 	}
+	checkArgs(fs, args, 0)
 
 	if strings.TrimSpace(*from) == "" {
 		fail(fmt.Errorf("spinoff: -from <slug> is required"))
@@ -1570,6 +1708,7 @@ func runAudit(args []string) {
 	if err := fs.Parse(args); err != nil {
 		fail(err)
 	}
+	checkArgs(fs, args, 0)
 
 	abs, err := filepath.Abs(*openspec)
 	if err != nil {
@@ -1695,6 +1834,7 @@ func runAuditTasks(args []string) {
 	if err := fs.Parse(args); err != nil {
 		fail(err)
 	}
+	checkArgs(fs, args, 0)
 
 	abs, err := filepath.Abs(*openspec)
 	if err != nil {
@@ -1781,6 +1921,7 @@ func runValidate(args []string) {
 	if err := fs.Parse(args); err != nil {
 		fail(err)
 	}
+	checkArgs(fs, args, 0)
 
 	abs, err := filepath.Abs(*openspec)
 	if err != nil {
@@ -1826,6 +1967,7 @@ func runIdea(args []string) {
 	if err := fs.Parse(args); err != nil {
 		fail(err)
 	}
+	checkArgs(fs, args, 1) // idea text is the one expected positional
 
 	// Resolve repo: -repo flag → openspec/specsync.yml → SPECSYNC_IDEAS_REPO → auto-detect.
 	abs, err := filepath.Abs(*openspec)
@@ -1898,6 +2040,7 @@ func runIdeas(args []string) {
 	if err := fs.Parse(args); err != nil {
 		fail(err)
 	}
+	checkArgs(fs, args, 0)
 
 	abs, err := filepath.Abs(*openspec)
 	if err != nil {
@@ -1980,6 +2123,7 @@ func runArchive(args []string) {
 	if err := fs.Parse(args); err != nil {
 		fail(err)
 	}
+	checkArgs(fs, args, 0)
 
 	if *change == "" {
 		fail(fmt.Errorf("archive: -change <slug> is required"))

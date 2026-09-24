@@ -5,7 +5,7 @@ created on `ExopenGitHub/portal` from an unrelated invocation). Task 2 is the
 independent, more general defect that made `-dry-run` silently do nothing. Task 5
 is the regression test proving both are actually fixed.
 
-- [ ] 1. Add a shared `rejectUnconsumedArgs(fs *flag.FlagSet)` helper (fails loudly,
+- [x] 1. Add a shared `rejectUnconsumedArgs(fs *flag.FlagSet)` helper (fails loudly,
        naming the exact leftover argument(s), if `fs.NArg() > 0`) and call it
        immediately after `fs.Parse(args)` in every subcommand whose flag set takes
        no legitimate positional arguments: `runSync`, `runAudit`, `runAuditTasks`,
@@ -19,7 +19,7 @@ is the regression test proving both are actually fixed.
        any subcommand + stray non-flag arg) now exits non-zero with an error
        naming the stray argument, and makes no provider calls.
 
-- [ ] 2. Detect flags shadowed by an earlier positional token — the independent bug
+- [x] 2. Detect flags shadowed by an earlier positional token — the independent bug
        that made `-dry-run` have zero effect regardless of task 1. Before
        `fs.Parse`, walk the subcommand's registered flags via `fs.VisitAll` to know
        each flag's arity, then scan the raw `args` for the first true positional
@@ -33,20 +33,20 @@ is the regression test proving both are actually fixed.
        either parses correctly or fails loudly naming `-dry-run` as shadowed —
        either outcome beats "silently does the opposite of what was asked."
 
-- [ ] 3. Add a pre-flight summary printed before any real (non-dry-run) write in
+- [x] 3. Add a pre-flight summary printed before any real (non-dry-run) write in
        `runSync`: resolved target repo, resolved spec-source directory, and count
        of changes about to be synced (`target: X — spec source: Y (N changes)`).
        Validation: a real `sync` run's first line of output states the repo, the
        spec source path, and the change count before any provider call.
 
-- [ ] 4. Decide the shadowed-flag scan's matching strategy (Open Question 1: exact
+- [x] 4. Decide the shadowed-flag scan's matching strategy (Open Question 1: exact
        name only, no typo-fuzzing) and confirm the arity-lookup approach (Open
        Question 2: `fs.VisitAll` to distinguish boolean vs value-consuming flags).
        Record both decisions.
        Validation: a `design.md` note states the decisions; the task-2
        implementation matches them.
 
-- [ ] 5. Regression test reproducing the 2026-09-24 incident's exact argument
+- [x] 5. Regression test reproducing the 2026-09-24 incident's exact argument
        shape end to end: `specsync -repo <repo> <url> -dry-run` run against a
        fixture directory whose `openspec/changes/` holds changes unrelated to
        `<repo>` must fail with a clear "unexpected argument" error, make zero
@@ -55,7 +55,7 @@ is the regression test proving both are actually fixed.
        Validation: the test fails against the pre-fix code and passes after tasks
        1–2 land.
 
-- [ ] 6. Sweep the rest of `cmd/specsync/main.go` for any other place that calls
+- [x] 6. Sweep the rest of `cmd/specsync/main.go` for any other place that calls
        `fs.Parse` and ignores `fs.NArg()`/leftover args, beyond the list in task 1
        — confirm the audit was exhaustive rather than covering only the reported
        cases.
