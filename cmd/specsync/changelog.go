@@ -33,6 +33,7 @@ func runChangelog(args []string) {
 	providerName := fs.String("provider", "github", "work provider for -resolve-refs: github (default) or beads")
 	failOnUnlinkedCommits := fs.Bool("fail-on-unlinked-commits", false, "exit non-zero when a conventional commit in range isn't linked to its change's issue (would otherwise render as a raw title+hash fallback)")
 	_ = fs.Parse(args)
+	checkArgs(fs, args, 0)
 
 	abs, err := filepath.Abs(*openspec)
 	if err != nil {

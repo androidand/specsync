@@ -24,6 +24,7 @@ func runTopology(args []string) {
 	if err := fs.Parse(args); err != nil {
 		fail(err)
 	}
+	checkArgs(fs, args, 0)
 
 	ctx := context.Background()
 

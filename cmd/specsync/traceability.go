@@ -22,6 +22,7 @@ func runTrace(args []string) {
 	until := fs.String("until", "", "range end (default: HEAD)")
 	asJSON := fs.Bool("json", false, "emit JSON")
 	_ = fs.Parse(args)
+	checkArgs(fs, args, 0)
 
 	abs, err := filepath.Abs(*openspec)
 	if err != nil {
@@ -45,6 +46,7 @@ func runScan(args []string) {
 	asJSON := fs.Bool("json", false, "emit JSON for a planning agent")
 	references := fs.Bool("references", false, "also show OpenSpec references and worksets")
 	_ = fs.Parse(args)
+	checkArgs(fs, args, -1) // paths + topic are free-form positionals
 
 	paths, topic := splitArea(fs.Args())
 	if len(paths) == 0 && topic == "" {
@@ -217,6 +219,7 @@ func runReleasePlan(args []string) {
 	archiveCompleted := fs.Bool("archive-completed", false, "move shipped completed changes from openspec/changes/ to openspec/changes/archive/")
 	apply := fs.Bool("apply", false, "perform suggested spec actions (archive completed changes)")
 	_ = fs.Parse(args)
+	checkArgs(fs, args, 0)
 
 	abs, err := filepath.Abs(*openspec)
 	if err != nil {
@@ -508,6 +511,7 @@ func runPRBody(args []string) {
 	bodyFile := fs.String("body-file", "", "file whose contents are merged after the reference line")
 	repo := fs.String("repo", "", "target repo as owner/name (default: auto-detect from git remote)")
 	_ = fs.Parse(args)
+	checkArgs(fs, args, 0)
 
 	if *change == "" {
 		fail(fmt.Errorf("pr-body: -change <slug> is required"))
@@ -632,6 +636,7 @@ func runVerify(args []string) {
 	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
 	repo := fs.String("repo", "", "target repo as owner/name (default: auto-detect from git remote)")
 	_ = fs.Parse(args)
+	checkArgs(fs, args, 0)
 
 	abs, err := filepath.Abs(*openspec)
 	if err != nil {

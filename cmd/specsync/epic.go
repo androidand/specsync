@@ -24,6 +24,7 @@ func runEpic(args []string) {
 	fs.Var(&children, "child", "a child to attach: local change slug, owner/repo#N, bare #N (resolved against --repo), or issue URL (repeatable)")
 	dryRun := fs.Bool("dry-run", false, "print what would happen without creating or editing any issue")
 	_ = fs.Parse(args)
+	checkArgs(fs, args, -1) // the title is a free-form positional
 
 	title := strings.TrimSpace(strings.Join(fs.Args(), " "))
 	if title == "" {
