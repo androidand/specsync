@@ -70,3 +70,49 @@ func TestUnlinkedCommitsErrorIgnoresSilentlyOmittedCommits(t *testing.T) {
 		t.Fatalf("expected nil — nothing for the gate to flag, got %v", err)
 	}
 }
+
+// TestUnlinkedCommitsErrorNamesEveryAvailableRemedy pins the gate's message
+// against the failure it caused: the message used to recommend only forms that
+// require editing the commit message, which is impossible for a squash-merge.
+// A reader hitting that case had no stated remedy and, because the rejected
+// commit still printed a "(#N)", no way to tell the gate was right.
+//
+// Each assertion below fails if its sentence is removed, which is the point:
+// the message is the only documentation an author has at the moment they are
+// blocked by this gate.
+func TestUnlinkedCommitsErrorNamesEveryAvailableRemedy(t *testing.T) {
+	cl := specsync.Changelog{Entries: []specsync.ChangelogEntry{
+		{Text: "unify agent skill integration", Hash: "57c7e49"},
+	}}
+	err := unlinkedCommitsError(cl, true)
+	if err == nil {
+		t.Fatal("expected an error for an unlinked commit")
+	}
+	msg := err.Error()
+
+	t.Run("names the proposal remedy for commits you cannot edit", func(t *testing.T) {
+		if !strings.Contains(msg, "## Release note") {
+			t.Fatalf("message must name the only remedy available to a squash-merge author; got %q", msg)
+		}
+		if !strings.Contains(msg, "squash-merge") {
+			t.Fatalf("message must say when the proposal remedy is the applicable one; got %q", msg)
+		}
+	})
+
+	t.Run("explains why a printed ref can still be unlinked", func(t *testing.T) {
+		if !strings.Contains(msg, "PR number") {
+			t.Fatalf("message must distinguish a PR ref from an issue ref; got %q", msg)
+		}
+	})
+
+	// "(#42)" is retained deliberately. It looks like the form to distrust,
+	// because extractRefs files a header "(#N)" under PRRefs — but BuildChangelog
+	// consults PRRefs too, so "(#42)" binds whenever 42 is the change's issue.
+	// See TestBindingDistinguishesHeaderRefFromPRRef. Dropping it from the
+	// examples would remove correct advice, so pin its presence.
+	t.Run("keeps the header form that does bind", func(t *testing.T) {
+		if !strings.Contains(msg, "(#42)") {
+			t.Fatalf(`message must keep "(#42)": it binds when 42 is the change's issue; got %q`, msg)
+		}
+	})
+}

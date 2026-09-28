@@ -136,7 +136,7 @@ func unlinkedCommitsError(cl specsync.Changelog, failOnUnlinkedCommits bool) err
 	if len(offenders) == 0 {
 		return nil
 	}
-	return fmt.Errorf("changelog: %d commit(s) not linked to a change's issue: %s — reference the issue (e.g. \"(#42)\", \"Closes #42\") so this renders as an authored release note instead of a raw commit line",
+	return fmt.Errorf("changelog: %d commit(s) not linked to a change's issue: %s — each needs the issue number of the change it ships, in one of two forms. Either reference it in the commit message (e.g. \"(#42)\", \"Closes #42\") so this renders as an authored release note instead of a raw commit line, or — when the commit message is not yours to edit, as with a squash-merge — add a \"## Release note\" section to the change's proposal.md, which is the only remedy available in that case. Note that a \"(#N)\" in a squash-merge header is often the PR number rather than the change's issue; that is why 131-style refs above can look present and still be unlinked. If the number is the change's issue, \"(#42)\" does bind and nothing else is needed",
 		len(offenders), strings.Join(offenders, ", "))
 }
 
