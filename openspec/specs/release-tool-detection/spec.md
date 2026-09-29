@@ -1,7 +1,9 @@
 # release-tool-detection Specification
 
 ## Purpose
-TBD - created by archiving change add-release-traceability. Update Purpose after archive.
+Detects the project's own release tool from filesystem evidence and defers to
+it, reporting responsibilities rather than invoking anything. specsync plans a
+release; it does not perform one.
 ## Requirements
 ### Requirement: Detect the project's release tool by filesystem evidence
 specsync SHALL detect which release tool a project uses by probing for common

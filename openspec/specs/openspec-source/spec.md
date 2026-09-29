@@ -1,7 +1,9 @@
 # openspec-source Specification
 
 ## Purpose
-TBD - created by archiving change add-change-traceability-model. Update Purpose after archive.
+Sources OpenSpec data through the openspec CLI rather than parsing spec files
+directly, treating its JSON as a version-scoped contract and degrading
+gracefully when the binary is absent.
 ## Requirements
 ### Requirement: Source OpenSpec data via the openspec CLI
 specsync SHALL obtain OpenSpec change metadata, requirement deltas, and

@@ -1,7 +1,9 @@
 # launch-readiness Specification
 
 ## Purpose
-TBD - created by archiving change launch-readiness. Update Purpose after archive.
+The minimum a released version owes a first-time user: a README covering the
+shipped CLI surface, discoverable package metadata, and a binary that can report
+its own version.
 ## Requirements
 ### Requirement: The README documents the full shipped CLI surface
 The README SHALL document every subcommand the released binary accepts

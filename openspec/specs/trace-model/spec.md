@@ -1,7 +1,9 @@
 # trace-model Specification
 
 ## Purpose
-TBD - created by archiving change add-change-traceability-model. Update Purpose after archive.
+The traceability graph linking a change to its issues, commits and PRs, with the
+provenance of every link recorded, resolvable over a change, a revision range,
+or an area of the codebase.
 ## Requirements
 ### Requirement: Represent a change's traceability graph
 specsync SHALL model the relationships between an OpenSpec change and its

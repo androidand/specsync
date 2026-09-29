@@ -1,7 +1,8 @@
 # trace Specification
 
 ## Purpose
-TBD - created by archiving change add-release-traceability. Update Purpose after archive.
+Exposes the resolved traceability graph as a read-only command, in human and
+machine-readable form.
 ## Requirements
 ### Requirement: Expose the resolved trace graph as a command
 specsync SHALL provide a `trace` command that prints the resolved trace graph for

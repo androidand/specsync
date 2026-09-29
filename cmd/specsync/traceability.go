@@ -16,7 +16,7 @@ import (
 // runTrace prints the raw resolved trace graph for a scope (debugging/scripting).
 func runTrace(args []string) {
 	fs := flag.NewFlagSet("trace", flag.ExitOnError)
-	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	openspec, storeFlag := addRootFlags(fs)
 	change := fs.String("change", "", "scope to a single change slug")
 	since := fs.String("since", "", "range start (default: latest tag)")
 	until := fs.String("until", "", "range end (default: HEAD)")
@@ -24,10 +24,7 @@ func runTrace(args []string) {
 	_ = fs.Parse(args)
 	checkArgs(fs, args, 0)
 
-	abs, err := filepath.Abs(*openspec)
-	if err != nil {
-		fail(err)
-	}
+	abs := resolveRoot(fs, openspec, storeFlag).Dir
 	scope := specsync.Scope{Change: *change, Since: *since, Until: *until}
 	tr := resolve(abs, scope)
 
@@ -41,7 +38,7 @@ func runTrace(args []string) {
 // runScan answers "what already exists here?" for an area before planning.
 func runScan(args []string) {
 	fs := flag.NewFlagSet("scan", flag.ExitOnError)
-	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	openspec, storeFlag := addRootFlags(fs)
 	openspecs := fs.String("openspecs", "", "comma-separated list of openspec directories for cross-repo scanning")
 	asJSON := fs.Bool("json", false, "emit JSON for a planning agent")
 	references := fs.Bool("references", false, "also show OpenSpec references and worksets")
@@ -52,6 +49,8 @@ func runScan(args []string) {
 	if len(paths) == 0 && topic == "" {
 		fail(fmt.Errorf("scan: give an area — one or more paths and/or a topic\nusage: specsync scan <path...> [topic]"))
 	}
+
+	defaultRoot := resolveRoot(fs, openspec, storeFlag).Dir
 
 	// Determine if this is a cross-repo scan
 	var abs []string
@@ -66,12 +65,7 @@ func runScan(args []string) {
 			abs = append(abs, d)
 		}
 	} else {
-		// Single-repo scan mode
-		d, err := filepath.Abs(*openspec)
-		if err != nil {
-			fail(err)
-		}
-		abs = append(abs, d)
+		abs = append(abs, defaultRoot)
 	}
 
 	ctx := context.Background()
@@ -211,7 +205,7 @@ func openIssuesInArea(ctx context.Context, in specsync.TraceInput, topic string)
 // runReleasePlan prints the read-only follow-up report for a revision range.
 func runReleasePlan(args []string) {
 	fs := flag.NewFlagSet("release-plan", flag.ExitOnError)
-	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	openspec, storeFlag := addRootFlags(fs)
 	since := fs.String("since", "", "range start (default: latest tag)")
 	until := fs.String("until", "", "range end (default: HEAD)")
 	asJSON := fs.Bool("json", false, "emit JSON")
@@ -221,10 +215,7 @@ func runReleasePlan(args []string) {
 	_ = fs.Parse(args)
 	checkArgs(fs, args, 0)
 
-	abs, err := filepath.Abs(*openspec)
-	if err != nil {
-		fail(err)
-	}
+	abs := resolveRoot(fs, openspec, storeFlag).Dir
 	ctx := context.Background()
 	scope := specsync.Scope{Since: *since, Until: *until}
 
@@ -506,7 +497,7 @@ func archiveCompletedChanges(openspecDir string, candidates []string) ([]string,
 // body file. Idempotent — re-running does not stack duplicate lines.
 func runPRBody(args []string) {
 	fs := flag.NewFlagSet("pr-body", flag.ExitOnError)
-	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	openspec, storeFlag := addRootFlags(fs)
 	change := fs.String("change", "", "change slug (required)")
 	bodyFile := fs.String("body-file", "", "file whose contents are merged after the reference line")
 	repo := fs.String("repo", "", "target repo as owner/name (default: auto-detect from git remote)")
@@ -517,10 +508,7 @@ func runPRBody(args []string) {
 		fail(fmt.Errorf("pr-body: -change <slug> is required"))
 	}
 
-	abs, err := filepath.Abs(*openspec)
-	if err != nil {
-		fail(err)
-	}
+	abs := resolveRoot(fs, openspec, storeFlag).Dir
 
 	c, err := specsync.LoadChangeBySlug(abs, *change)
 	if err != nil {
@@ -633,15 +621,27 @@ func ensureNoDuplicateReference(body string, allComplete bool, issueID string) s
 // matches a change slug but whose body has no reference to that change's issue.
 func runVerify(args []string) {
 	fs := flag.NewFlagSet("verify", flag.ExitOnError)
-	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	openspec, store := addRootFlags(fs)
 	repo := fs.String("repo", "", "target repo as owner/name (default: auto-detect from git remote)")
+	change := fs.String("change", "", "verify this change against its own spec deltas (OpenSpec's Verify phase)")
+	asJSON := fs.Bool("json", false, "output as JSON")
+	checklist := fs.Bool("checklist", false, "print only the acceptance checklist, for pasting into a PR")
 	_ = fs.Parse(args)
 	checkArgs(fs, args, 0)
 
-	abs, err := filepath.Abs(*openspec)
-	if err != nil {
-		fail(err)
+	root := resolveRoot(fs, openspec, store)
+
+	// -change verifies one change against its behaviour contract; without it,
+	// verify sweeps the release for change -> issue -> PR traceability.
+	if *change != "" || *checklist {
+		if *change == "" {
+			fail(fmt.Errorf("-checklist needs -change <slug>"))
+		}
+		runVerifySpec(root, *change, *asJSON, *checklist)
+		return
 	}
+
+	abs := root.Dir
 
 	// Load all changes.
 	changes, err := specsync.LoadChanges(abs)
@@ -651,9 +651,9 @@ func runVerify(args []string) {
 
 	// Build a map: change slug -> synced issue number.
 	type changeIssue struct {
-		slug string
+		slug     string
 		issueNum string
-		url  string
+		url      string
 	}
 	var changeIssues []changeIssue
 	for _, c := range changes {

@@ -1,7 +1,9 @@
 # conventional-commits Specification
 
 ## Purpose
-TBD - created by archiving change add-change-traceability-model. Update Purpose after archive.
+Parses Conventional Commit headers into type, scope, breaking-change marker and
+issue references, tolerating messages that do not follow the convention rather
+than rejecting them.
 ## Requirements
 ### Requirement: Parse the Conventional Commits header
 specsync SHALL parse a commit message header of the form

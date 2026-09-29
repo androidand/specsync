@@ -1,0 +1,20 @@
+- [ ] File upstream OpenSpec feedback proposing a standard target-repo field on a change
+- [ ] Report the `openspec view` store bug upstream: it ignores `store:` and reports 0 changes while `list`/`status`/`validate` resolve correctly
+- [ ] Report the undocumented validator rule upstream: SHALL/MUST is only recognised on a requirement's first body line
+- [x] Read `store:` from `openspec/config.yaml` in spec-root resolution
+- [x] Add `-store <id>`, resolving via `openspec store list --json`
+- [x] Tolerate the several key names OpenSpec has used for a store's local path (`root`, `location`, `path`) while stores are beta
+- [x] Fail loudly when a spec root resolves to nothing instead of printing an empty table
+- [x] Route every command that reads changes through the shared root resolver
+- [x] Add `targets` to a committed per-change `specsync.yml`
+- [x] Add `RuleChangeTarget` to repo resolution ahead of gh/origin detection
+- [x] Have `pull` record the source issue's repo as the change's target
+- [x] Fan out a multi-target change to one provider per target repo
+- [x] Require `-change` or `-all` when the spec root is a store
+- [x] Add `doctor store`: root, registration, dirty, behind-remote, missing targets, uncontracted changes
+- [x] Parse `specs/**/spec.md` deltas into the Change model
+- [x] Add the Verify phase: `specsync verify -change <slug>`, with `-json` and `-checklist`
+- [~] dropped: `targets` in `.specsync/metadata.json` — the whole directory is gitignored (0 tracked files), so a target would never survive a clone. Moved to a committed per-change `specsync.yml`. Surfaced that `stage` has the same defect; tracked separately as commit-change-stage
+- [ ] Cross-link the issues a multi-target change creates, so each half names the other
+- [ ] Project the acceptance checklist into the issue body as a collapsed Verification section
+- [ ] Add `specsync store migrate` to move changes/specs from N code repos into one store, writing targets from each source repo
