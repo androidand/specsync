@@ -1,1 +1,0 @@
-- androidand/specsync#160

@@ -1,0 +1,3 @@
+- [ ] Read `stage` and `priority` from the committed per-change `specsync.yml`
+- [ ] Keep reading `.specsync/metadata.json` as a fallback, migrating on next write
+- [ ] Update `set-stage` and `set-priority` to write `specsync.yml` instead of `.specsync/metadata.json`
