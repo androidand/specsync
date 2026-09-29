@@ -3,6 +3,7 @@ package specsync
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 )
 
@@ -175,6 +176,7 @@ func Sync(ctx context.Context, opts Options) (Result, error) {
 		var firstRef Ref
 		var firstCreated bool
 		var firstClosedDeferred string
+		var boardPlan BoardPlan
 		providerResults := make([]ProviderResult, 0, len(providers))
 
 		for _, prov := range providers {
@@ -258,6 +260,17 @@ func Sync(ctx context.Context, opts Options) (Result, error) {
 				firstRef = ref
 				firstCreated = created
 				firstClosedDeferred = ref.ClosedDeferred
+			}
+
+			if opts.Project.Configured() {
+				if bp, ok := prov.(BoardProjector); ok {
+					plan, berr := bp.ProjectOntoBoard(ctx, opts.Project, ref, item, opts.DryRun, c.Dir)
+					if berr != nil {
+						fmt.Fprintf(os.Stderr, "specsync: warning: board projection for %s failed: %v\n", c.Slug, berr)
+					} else if boardPlan == (BoardPlan{}) {
+						boardPlan = plan
+					}
+				}
 			}
 
 			if opts.DryRun {
@@ -344,6 +357,7 @@ func Sync(ctx context.Context, opts Options) (Result, error) {
 			Flips:           allFlips,
 			TitleSuggestion: suggestion,
 			BoardConfigured: opts.Project.Configured(),
+			Board:           boardPlan,
 			ClosedDeferred:  firstClosedDeferred,
 			Providers:       providerResults,
 		})
