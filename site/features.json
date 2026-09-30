@@ -21,6 +21,14 @@
   },
   {
     "group": "plan",
+    "icon": "flow",
+    "title": "See who's already working what",
+    "body": "<code>specsync topology</code> joins every change with its tracker issue, git branch, and worktree across coordinated stores — a read-only check before an agent starts, so it doesn't duplicate work already in flight.",
+    "status": "soon",
+    "issue": 168
+  },
+  {
+    "group": "plan",
     "icon": "followup",
     "title": "Spin off emergent work",
     "body": "<code>specsync spinoff</code> spawns a new linked change from a discovery, keeping the parent scoped and marking the source task as moved."
