@@ -1,7 +1,9 @@
 # release-plan Specification
 
 ## Purpose
-TBD - created by archiving change add-release-traceability. Update Purpose after archive.
+Reports what a release actually shipped and what is still loose, reading from
+the trace graph. Read-only by default: writing to specs is gated behind an
+explicit flag.
 ## Requirements
 ### Requirement: Report what shipped and what is loose
 specsync SHALL provide a `release-plan` report for a revision range that lists

@@ -134,40 +134,40 @@ func TestBranchMatchesChange(t *testing.T) {
 
 func TestPRBodyReferencesIssue(t *testing.T) {
 	tests := []struct {
-		name      string
-		body      string
-		issueNum  string
-		want      bool
+		name     string
+		body     string
+		issueNum string
+		want     bool
 	}{
 		{
-			name:      "simple reference",
-			body:      "This PR implements the feature\nRefs #42",
-			issueNum:  "42",
-			want:      true,
+			name:     "simple reference",
+			body:     "This PR implements the feature\nRefs #42",
+			issueNum: "42",
+			want:     true,
 		},
 		{
-			name:      "closes reference",
-			body:      "Closes #42\nAll tasks done",
-			issueNum:  "42",
-			want:      true,
+			name:     "closes reference",
+			body:     "Closes #42\nAll tasks done",
+			issueNum: "42",
+			want:     true,
 		},
 		{
-			name:      "part of reference",
-			body:      "Part of #42\nPhase 1 of 3",
-			issueNum:  "42",
-			want:      true,
+			name:     "part of reference",
+			body:     "Part of #42\nPhase 1 of 3",
+			issueNum: "42",
+			want:     true,
 		},
 		{
-			name:      "different issue",
-			body:      "Refs #43\nNot related to anything",
-			issueNum:  "42",
-			want:      false,
+			name:     "different issue",
+			body:     "Refs #43\nNot related to anything",
+			issueNum: "42",
+			want:     false,
 		},
 		{
-			name:      "no reference",
-			body:      "Just a regular PR body\nNo issue references",
-			issueNum:  "42",
-			want:      false,
+			name:     "no reference",
+			body:     "Just a regular PR body\nNo issue references",
+			issueNum: "42",
+			want:     false,
 		},
 	}
 

@@ -33,7 +33,7 @@ var knownSubcommands = map[string]bool{
 	"sync": true, "audit": true, "audit-tasks": true, "validate": true,
 	"spinoff": true, "pr-body": true, "verify": true,
 	"agent-help": true, "doctor": true, "idea": true, "ideas": true, "archive": true,
-	"epic": true, "adopt": true, "topology": true,
+	"epic": true, "adopt": true,
 }
 
 // knownConfusions maps a word someone might reach for by habit (e.g. git's
@@ -94,7 +94,7 @@ func deprecatedSlugFlag(args []string) error {
 func main() {
 	cmd, rest, err := resolveSubcommand(os.Args[1:])
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "specsync: %v\n\nRun with no subcommand (optionally with flags) to sync, or use one of: pull, adopt, link, scan, trace, release-plan, changelog, install-skill, changes, set-stage, set-priority, note, audit, audit-tasks, validate, spinoff, pr-body, verify, idea, ideas, archive, epic, topology\n", err)
+		fmt.Fprintf(os.Stderr, "specsync: %v\n\nRun with no subcommand (optionally with flags) to sync, or use one of: pull, adopt, link, scan, trace, release-plan, changelog, install-skill, changes, set-stage, set-priority, note, audit, audit-tasks, validate, spinoff, pr-body, verify, idea, ideas, archive, epic\n", err)
 		os.Exit(2)
 	}
 
@@ -151,8 +151,6 @@ func main() {
 		runArchive(rest)
 	case "epic":
 		runEpic(rest)
-	case "topology":
-		runTopology(rest)
 	default:
 		runSync(rest)
 	}
@@ -328,8 +326,9 @@ func (s *stringSlice) Set(v string) error {
 // runSync projects every OpenSpec change into the tracker (spec -> issue).
 func runSync(args []string) {
 	fs := flag.NewFlagSet("sync", flag.ExitOnError)
-	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	openspec, store := addRootFlags(fs)
 	change := fs.String("change", "", "sync only this change (default: all changes)")
+	all := fs.Bool("all", false, "sync every change in the resolved root (required to sweep a store)")
 	repo := fs.String("repo", "", "target repo as owner/name (default: auto-detect from git remote)")
 	var providerNames stringSlice
 	fs.Var(&providerNames, "provider", "work provider: github, beads, mcp (repeatable; auto-detect when absent)")
@@ -349,11 +348,13 @@ func runSync(args []string) {
 	_ = fs.Parse(args)
 	checkArgs(fs, args, 0)
 
-	abs, err := filepath.Abs(*openspec)
-	if err != nil {
-		fail(err)
-	}
+	root := resolveRoot(fs, openspec, store)
+	guardStoreScope(root, *change, *all)
+	abs := root.Dir
 	repoRoot := filepath.Dir(abs)
+	if root.IsStore() {
+		fmt.Printf("root: store %s (%s)\n", root.StoreID, abs)
+	}
 
 	// Resolve board: -project flag → openspec/specsync.yml → no board.
 	resolvedBoard, err := specsync.ResolveBoard(*project, repoRoot)
@@ -374,9 +375,27 @@ func runSync(args []string) {
 		StatusMapping: statusMapping,
 	}
 
+	// A scoped change may declare its target repos. Honour them ahead of
+	// git-remote auto-detection, and fan out to one provider per target so a
+	// single plan can hold its backend and frontend halves.
+	targetRepos := scopedTargetRepos(abs, *change, *repo)
+	if len(targetRepos) > 0 && *dryRun {
+		fmt.Printf("targets: %s (declared by the change)\n", strings.Join(targetRepos, ", "))
+	}
+
 	// Build provider set. When -provider is absent, auto-detect a single one.
 	var providers []specsync.WorkProvider
-	if len(providerNames) == 0 {
+	if len(targetRepos) > 0 && len(providerNames) == 0 {
+		if *dryRun {
+			fmt.Printf("DRY RUN — no github calls are made\n")
+		}
+		for _, tr := range targetRepos {
+			providers = append(providers, makeProvider(tr, *dryRun, "github", *mcpConfig))
+		}
+		if *dryRun {
+			fmt.Println()
+		}
+	} else if len(providerNames) == 0 {
 		provider, providerReason := detectProvider("", repoRoot)
 		prov := makeProvider(*repo, *dryRun, provider, *mcpConfig)
 		providers = []specsync.WorkProvider{prov}
@@ -567,7 +586,7 @@ func runSync(args []string) {
 // (issue -> spec). A dry run reads the issue but writes nothing to disk.
 func runPull(args []string) {
 	fs := flag.NewFlagSet("pull", flag.ExitOnError)
-	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	openspec, storeFlag := addRootFlags(fs)
 	issue := fs.String("issue", "", "issue number to pull into a local change (auto-resolved from branch name like feat/42-change when omitted)")
 	change := fs.String("change", "", "change name (default: derived from the issue title)")
 	repo := fs.String("repo", "", "source repo as owner/name (default: auto-detect from git remote)")
@@ -583,10 +602,7 @@ func runPull(args []string) {
 	_ = fs.Parse(args)
 	checkArgs(fs, args, 0)
 
-	abs, err := filepath.Abs(*openspec)
-	if err != nil {
-		fail(err)
-	}
+	abs := resolveRoot(fs, openspec, storeFlag).Dir
 	repoRoot := filepath.Dir(abs)
 
 	resolvedBoard, err := specsync.ResolveBoard(*project, repoRoot)
@@ -643,8 +659,21 @@ func runPull(args []string) {
 		}
 		return
 	}
+	// Record where the issue came from, so a change living in a store still
+	// knows its target repo when the working directory no longer implies one.
+	if prov := makeProvider(*repo, false, "github", ""); prov != nil {
+		if gp, ok := prov.(*specsync.GitHubProvider); ok {
+			if key := gp.Name(); specsync.RepoFromProviderKey(key) != "" {
+				if err := specsync.WriteChangeTargets(filepath.Join(abs, "changes", res.Slug), []string{key}); err != nil {
+					fmt.Fprintf(os.Stderr, "specsync: could not record target: %v\n", err)
+				}
+			}
+		}
+	}
+
 	fmt.Printf("specsync: pulled issue %s -> %s\n", res.IssueID, dest)
 	fmt.Println("  + proposal.md")
+	fmt.Println("  + specsync.yml (target)")
 	if res.Tasks != "" {
 		fmt.Println("  + tasks.md")
 	}
@@ -661,7 +690,7 @@ func runPull(args []string) {
 // declares that an already-existing pair are the same work.
 func runAdopt(args []string) {
 	fs := flag.NewFlagSet("adopt", flag.ExitOnError)
-	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	openspec, storeFlag := addRootFlags(fs)
 	issue := fs.String("issue", "", "issue number to bind the change to (required)")
 	change := fs.String("change", "", "change slug (default: derived from the current branch name, e.g. feat/42-change)")
 	repo := fs.String("repo", "", "target repo as owner/name (default: auto-detect from git remote)")
@@ -677,10 +706,7 @@ func runAdopt(args []string) {
 		fail(fmt.Errorf("-issue is required"))
 	}
 
-	abs, err := filepath.Abs(*openspec)
-	if err != nil {
-		fail(err)
-	}
+	abs := resolveRoot(fs, openspec, storeFlag).Dir
 
 	res, err := specsync.Adopt(context.Background(), specsync.AdoptOptions{
 		OpenSpecDir: abs,
@@ -850,7 +876,7 @@ func ensureWorktree(ctx context.Context, worktreePath, branchName string) error 
 // Usage: specsync link [flags] <change1> <change2> [<change3>...]
 func runLink(args []string) {
 	fs := flag.NewFlagSet("link", flag.ExitOnError)
-	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	openspec, storeFlag := addRootFlags(fs)
 	dryRun := fs.Bool("dry-run", false, "show what would change without writing files or calling GitHub")
 	repo := fs.String("repo", "", "repo (owner/name) for bare issue refs")
 	_ = fs.Parse(args)
@@ -861,10 +887,7 @@ func runLink(args []string) {
 		fail(fmt.Errorf("link: at least 2 arguments required\nusage: specsync link <change1> <change2> [<change3>...]"))
 	}
 
-	abs, err := filepath.Abs(*openspec)
-	if err != nil {
-		fail(err)
-	}
+	abs := resolveRoot(fs, openspec, storeFlag).Dir
 
 	result, err := specsync.Link(context.Background(), specsync.LinkOptions{
 		OpenSpecDir: abs,
@@ -1285,7 +1308,7 @@ func shellJoin(args []string) string {
 // runChanges lists OpenSpec changes with state and priority.
 func runChanges(args []string) {
 	fs := flag.NewFlagSet("changes", flag.ExitOnError)
-	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	openspec, storeFlag := addRootFlags(fs)
 	stages := fs.String("stage", "", "filter by stages (comma-separated, e.g. backlog,blocked)")
 	sortBy := fs.String("sort", "stage", "sort order: stage (canonical), priority, or slug")
 	asJSON := fs.Bool("json", false, "output as JSON")
@@ -1298,7 +1321,7 @@ func runChanges(args []string) {
 		fail(fmt.Errorf("invalid sort value %q: must be stage, priority, or slug", *sortBy))
 	}
 
-	changes, err := specsync.LoadChanges(*openspec)
+	changes, err := specsync.LoadChanges(resolveRoot(fs, openspec, storeFlag).Dir)
 	if err != nil {
 		fail(err)
 	}
@@ -1524,7 +1547,7 @@ func changeMetadata(change *specsync.Change) specsync.ChangeMetadata {
 // stage field is touched: an explicit priority survives set-stage auto.
 func runSetStage(args []string) {
 	fs := flag.NewFlagSet("set-stage", flag.ExitOnError)
-	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	openspec, storeFlag := addRootFlags(fs)
 	if err := fs.Parse(args); err != nil {
 		fail(err)
 	}
@@ -1534,7 +1557,7 @@ func runSetStage(args []string) {
 	}
 	changeName, stage := fs.Arg(0), fs.Arg(1)
 
-	change := mutableChange(*openspec, changeName, false)
+	change := mutableChange(resolveRoot(fs, openspec, storeFlag).Dir, changeName, false)
 	meta := changeMetadata(change)
 
 	if stage == "auto" {
@@ -1559,7 +1582,7 @@ func runSetStage(args []string) {
 // runSetPriority sets a change's priority.
 func runSetPriority(args []string) {
 	fs := flag.NewFlagSet("set-priority", flag.ExitOnError)
-	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	openspec, storeFlag := addRootFlags(fs)
 	if err := fs.Parse(args); err != nil {
 		fail(err)
 	}
@@ -1569,7 +1592,7 @@ func runSetPriority(args []string) {
 	}
 	changeName, priorityArg := fs.Arg(0), fs.Arg(1)
 
-	change := mutableChange(*openspec, changeName, true)
+	change := mutableChange(resolveRoot(fs, openspec, storeFlag).Dir, changeName, true)
 	meta := changeMetadata(change)
 
 	if priorityArg == "unset" {
@@ -1593,7 +1616,7 @@ func runSetPriority(args []string) {
 // runNote appends a discovery line to the ## Discoveries section of a change.
 func runNote(args []string) {
 	fs := flag.NewFlagSet("note", flag.ExitOnError)
-	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	openspec, storeFlag := addRootFlags(fs)
 	dryRun := fs.Bool("dry-run", false, "show what would be written without modifying files")
 	if err := fs.Parse(args); err != nil {
 		fail(err)
@@ -1604,7 +1627,7 @@ func runNote(args []string) {
 	}
 	changeName, text := fs.Arg(0), fs.Arg(1)
 
-	c, err := specsync.LoadChangeBySlug(*openspec, changeName)
+	c, err := specsync.LoadChangeBySlug(resolveRoot(fs, openspec, storeFlag).Dir, changeName)
 	if err != nil {
 		fail(err)
 	}
@@ -1632,7 +1655,7 @@ func runNote(args []string) {
 // existing change.
 func runSpinoff(args []string) {
 	fs := flag.NewFlagSet("spinoff", flag.ExitOnError)
-	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	openspec, storeFlag := addRootFlags(fs)
 	from := fs.String("from", "", "parent change slug (required)")
 	task := fs.String("task", "", "task index to spin off (1-based); omit for free text mode")
 	repo := fs.String("repo", "", "target repo as owner/name (default: same as parent)")
@@ -1669,10 +1692,7 @@ func runSpinoff(args []string) {
 		fail(fmt.Errorf("spinoff: either -task <n> or -text <text> is required"))
 	}
 
-	abs, err := filepath.Abs(*openspec)
-	if err != nil {
-		fail(err)
-	}
+	abs := resolveRoot(fs, openspec, storeFlag).Dir
 
 	res, err := specsync.Spinoff(context.Background(), specsync.SpinoffOptions{
 		OpenSpecDir: abs,
@@ -1728,7 +1748,7 @@ func runSpinoff(args []string) {
 // each as unmerged, shipped, or orphaned.
 func runAudit(args []string) {
 	fs := flag.NewFlagSet("audit", flag.ExitOnError)
-	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	openspec, storeFlag := addRootFlags(fs)
 	repo := fs.String("repo", "", "target repo as owner/name (default: auto-detect from git remote)")
 	asJSON := fs.Bool("json", false, "output as JSON")
 	failOnUnmerged := fs.Bool("fail-on-unmerged", false, "exit non-zero when unmerged changes exist")
@@ -1738,10 +1758,7 @@ func runAudit(args []string) {
 	}
 	checkArgs(fs, args, 0)
 
-	abs, err := filepath.Abs(*openspec)
-	if err != nil {
-		fail(err)
-	}
+	abs := resolveRoot(fs, openspec, storeFlag).Dir
 
 	changes, err := specsync.LoadChanges(abs)
 	if err != nil {
@@ -1856,7 +1873,7 @@ func fail(err error) {
 // where code exists but tasks remain unchecked — the dogfooding failure mode.
 func runAuditTasks(args []string) {
 	fs := flag.NewFlagSet("audit-tasks", flag.ExitOnError)
-	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	openspec, storeFlag := addRootFlags(fs)
 	asJSON := fs.Bool("json", false, "output as JSON")
 	failOnMismatch := fs.Bool("fail-on-mismatch", false, "exit non-zero when mismatches exist")
 	if err := fs.Parse(args); err != nil {
@@ -1864,10 +1881,7 @@ func runAuditTasks(args []string) {
 	}
 	checkArgs(fs, args, 0)
 
-	abs, err := filepath.Abs(*openspec)
-	if err != nil {
-		fail(err)
-	}
+	abs := resolveRoot(fs, openspec, storeFlag).Dir
 
 	changes, err := specsync.LoadChanges(abs)
 	if err != nil {
@@ -1944,17 +1958,14 @@ func runAuditTasks(args []string) {
 // valid metadata, well-formed stages. Reports all issues in one pass.
 func runValidate(args []string) {
 	fs := flag.NewFlagSet("validate", flag.ExitOnError)
-	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	openspec, storeFlag := addRootFlags(fs)
 	asJSON := fs.Bool("json", false, "output as JSON")
 	if err := fs.Parse(args); err != nil {
 		fail(err)
 	}
 	checkArgs(fs, args, 0)
 
-	abs, err := filepath.Abs(*openspec)
-	if err != nil {
-		fail(err)
-	}
+	abs := resolveRoot(fs, openspec, storeFlag).Dir
 
 	result := specsync.ValidateChanges(abs)
 
@@ -1990,7 +2001,7 @@ func runValidate(args []string) {
 // verbatim text plus a capture timestamp.
 func runIdea(args []string) {
 	fs := flag.NewFlagSet("idea", flag.ExitOnError)
-	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	openspec, storeFlag := addRootFlags(fs)
 	repo := fs.String("repo", "", "repo as owner/name (default: config ideas_repo, $SPECSYNC_IDEAS_REPO, or current repo)")
 	if err := fs.Parse(args); err != nil {
 		fail(err)
@@ -1998,10 +2009,7 @@ func runIdea(args []string) {
 	checkArgs(fs, args, 1) // idea text is the one expected positional
 
 	// Resolve repo: -repo flag → openspec/specsync.yml → SPECSYNC_IDEAS_REPO → auto-detect.
-	abs, err := filepath.Abs(*openspec)
-	if err != nil {
-		fail(err)
-	}
+	abs := resolveRoot(fs, openspec, storeFlag).Dir
 	repoRoot := filepath.Dir(abs)
 	targetRepo := specsync.ResolveIdeasRepo(*repo, repoRoot)
 
@@ -2062,7 +2070,7 @@ func runIdea(args []string) {
 // runIdeas lists open stage:intake issues for the repo.
 func runIdeas(args []string) {
 	fs := flag.NewFlagSet("ideas", flag.ExitOnError)
-	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	openspec, storeFlag := addRootFlags(fs)
 	repo := fs.String("repo", "", "repo as owner/name (default: config ideas_repo, $SPECSYNC_IDEAS_REPO, or current repo)")
 	asJSON := fs.Bool("json", false, "output as JSON")
 	if err := fs.Parse(args); err != nil {
@@ -2070,10 +2078,7 @@ func runIdeas(args []string) {
 	}
 	checkArgs(fs, args, 0)
 
-	abs, err := filepath.Abs(*openspec)
-	if err != nil {
-		fail(err)
-	}
+	abs := resolveRoot(fs, openspec, storeFlag).Dir
 	repoRoot := filepath.Dir(abs)
 	targetRepo := specsync.ResolveIdeasRepo(*repo, repoRoot)
 
@@ -2142,7 +2147,7 @@ func runIdeas(args []string) {
 // are unchecked.
 func runArchive(args []string) {
 	fs := flag.NewFlagSet("archive", flag.ExitOnError)
-	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	openspec, storeFlag := addRootFlags(fs)
 	change := fs.String("change", "", "change to archive (required)")
 	repo := fs.String("repo", "", "target repo as owner/name (default: auto-detect)")
 	retain := fs.String("retain", "", "retention policy: move (keep) or prune (delete)")
@@ -2157,10 +2162,7 @@ func runArchive(args []string) {
 		fail(fmt.Errorf("archive: -change <slug> is required"))
 	}
 
-	abs, err := filepath.Abs(*openspec)
-	if err != nil {
-		fail(err)
-	}
+	abs := resolveRoot(fs, openspec, storeFlag).Dir
 
 	// Build provider.
 	var provider specsync.WorkProvider

@@ -1,7 +1,8 @@
 # commit-source Specification
 
 ## Purpose
-TBD - created by archiving change add-change-traceability-model. Update Purpose after archive.
+Reads a revision range's commits as structured records, so release tooling can
+reason about history without any component re-implementing git plumbing.
 ## Requirements
 ### Requirement: Read commits for a revision range
 specsync SHALL provide a `CommitSource` capability that returns the parsed

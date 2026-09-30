@@ -556,7 +556,7 @@ func capSlug(s string, max int) string {
 }
 
 // dirExists reports whether path exists (any type), for the pull collision
-// guard below.
+// guard above.
 func dirExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil

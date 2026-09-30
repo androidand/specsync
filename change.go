@@ -142,15 +142,17 @@ const (
 type Change struct {
 	Dir           string // absolute path to the change folder
 	Slug          string
-	Title         string // first H1 of proposal.md, falling back to Slug
-	Body          string // proposal.md contents
-	TasksMarkdown string // tasks.md contents, may be ""
-	Links         []Ref  // resolved related issue refs from links.md (## Related)
-	BlockedBy     []Ref  // resolved blocked-by refs from links.md (## Blocked by)
-	Blocks        []Ref  // resolved blocks refs from links.md (## Blocks)
-	OriginalAsk   string // original-ask.md contents, may be ""
-	Discoveries   string // discoveries.md contents, may be ""
-	DesignNotes   string // design.md contents, may be ""
+	Title         string      // first H1 of proposal.md, falling back to Slug
+	Body          string      // proposal.md contents
+	TasksMarkdown string      // tasks.md contents, may be ""
+	Links         []Ref       // resolved related issue refs from links.md (## Related)
+	BlockedBy     []Ref       // resolved blocked-by refs from links.md (## Blocked by)
+	Blocks        []Ref       // resolved blocks refs from links.md (## Blocks)
+	OriginalAsk   string      // original-ask.md contents, may be ""
+	Discoveries   string      // discoveries.md contents, may be ""
+	DesignNotes   string      // design.md contents, may be ""
+	Deltas        []SpecDelta // specs/**/spec.md behaviour contracts, may be empty
+	Targets       []string    // provider keys from the committed specsync.yml
 	Archived      bool
 	Significant   bool         // true when the change has a significant marker, design.md, or >5 tasks
 	Progress      TaskProgress // what the task checklist says
@@ -247,6 +249,12 @@ func LoadChange(dir string, archived bool, openspecDir string) (*Change, error) 
 	if design, err := os.ReadFile(filepath.Join(dir, "design.md")); err == nil {
 		c.DesignNotes = string(design)
 	}
+	deltas, err := LoadSpecDeltas(dir)
+	if err != nil {
+		return nil, fmt.Errorf("load spec deltas for %s: %w", slug, err)
+	}
+	c.Deltas = deltas
+	c.Targets = ChangeTargets(dir)
 	// Load baseline task count from metadata.json (set on pull).
 	if meta, err := LoadChangeMetadata(dir); err == nil && meta != nil && meta.BaselineTaskCount != nil {
 		c.BaselineTasks = meta.BaselineTaskCount

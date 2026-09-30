@@ -1,7 +1,9 @@
 # release-impact Specification
 
 ## Purpose
-TBD - created by archiving change add-release-traceability. Update Purpose after archive.
+Infers an advisory SemVer bump from several independent signals, including
+OpenSpec requirement deltas, so a behaviour change that never touched a public
+symbol still registers as one.
 ## Requirements
 ### Requirement: Infer an advisory SemVer bump from multiple signals
 specsync SHALL infer an advisory bump (`none`, `patch`, `minor`, or `major`) by

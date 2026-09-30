@@ -1,7 +1,9 @@
 # stable-projection-identity Specification
 
 ## Purpose
-TBD - created by archiving change stable-projection-ref-key. Update Purpose after archive.
+Guarantees that a change resolves to the same tracker issue however it was
+bound — pulled, adopted, or synced with or without an explicit repo — so a lost
+local cache never produces a duplicate issue.
 ## Requirements
 ### Requirement: Repo-stable ref-cache key
 The GitHub provider SHALL key the ref cache by the concrete target repository,
