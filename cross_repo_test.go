@@ -9,8 +9,8 @@ func TestExtractRepoFromDir(t *testing.T) {
 		dir  string
 		want string
 	}{
-		{"/Users/andreas/dev/brick-now/openspec", "brick-now"},
-		{"/Users/andreas/dev/tengil/openspec/changes/foo", "tengil"},
+		{"/home/user/dev/brick-now/openspec", "brick-now"},
+		{"/home/user/dev/tengil/openspec/changes/foo", "tengil"},
 		{"/home/user/project/openspec", "project"},
 		{"/openspec", ""},          // edge case: no parent
 		{"openspec", "openspec"},   // bare openspec — no parent, returns full dir
