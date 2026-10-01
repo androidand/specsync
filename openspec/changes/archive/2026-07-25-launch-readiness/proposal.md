@@ -69,7 +69,7 @@ owner-only decisions.
 - Grep for `/Users/`, `/home/`, `192.168.`, `10.0.`, personal emails — no
   matches in tracked files.
 - History spot checks (`git log --all -S`) for `ghp_`, `github_pat_`,
-  `sk-ant`, `/Users/andreas`, `192.168.` — no matches.
+  `sk-ant`, `/Users/<name>`, `192.168.` — no matches.
 - Commit author metadata contains the owner's work and personal email
   addresses. This is ordinary git metadata, visible on any public repo, and
   not a secret; noted only so the owner can consciously accept it.

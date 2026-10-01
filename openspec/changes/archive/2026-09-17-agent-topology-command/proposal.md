@@ -44,13 +44,13 @@ JSON shape, one entry per change:
       "slug": "add-field-forms",
       "title": "Auto-render field forms",
       "stage": "active",
-      "store": "/Users/andreas/exopen/portal",
+      "store": "/home/user/projects/portal",
       "repo": "ExopenGitHub/portal",
       "issue": {"provider": "github:ExopenGitHub/portal", "id": "4231",
                 "url": "https://github.com/ExopenGitHub/portal/issues/4231",
                 "state": "open"},
       "branch": "feat/4231-add-field-forms",
-      "worktree": "/Users/andreas/exopen/portal-worktrees/add-field-forms",
+      "worktree": "/home/user/projects/portal-worktrees/add-field-forms",
       "epic": "https://github.com/ExopenGitHub/planning/issues/88",
       "linked": ["add-field-forms-api"]
     }
