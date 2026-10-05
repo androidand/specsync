@@ -1,0 +1,2 @@
+- [x] Restore topology to knownSubcommands and the dispatch switch
+- [x] Drop stale soon/issue fields from the three shipped feature cards

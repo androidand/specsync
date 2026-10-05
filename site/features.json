@@ -9,9 +9,7 @@
     "group": "plan",
     "icon": "flow",
     "title": "Design notes survive the worktree",
-    "body": "A <code>design.md</code> renders as <code>## Design notes</code> in the synced issue, so decisions made while planning aren't lost if the local worktree is force-removed. Oversized notes overflow to a linked issue comment instead of getting truncated.",
-    "status": "soon",
-    "issue": 139
+    "body": "A <code>design.md</code> renders as <code>## Design notes</code> in the synced issue, so decisions made while planning aren't lost if the local worktree is force-removed. Oversized notes overflow to a linked issue comment instead of getting truncated."
   },
   {
     "group": "plan",
@@ -23,9 +21,7 @@
     "group": "plan",
     "icon": "flow",
     "title": "See who's already working what",
-    "body": "<code>specsync topology</code> joins every change with its tracker issue, git branch, and worktree across coordinated stores — a read-only check before an agent starts, so it doesn't duplicate work already in flight.",
-    "status": "soon",
-    "issue": 168
+    "body": "<code>specsync topology</code> joins every change with its tracker issue, git branch, and worktree across coordinated stores — a read-only check before an agent starts, so it doesn't duplicate work already in flight."
   },
   {
     "group": "plan",
@@ -49,9 +45,7 @@
     "group": "collaborate",
     "icon": "idempotent",
     "title": "Adopt an existing issue",
-    "body": "<code>specsync adopt -issue 3691 -change my-change</code> binds a change and an issue that already exist independently, writing the ref cache before touching the issue body so the link holds immediately instead of racing search indexing.",
-    "status": "soon",
-    "issue": 160
+    "body": "<code>specsync adopt -issue 3691 -change my-change</code> binds a change and an issue that already exist independently, writing the ref cache before touching the issue body so the link holds immediately instead of racing search indexing."
   },
   {
     "group": "collaborate",
