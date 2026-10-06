@@ -86,18 +86,6 @@
   {
     "group": "collaborate",
     "icon": "idempotent",
-    "title": "Explicit repo resolution",
-    "body": "specsync resolves the target repository deterministically: <code>-repo</code> flag → <code>gh repo set-default</code> → <code>origin</code>. Fork-parent writes are refused by default; use <code>-repo</code> to override."
-  },
-  {
-    "group": "collaborate",
-    "icon": "board",
-    "title": "Per-repository board",
-    "body": "Board resolution per-repository: <code>-project</code> flag → <code>openspec/specsync.yml</code> → no board. No global default; each repo syncs only to its own declared board."
-  },
-  {
-    "group": "collaborate",
-    "icon": "idempotent",
     "title": "Spec ↔ issue linker",
     "body": "specsync resolves a change's issue from branch name (<code>feat/42-my-change</code>), issue marker, or ref cache — so <code>pull</code> without <code>-issue</code> and idempotent <code>sync</code> update the right issue instead of creating duplicates."
   },
@@ -128,13 +116,7 @@
   {
     "group": "collaborate",
     "icon": "state",
-    "title": "Collapsed by default",
+    "title": "A clean issue, not a wall of text",
     "body": "A synced issue shows title and task checklist first — Proposal, Original ask, and Discoveries render inside collapsed <code>&lt;details&gt;</code> blocks, one click away, nothing removed."
-  },
-  {
-    "group": "collaborate",
-    "icon": "idempotent",
-    "title": "No label noise by default",
-    "body": "<code>specsync</code> and <code>stage:&lt;stage&gt;</code> labels are opt-in via <code>-labels</code> — neither is read back by specsync itself, so they aren't added unless you actually want native-label filtering."
   }
 ]
