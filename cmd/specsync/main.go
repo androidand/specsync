@@ -34,6 +34,7 @@ var knownSubcommands = map[string]bool{
 	"spinoff": true, "pr-body": true, "verify": true,
 	"agent-help": true, "doctor": true, "idea": true, "ideas": true, "archive": true,
 	"epic": true, "adopt": true, "topology": true,
+	"query": true, "claim": true, "release": true,
 }
 
 // knownConfusions maps a word someone might reach for by habit (e.g. git's
@@ -153,6 +154,12 @@ func main() {
 		runEpic(rest)
 	case "topology":
 		runTopology(rest)
+	case "query":
+		runQuery(rest)
+	case "claim":
+		runClaim(rest)
+	case "release":
+		runRelease(rest)
 	default:
 		runSync(rest)
 	}
@@ -1502,6 +1509,12 @@ func mutableChange(openspecDir, slug string, allowArchived bool) *specsync.Chang
 	return change
 }
 
+// isChangesDir reports whether dir exists and is a directory.
+func isChangesDir(dir string) bool {
+	fi, err := os.Stat(dir)
+	return err == nil && fi.IsDir()
+}
+
 // validateSlug ensures the slug is a safe directory name: lowercase letters,
 // digits, hyphens, and underscores only; must start with a letter or digit.
 func validateSlug(slug string) error {
@@ -2204,6 +2217,279 @@ func runArchive(args []string) {
 	if *dryRun {
 		fmt.Println("\nDRY RUN — no files or GitHub calls were modified")
 	}
+}
+
+// runQuery lists claimable changes across one or more repositories.
+// It is the read-side counterpart to the write-heavy sync/audit commands:
+// opencode's multi-repo runner calls it each tick to discover what to work.
+func runQuery(args []string) {
+	fs := flag.NewFlagSet("query", flag.ExitOnError)
+	repos := fs.String("repo", "", "comma-separated absolute paths to scan (default: current directory)")
+	stages := fs.String("stage", "backlog", "comma-separated stages to include (default: backlog, i.e. claimable)")
+	asJSON := fs.Bool("json", false, "output as JSON")
+	if err := fs.Parse(args); err != nil {
+		fail(err)
+	}
+
+	// Parse stage filter.
+	stageSet := make(map[string]bool)
+	for _, s := range strings.Split(*stages, ",") {
+		stageSet[strings.TrimSpace(s)] = true
+	}
+
+	// Determine directories to scan.
+	var dirs []string
+	if *repos != "" {
+		for _, r := range strings.Split(*repos, ",") {
+			dirs = append(dirs, strings.TrimSpace(r))
+		}
+	} else {
+		abs, err := filepath.Abs(".")
+		if err != nil {
+			fail(err)
+		}
+		dirs = []string{abs}
+	}
+
+	type queryItem struct {
+		Repo      string   `json:"repo"`
+		Change    string   `json:"change"`
+		Title     string   `json:"title"`
+		Item      string   `json:"item,omitempty"`
+		Provider  string   `json:"provider,omitempty"`
+		Reason    string   `json:"reason"`
+		Priority  *int     `json:"priority"`
+		BlockedBy []string `json:"blocked_by"`
+	}
+
+	var results []queryItem
+
+	for _, dir := range dirs {
+		openspecDir := filepath.Join(dir, "openspec")
+		if _, err := os.Stat(openspecDir); os.IsNotExist(err) {
+			fmt.Fprintf(os.Stderr, "specsync: query: skip %s: no openspec directory\n", dir)
+			continue
+		}
+
+		changes, err := specsync.LoadChanges(openspecDir)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "specsync: query: skip %s: %v\n", dir, err)
+			continue
+		}
+
+		for _, c := range changes {
+			// Skip archived and non-canonical stages.
+			if !specsync.IsCanonicalStage(c.Stage) {
+				continue
+			}
+
+			// Filter by requested stages.
+			if !stageSet[string(c.Stage)] {
+				continue
+			}
+
+			// Collect blocker refs. Claimability (whether blockers are resolved)
+			// is checked live by the runner after claim acquisition.
+			var blockedByRefs []string
+			for _, b := range c.BlockedBy {
+				blockedByRefs = append(blockedByRefs, b.URL)
+			}
+
+			// Load board state to check for existing binding and in-progress status.
+			boardState, err := specsync.LoadBoardState(c.Dir)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "specsync: query: skip %s: malformed board.json: %v\n", c.Slug, err)
+				continue
+			}
+
+			var itemRef string
+			var providerName string
+			for _, binding := range boardState.Bindings {
+				if binding.ItemID != "" {
+					itemRef = binding.ItemID
+					providerName = binding.Provider
+					break
+				}
+			}
+
+			// Build the item reference URL from the binding if available.
+			var itemURL string
+			if itemRef != "" && providerName != "" {
+				// Format: owner/repo#N for GitHub projects, or the raw item ID.
+				// We store the binding's item_id and provider for the runner to
+				// resolve into a tracker URL when claiming.
+				itemURL = itemRef
+			}
+
+			reason := fmt.Sprintf("stage=%s", c.Stage)
+			if len(c.BlockedBy) > 0 {
+				reason += fmt.Sprintf(",blocked_by=%d", len(c.BlockedBy))
+			}
+
+			results = append(results, queryItem{
+				Repo:      dir,
+				Change:    c.Slug,
+				Title:     c.Title,
+				Item:      itemURL,
+				Provider:  providerName,
+				Reason:    reason,
+				Priority:  c.Priority,
+				BlockedBy: blockedByRefs,
+			})
+		}
+	}
+
+	// Sort by priority (higher first), then by stage order, then by slug.
+	stageOrder := make(map[string]int)
+	for i, s := range specsync.CanonicalStageOrder() {
+		stageOrder[string(s)] = i
+	}
+	sort.SliceStable(results, func(i, j int) bool {
+		pi := results[i].Priority
+		pj := results[j].Priority
+		if pi != nil && pj != nil {
+			if *pi != *pj {
+				return *pi > *pj // higher priority first
+			}
+		} else if pi != nil {
+			return true
+		} else if pj != nil {
+			return false
+		}
+		si := stageOrder[results[i].Reason]
+		sj := stageOrder[results[j].Reason]
+		if si != sj {
+			return si < sj
+		}
+		return results[i].Change < results[j].Change
+	})
+
+	if *asJSON {
+		type changeJSON struct {
+			Repo      string   `json:"repo"`
+			Change    string   `json:"change"`
+			Title     string   `json:"title"`
+			Item      string   `json:"item,omitempty"`
+			Provider  string   `json:"provider,omitempty"`
+			Reason    string   `json:"reason"`
+			Priority  *int     `json:"priority"`
+			BlockedBy []string `json:"blocked_by"`
+		}
+		var out []changeJSON
+		for _, r := range results {
+			out = append(out, changeJSON(r))
+		}
+		data, err := json.MarshalIndent(out, "", "  ")
+		if err != nil {
+			fail(fmt.Errorf("marshal JSON: %w", err))
+		}
+		fmt.Println(string(data))
+	} else {
+		if len(results) == 0 {
+			fmt.Println("No claimable changes.")
+			return
+		}
+		fmt.Printf("%-40s %-25s %-8s %-6s %s\n", "REPO", "CHANGE", "STAGE", "PRI", "REASON")
+		fmt.Println(strings.Repeat("─", 100))
+		for _, r := range results {
+			// Extract stage from reason.
+			stage := strings.TrimPrefix(r.Reason, "stage=")
+			pri := "-"
+			if r.Priority != nil {
+				pri = strconv.Itoa(*r.Priority)
+			}
+			fmt.Printf("%-40s %-25s %-8s %-6s %s\n",
+				filepath.Base(r.Repo), r.Change, stage, pri, r.Reason)
+		}
+	}
+}
+
+// runClaim transitions a change to the active stage and projects it onto the
+// tracker as in-progress. It is the runner-facing counterpart to query: after
+// the runner picks an item, it calls claim to lock it before starting work.
+func runClaim(args []string) {
+	fs := flag.NewFlagSet("claim", flag.ExitOnError)
+	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	change := fs.String("change", "", "change slug to claim (required)")
+	dryRun := fs.Bool("dry-run", false, "preview without touching the tracker")
+	if err := fs.Parse(args); err != nil {
+		fail(err)
+	}
+	if *change == "" {
+		fail(fmt.Errorf("claim: -change <slug> is required"))
+	}
+
+	abs, err := filepath.Abs(*openspec)
+	if err != nil {
+		fail(err)
+	}
+
+	if !isChangesDir(filepath.Join(abs, "changes")) {
+		fail(fmt.Errorf("claim: -openspec %q is not an openspec/ directory (no changes/)", *openspec))
+	}
+	// Load the change before writing: a typo'd slug must fail, not create
+	// changes/<slug>/.specsync/metadata.json via SaveChangeMetadata's MkdirAll.
+	mutableChange(abs, *change, false)
+
+	// Set stage to active.
+	stg := specsync.StageActive
+	if err := specsync.SaveChangeMetadata(filepath.Join(abs, "changes", *change), specsync.ChangeMetadata{
+		Version: 1,
+		Stage:   &stg,
+	}); err != nil {
+		fail(fmt.Errorf("save stage: %w", err))
+	}
+
+	// Sync to push the stage onto the tracker.
+	syncArgs := []string{"-openspec", abs, "-change", *change}
+	if *dryRun {
+		syncArgs = append(syncArgs, "-dry-run")
+	}
+	runSync(syncArgs)
+}
+
+// runRelease transitions a change back to its previous stage (typically backlog)
+// and removes it from the tracker's in-progress view. The runner calls this when
+// an item halts unexpectedly and wants to move on without completing it.
+func runRelease(args []string) {
+	fs := flag.NewFlagSet("release", flag.ExitOnError)
+	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
+	change := fs.String("change", "", "change slug to release (required)")
+	dryRun := fs.Bool("dry-run", false, "preview without touching the tracker")
+	if err := fs.Parse(args); err != nil {
+		fail(err)
+	}
+	if *change == "" {
+		fail(fmt.Errorf("release: -change <slug> is required"))
+	}
+
+	abs, err := filepath.Abs(*openspec)
+	if err != nil {
+		fail(err)
+	}
+
+	if !isChangesDir(filepath.Join(abs, "changes")) {
+		fail(fmt.Errorf("release: -openspec %q is not an openspec/ directory (no changes/)", *openspec))
+	}
+	// Load the change before writing: a typo'd slug must fail, not create
+	// changes/<slug>/.specsync/metadata.json via SaveChangeMetadata's MkdirAll.
+	mutableChange(abs, *change, false)
+
+	// Set stage back to backlog.
+	stg := specsync.StageBacklog
+	if err := specsync.SaveChangeMetadata(filepath.Join(abs, "changes", *change), specsync.ChangeMetadata{
+		Version: 1,
+		Stage:   &stg,
+	}); err != nil {
+		fail(fmt.Errorf("save stage: %w", err))
+	}
+
+	// Sync to push the stage onto the tracker.
+	syncArgs := []string{"-openspec", abs, "-change", *change}
+	if *dryRun {
+		syncArgs = append(syncArgs, "-dry-run")
+	}
+	runSync(syncArgs)
 }
 
 // deriveIdeaTitle returns a title from the idea text: first line or first
