@@ -1,7 +1,7 @@
 # Tasks: reject-unconsumed-cli-args
 
 Task 1 is the exact defect that caused the 2026-09-24 incident (81 live issues
-created on `ExopenGitHub/portal` from an unrelated invocation). Task 2 is the
+created on `example-org/other-repo` from an unrelated invocation). Task 2 is the
 independent, more general defect that made `-dry-run` silently do nothing. Task 5
 is the regression test proving both are actually fixed.
 
@@ -11,7 +11,7 @@ is the regression test proving both are actually fixed.
        no legitimate positional arguments: `runSync`, `runAudit`, `runAuditTasks`,
        `runValidate`, `runArchive`, `runIdeas`, `runIdea` (idea text is the one
        expected positional — special-case it), and any others found during the
-       audit. Reproduced 2026-09-24: `specsync -repo ExopenGitHub/portal
+       audit. Reproduced 2026-09-24: `specsync -repo example-org/other-repo
        <issue-url> -dry-run` silently ignored the URL as a stray argument, left
        `-change` unset (meaning "sync everything"), and proceeded as a live full
        sync.
