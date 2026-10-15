@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -27,13 +28,47 @@ var skillTargets = []target{
 	{"agents", "Generic (.agents)", []string{".agents", "skills", "specsync"}},
 }
 
-func runInstallSkill(args []string) {
-	fs := flag.NewFlagSet("install-skill", flag.ExitOnError)
-	all := fs.Bool("all", false, "install to every known agent directory")
-	flags := make([]*bool, len(skillTargets))
-	for i, t := range skillTargets {
-		flags[i] = fs.Bool(t.flag, false, fmt.Sprintf("install to %s (~/%s)", t.label, filepath.Join(t.relPath...)))
+// installSkillCmd copies the embedded skill into agent skill directories.
+type installSkillCmd struct {
+	all     *bool
+	targets []*bool
+}
+
+func init() { Register(&installSkillCmd{}) }
+
+func (*installSkillCmd) Spec() Spec {
+	return Spec{
+		Name:     "install-skill",
+		Group:    GroupHousekeeping,
+		Summary:  "Install the specsync skill for your coding agent.",
+		Mutates:  true,
+		Workflow: AgentCommandWorkflow{Position: "setup"},
+		Safety: []string{
+			"Writes SKILL.md under the agent's skills directory in your home directory",
+		},
+		Examples: []string{
+			"specsync install-skill -claude-code",
+			"specsync install-skill -all",
+		},
 	}
+}
+
+func (cm *installSkillCmd) Flags(fs *flag.FlagSet) {
+	cm.all = fs.Bool("all", false, "install to every known agent directory")
+	cm.targets = make([]*bool, len(skillTargets))
+	for i, t := range skillTargets {
+		cm.targets[i] = fs.Bool(t.flag, false, fmt.Sprintf("install to %s (~/%s)", t.label, filepath.Join(t.relPath...)))
+	}
+}
+
+func (cm *installSkillCmd) Run(_ context.Context, args []string) error {
+	cm.run(args)
+	return nil
+}
+
+func (cm *installSkillCmd) run(args []string) {
+	fs := flagSetFor(cm)
+	all, flags := cm.all, cm.targets
 	_ = fs.Parse(args)
 	checkArgs(fs, args, 0)
 

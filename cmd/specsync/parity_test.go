@@ -45,11 +45,15 @@ func registeredNames(t *testing.T) []string {
 			if !ok || fn.Body == nil || fn.Recv != nil {
 				continue
 			}
+			// A free run* handler is a command that is not registered.
 			if !strings.HasPrefix(fn.Name.Name, "run") || !takesArgsSlice(fn) {
 				continue
 			}
 			names = append(names, kebab(strings.TrimPrefix(fn.Name.Name, "run")))
 		}
+	}
+	for name := range registry {
+		names = append(names, name)
 	}
 	sort.Strings(names)
 	if len(names) == 0 {
@@ -172,7 +176,8 @@ func namesThatDispatch(want []string) func(*testing.T) []string {
 		var got []string
 		for _, name := range want {
 			cmd, _, err := resolveSubcommand([]string{name})
-			if err == nil && cmd == name && cases[name] {
+			_, registered := lookupCommand(name)
+			if err == nil && cmd == name && (registered || cases[name]) {
 				got = append(got, name)
 			}
 		}
@@ -233,6 +238,9 @@ func handKeptLists(want []string) func(*testing.T) []string {
 			}
 			ast.Inspect(f, func(n ast.Node) bool {
 				switch n := n.(type) {
+				case *ast.FuncDecl:
+					// A command's Spec declares its own name and related commands.
+					return !(n.Recv != nil && n.Name.Name == "Spec")
 				case *ast.CompositeLit:
 					var strs []string
 					for _, el := range n.Elts {

@@ -9,18 +9,49 @@ import (
 	specsync "github.com/androidand/specsync"
 )
 
-// runTopology prints the change → repo → issue → branch → worktree join
+// statusCmd prints the change → repo → issue → branch → worktree join
 // (see openspec/changes/agent-topology-command). Read-only; every source is
 // optional, so a missing openspec/gh/git-worktree source narrows a row
 // instead of dropping it. Exits non-zero only when nothing could be resolved
 // at all — a command an agent checks before starting work must not fail
 // closed just because one source degraded.
-func runTopology(args []string) {
-	fs := flag.NewFlagSet("topology", flag.ExitOnError)
-	openspec := fs.String("openspec", "openspec", "path to the openspec/ directory")
-	change := fs.String("change", "", "scope to one change (default: every change)")
-	all := fs.Bool("all", false, "include archived changes")
-	asJSON := fs.Bool("json", false, "output as JSON")
+type statusCmd struct {
+	openspec, change *string
+	all, asJSON      *bool
+}
+
+func init() { Register(&statusCmd{}) }
+
+func (*statusCmd) Spec() Spec {
+	return Spec{
+		Name:     "status",
+		Group:    GroupOverview,
+		Summary:  "Show each change with its issue, branch and worktree.",
+		Workflow: AgentCommandWorkflow{Position: "planning", RelatedAfter: []string{"changes", "relate"}},
+		Safety:   []string{"Read-only: never writes to disk or the tracker"},
+		Examples: []string{
+			"specsync status",
+			"specsync status -change my-change -json",
+		},
+		Confusions: map[string]string{"topology": "it was renamed to status"},
+	}
+}
+
+func (cm *statusCmd) Flags(fs *flag.FlagSet) {
+	cm.openspec = fs.String("openspec", "openspec", "path to the openspec/ directory")
+	cm.change = fs.String("change", "", "scope to one change (default: every change)")
+	cm.all = fs.Bool("all", false, "include archived changes")
+	cm.asJSON = fs.Bool("json", false, "output as JSON")
+}
+
+func (cm *statusCmd) Run(_ context.Context, args []string) error {
+	cm.run(args)
+	return nil
+}
+
+func (cm *statusCmd) run(args []string) {
+	fs := flagSetFor(cm)
+	openspec, change, all, asJSON := cm.openspec, cm.change, cm.all, cm.asJSON
 	if err := fs.Parse(args); err != nil {
 		fail(err)
 	}

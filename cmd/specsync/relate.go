@@ -13,17 +13,50 @@ import (
 	"github.com/androidand/specsync"
 )
 
-// runRelate builds the work graph for a change and prints the connected slice.
+// relateCmd builds the work graph for a change and prints the connected slice.
 // It is read-only — no tracker writes, no refs.json/links.md mutation.
 // The command only reads from disk (change folders, refs.json, links.md) and
 // queries gh/git for edge data. It never writes to disk or the tracker.
-func runRelate(args []string) {
-	fs := flag.NewFlagSet("relate", flag.ExitOnError)
-	openspec, storeFlag := addRootFlags(fs)
-	change := fs.String("change", "", "change slug to relate")
-	path := fs.String("path", "", "file path to find related changes (alternative to -change)")
-	repo := fs.String("repo", "", "target repo as owner/name (default: auto-detect from git remote)")
-	fs.Parse(args)
+type relateCmd struct {
+	openspec, storeFlag *string
+	change, path, repo  *string
+}
+
+func init() { Register(&relateCmd{}) }
+
+func (*relateCmd) Spec() Spec {
+	return Spec{
+		Name:     "relate",
+		Group:    GroupOverview,
+		Summary:  "Show the work connected to a change or a file path.",
+		Workflow: AgentCommandWorkflow{Position: "planning", RelatedAfter: []string{"link", "trace"}},
+		Safety:   []string{"Read-only: never writes to disk or the tracker"},
+		Examples: []string{
+			"specsync relate -change my-change",
+			"specsync relate -path pkg/api/handler.go",
+		},
+	}
+}
+
+func (cm *relateCmd) Flags(fs *flag.FlagSet) {
+	cm.openspec, cm.storeFlag = addRootFlags(fs)
+	cm.change = fs.String("change", "", "change slug to relate")
+	cm.path = fs.String("path", "", "file path to find related changes (alternative to -change)")
+	cm.repo = fs.String("repo", "", "target repo as owner/name (default: auto-detect from git remote)")
+}
+
+func (cm *relateCmd) Run(_ context.Context, args []string) error {
+	cm.run(args)
+	return nil
+}
+
+func (cm *relateCmd) run(args []string) {
+	fs := flagSetFor(cm)
+	openspec, storeFlag, change, path, repo := cm.openspec, cm.storeFlag, cm.change, cm.path, cm.repo
+	if err := fs.Parse(args); err != nil {
+		fail(err)
+	}
+	checkArgs(fs, args, 0)
 
 	if *change == "" && *path == "" {
 		fail(fmt.Errorf("relate: need -change <slug> or -path <file>"))
