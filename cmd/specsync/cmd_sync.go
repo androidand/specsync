@@ -51,7 +51,7 @@ func (*syncCmd) Spec() Spec {
 		Examples: []string{
 			"specsync -dry-run -change my-change",
 			"specsync -change my-change",
-			"specsync sync -json -change my-change",
+			"specsync sync -dry-run -change my-change",
 		},
 	}
 }

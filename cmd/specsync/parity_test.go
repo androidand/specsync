@@ -5,7 +5,6 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -132,32 +131,6 @@ func namesFromAgentHelpList(t *testing.T) []string {
 	return names
 }
 
-var (
-	mentionCmd = regexp.MustCompile("`?specsync ([a-z][a-z-]+)")
-	headingCmd = regexp.MustCompile("(?m)^#{2,4} `([a-z][a-z-]+)`")
-)
-
-// namesFromProse lists commands a prose file mentions as `specsync <name>` or
-// as a `### name` heading. Prose also says "specsync is" and the like, so only
-// the missing direction is checked until the file has a generated, marked
-// command section (task 3.3).
-func namesFromProse(path string) func(*testing.T) []string {
-	return func(t *testing.T) []string {
-		b, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("read %s: %v", path, err)
-		}
-		var names []string
-		for _, m := range mentionCmd.FindAllStringSubmatch(string(b), -1) {
-			names = append(names, m[1])
-		}
-		for _, m := range headingCmd.FindAllStringSubmatch(string(b), -1) {
-			names = append(names, m[1])
-		}
-		return names
-	}
-}
-
 // namesThatDispatch returns the registered names that resolve to themselves
 // and have a case in main's dispatch switch.
 func namesThatDispatch(want []string) func(*testing.T) []string {
@@ -272,11 +245,11 @@ func TestEverySurfaceListsExactlyTheRegisteredCommands(t *testing.T) {
 	}{
 		{"agent-help list", namesFromAgentHelpList, true},
 		{"agent-help -json", namesFromAgentHelpJSON, true},
-		{"README", namesFromProse("../../README.md"), false},
-		{"skill (canonical)", namesFromProse("../../skills/specsync/SKILL.md"), false},
-		{"skill (cmd/specsync copy)", namesFromProse("SKILL.md"), false},
-		{"skill (npm copy)", namesFromProse("../../npm/skills/specsync/SKILL.md"), false},
-		{"skill (.claude copy)", namesFromProse("../../.claude/skills/specsync/SKILL.md"), false},
+		{"README", namesFromMarkedSection("../../README.md"), true},
+		{"skill (canonical)", namesFromMarkedSection("../../skills/specsync/SKILL.md"), true},
+		{"skill (cmd/specsync copy)", namesFromMarkedSection("SKILL.md"), true},
+		{"skill (npm copy)", namesFromMarkedSection("../../npm/skills/specsync/SKILL.md"), true},
+		{"skill (.claude copy)", namesFromMarkedSection("../../.claude/skills/specsync/SKILL.md"), true},
 		{"dispatch", namesThatDispatch(want), true},
 	}
 	for _, s := range surfaces {
