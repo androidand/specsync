@@ -65,7 +65,7 @@ func collect(t *testing.T, dir string) LocalState {
 func TestLocalState_Clean(t *testing.T) {
 	clone, _ := repoWithOrigin(t)
 	ls := collect(t, clone)
-	if ls.Modified != 0 || ls.Untracked != 0 || ls.Ahead != 0 || ls.Behind != 0 {
+	if ls.Modified != 0 || ls.Untracked != 0 || ls.Ahead != 0 || ls.UpstreamBehind != 0 {
 		t.Fatalf("clean worktree reported changes: %+v", ls)
 	}
 	if ls.Upstream != "origin/feature" || ls.Base != "origin/main" {
@@ -101,8 +101,8 @@ func TestLocalState_AheadOfUpstream(t *testing.T) {
 	commitFile(t, clone, "b.txt", "b\n")
 	commitFile(t, clone, "c.txt", "c\n")
 	ls := collect(t, clone)
-	if ls.Ahead != 2 || ls.Behind != 0 {
-		t.Fatalf("ahead/behind = %d/%d, want 2/0", ls.Ahead, ls.Behind)
+	if ls.Ahead != 2 || ls.UpstreamBehind != 0 {
+		t.Fatalf("ahead/behind = %d/%d, want 2/0", ls.Ahead, ls.UpstreamBehind)
 	}
 	if !reflect.DeepEqual(LocalAttention(ls), []string{"unpushed"}) {
 		t.Fatalf("attention = %v", LocalAttention(ls))
@@ -121,8 +121,8 @@ func TestLocalState_BehindUpstreamAndDiverged(t *testing.T) {
 	gitFixture(t, clone, "fetch", "-q")
 
 	ls := collect(t, clone)
-	if ls.Behind != 1 || ls.Ahead != 0 {
-		t.Fatalf("ahead/behind = %d/%d, want 0/1", ls.Ahead, ls.Behind)
+	if ls.UpstreamBehind != 1 || ls.Ahead != 0 {
+		t.Fatalf("ahead/behind = %d/%d, want 0/1", ls.Ahead, ls.UpstreamBehind)
 	}
 	if !reflect.DeepEqual(LocalAttention(ls), []string{"behind-upstream"}) {
 		t.Fatalf("attention = %v", LocalAttention(ls))
@@ -130,8 +130,8 @@ func TestLocalState_BehindUpstreamAndDiverged(t *testing.T) {
 
 	commitFile(t, clone, "mine.txt", "mine\n")
 	ls = collect(t, clone)
-	if ls.Ahead != 1 || ls.Behind != 1 {
-		t.Fatalf("ahead/behind = %d/%d, want 1/1", ls.Ahead, ls.Behind)
+	if ls.Ahead != 1 || ls.UpstreamBehind != 1 {
+		t.Fatalf("ahead/behind = %d/%d, want 1/1", ls.Ahead, ls.UpstreamBehind)
 	}
 	if !reflect.DeepEqual(LocalAttention(ls), []string{"unpushed", "diverged"}) {
 		t.Fatalf("attention = %v", LocalAttention(ls))

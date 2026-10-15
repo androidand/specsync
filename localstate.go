@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -15,16 +16,25 @@ import (
 // is. Every field is read from git; nothing is inferred. See
 // openspec/changes/status-pr-and-worktree-state.
 type LocalState struct {
-	Modified     int         `json:"modified"`
-	Untracked    int         `json:"untracked"`
-	Upstream     string      `json:"upstream,omitempty"`
-	Ahead        int         `json:"ahead"`
-	Behind       int         `json:"behind"`
-	Base         string      `json:"base,omitempty"`
-	BehindBase   int         `json:"behindBase"`
-	Size         *BranchSize `json:"size,omitempty"`
-	LastCommit   string      `json:"lastCommit,omitempty"` // RFC 3339
-	VolatilePath bool        `json:"volatilePath,omitempty"`
+	Modified       int         `json:"modified"`
+	Untracked      int         `json:"untracked"`
+	Upstream       string      `json:"upstream,omitempty"`
+	Ahead          int         `json:"ahead"`
+	UpstreamBehind int         `json:"upstreamBehind"`
+	Base           string      `json:"base,omitempty"`
+	BehindBase     int         `json:"behindBase"`
+	Size           *BranchSize `json:"size,omitempty"`
+	LastCommit     string      `json:"lastCommit,omitempty"` // RFC 3339
+	VolatilePath   bool        `json:"volatilePath,omitempty"`
+
+	// Freshness: has the base moved, over files this branch also changed, and
+	// would merging or rebasing onto it conflict? Set only when a base exists.
+	BaseMovedAt              string   `json:"baseMovedAt,omitempty"` // RFC 3339, base tip commit time
+	BaseTouchesYourFiles     []string `json:"baseTouchesYourFiles,omitempty"`
+	Conflicts                []string `json:"conflicts,omitempty"`
+	ConflictCheckUnavailable bool     `json:"conflictCheckUnavailable,omitempty"`
+	// SharedBranch is true when commits on the branch have more than one author.
+	SharedBranch bool `json:"sharedBranch,omitempty"`
 }
 
 // BranchSize is the branch's size against its merge base with the base.
@@ -69,7 +79,7 @@ func CollectLocalState(ctx context.Context, dir string, opts LocalStateOptions) 
 	if up, err := gitIn(ctx, dir, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"); err == nil {
 		ls.Upstream = strings.TrimSpace(up)
 		if out, err := gitIn(ctx, dir, "rev-list", "--left-right", "--count", "HEAD...@{u}"); err == nil {
-			ls.Ahead, ls.Behind = twoInts(out)
+			ls.Ahead, ls.UpstreamBehind = twoInts(out)
 		}
 	}
 
@@ -84,6 +94,7 @@ func CollectLocalState(ctx context.Context, dir string, opts LocalStateOptions) 
 			ls.Base = base
 			ls.BehindBase, _ = strconv.Atoi(strings.TrimSpace(out))
 			ls.Size = branchSize(ctx, dir, base)
+			collectFreshness(ctx, dir, base, ls)
 		}
 	}
 
@@ -97,6 +108,82 @@ func CollectLocalState(ctx context.Context, dir string, opts LocalStateOptions) 
 	}
 	ls.VolatilePath = isVolatilePath(dir, dirs)
 	return ls, nil
+}
+
+// collectFreshness fills the base-movement facts. The conflict check uses
+// `git merge-tree --write-tree`, which computes the merge in memory: it writes
+// objects but never touches the index, the worktree or any ref.
+func collectFreshness(ctx context.Context, dir, base string, ls *LocalState) {
+	if out, err := gitIn(ctx, dir, "log", "-1", "--format=%cI", base); err == nil {
+		ls.BaseMovedAt = strings.TrimSpace(out)
+	}
+	if out, err := gitIn(ctx, dir, "log", "--format=%ae", base+"..HEAD"); err == nil {
+		authors := map[string]bool{}
+		for _, a := range strings.Fields(out) {
+			authors[a] = true
+		}
+		ls.SharedBranch = len(authors) > 1
+	}
+	if ls.BehindBase == 0 {
+		return
+	}
+	mine, err1 := gitIn(ctx, dir, "diff", "--name-only", base+"...HEAD")
+	theirs, err2 := gitIn(ctx, dir, "diff", "--name-only", "HEAD..."+base)
+	if err1 == nil && err2 == nil {
+		ls.BaseTouchesYourFiles = intersectLines(mine, theirs)
+	}
+	cmd := exec.CommandContext(ctx, "git", "-C", dir, "merge-tree", "--write-tree", "--name-only", "HEAD", base)
+	cmd.Env = append(os.Environ(), "LC_ALL=C")
+	out, err := cmd.Output()
+	exit := 0
+	if err != nil {
+		exit = -1
+		if ee, ok := err.(*exec.ExitError); ok {
+			exit = ee.ExitCode()
+		}
+	}
+	paths, ok := classifyMergeTree(exit, string(out))
+	ls.Conflicts, ls.ConflictCheckUnavailable = paths, !ok
+}
+
+// classifyMergeTree interprets `git merge-tree --write-tree --name-only`:
+// exit 0 is a clean merge, exit 1 lists the conflicted paths after the result
+// tree line, anything else (an old git without --write-tree, a failure) means
+// the check is unavailable and nothing is guessed.
+func classifyMergeTree(exit int, stdout string) (paths []string, ok bool) {
+	switch exit {
+	case 0:
+		return nil, true
+	case 1:
+		lines := strings.Split(stdout, "\n")
+		for _, l := range lines[1:] {
+			if l == "" {
+				break
+			}
+			paths = append(paths, l)
+		}
+		sort.Strings(paths)
+		return paths, true
+	}
+	return nil, false
+}
+
+// intersectLines returns the sorted lines present in both newline lists.
+func intersectLines(a, b string) []string {
+	in := map[string]bool{}
+	for _, l := range strings.Split(a, "\n") {
+		if l != "" {
+			in[l] = true
+		}
+	}
+	var both []string
+	for _, l := range strings.Split(b, "\n") {
+		if l != "" && in[l] {
+			both = append(both, l)
+		}
+	}
+	sort.Strings(both)
+	return both
 }
 
 func branchSize(ctx context.Context, dir, base string) *BranchSize {
@@ -191,9 +278,11 @@ func LocalAttention(ls LocalState) []string {
 	add(ls.Ahead > 0, "unpushed")
 	add(ls.Modified+ls.Untracked > 0, "uncommitted")
 	add(ls.Upstream == "", "no-upstream")
-	add(ls.Behind > 0 && ls.Ahead == 0, "behind-upstream")
-	add(ls.Behind > 0 && ls.Ahead > 0, "diverged")
+	add(ls.UpstreamBehind > 0 && ls.Ahead == 0, "behind-upstream")
+	add(ls.UpstreamBehind > 0 && ls.Ahead > 0, "diverged")
 	add(ls.BehindBase > 0, "behind-base")
+	add(len(ls.BaseTouchesYourFiles) > 0, "base-touches-your-files")
+	add(len(ls.Conflicts) > 0, "conflicts-with-base")
 	add(ls.VolatilePath, "volatile-path")
 	return flags
 }
