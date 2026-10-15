@@ -130,8 +130,6 @@ func main() {
 		runSetStage(rest)
 	case "set-priority":
 		runSetPriority(rest)
-	case "note":
-		runNote(rest)
 	case "sync":
 		runSync(rest)
 	case "audit":
