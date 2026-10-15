@@ -22,24 +22,24 @@ type Node struct {
 	Label string
 
 	// Optional fields for specific node kinds.
-	Slug       string    // change slug (GraphKindSpec)
-	IssueNum   string    // issue/PR number (GraphKindIssue, GraphKindPR)
-	Hash       string    // commit hash (GraphKindCommit)
-	TagName    string    // release tag name (GraphKindRelease)
-	Stage      Stage     // workflow stage for spec nodes
-	CommitDate string    // commit date for GraphKindCommit
+	Slug       string // change slug (GraphKindSpec)
+	IssueNum   string // issue/PR number (GraphKindIssue, GraphKindPR)
+	Hash       string // commit hash (GraphKindCommit)
+	TagName    string // release tag name (GraphKindRelease)
+	Stage      Stage  // workflow stage for spec nodes
+	CommitDate string // commit date for GraphKindCommit
 }
 
 // EdgeKind is the type of a work-graph edge.
 type EdgeKind string
 
 const (
-	EdgeSpecSpec   EdgeKind = "spec-spec"    // links.md (asserted)
-	EdgeSpecIssue  EdgeKind = "spec-issue"   // body marker / refs.json (asserted)
-	EdgeIssuePR    EdgeKind = "issue-pr"     // gh issue/PR linkage
-	EdgePRCommit   EdgeKind = "pr-commit"    // PR merge commit
-	EdgeCommitRel  EdgeKind = "commit-release" // git tag --contains / gh release
-	EdgeWorkFiles  EdgeKind = "work-files"   // changed files of linked PRs/commits
+	EdgeSpecSpec  EdgeKind = "spec-spec"      // links.md (asserted)
+	EdgeSpecIssue EdgeKind = "spec-issue"     // body marker / refs.json (asserted)
+	EdgeIssuePR   EdgeKind = "issue-pr"       // gh issue/PR linkage
+	EdgePRCommit  EdgeKind = "pr-commit"      // PR merge commit
+	EdgeCommitRel EdgeKind = "commit-release" // git tag --contains / gh release
+	EdgeWorkFiles EdgeKind = "work-files"     // changed files of linked PRs/commits
 )
 
 // String returns the lowercase kind name.

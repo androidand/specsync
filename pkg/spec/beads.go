@@ -10,11 +10,11 @@ import (
 // It implements specsync.SpecSource but returns "not implemented" for all operations.
 //
 // Beads format requirements (for future implementation):
-// - Beads uses a .beads/ directory as a task graph database
-// - Each bead represents a task with open/closed status
-// - Tasks are linked via edges (parent/child, blocked-by, etc.)
-// - Mapping to Change: each bead family maps to a Change, with
-//   bead open/closed status mapping to task completion state
+//   - Beads uses a .beads/ directory as a task graph database
+//   - Each bead represents a task with open/closed status
+//   - Tasks are linked via edges (parent/child, blocked-by, etc.)
+//   - Mapping to Change: each bead family maps to a Change, with
+//     bead open/closed status mapping to task completion state
 type BeadsSource struct{}
 
 // Name returns "beads".

@@ -314,5 +314,3 @@ func (m *mockGitRunner) Run(ctx context.Context, args ...string) (string, error)
 	}
 	return "", nil
 }
-
-
