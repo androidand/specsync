@@ -982,7 +982,7 @@
       "examples": [
         "specsync pull -issue 42 -dry-run",
         "specsync pull -issue 42",
-        "specsync pull -issue 42 -json"
+        "specsync pull -issue 42 -dry-run"
       ]
     },
     "relate": {
@@ -1543,7 +1543,7 @@
       "examples": [
         "specsync -dry-run -change my-change",
         "specsync -change my-change",
-        "specsync sync -json -change my-change"
+        "specsync sync -dry-run -change my-change"
       ]
     },
     "trace": {

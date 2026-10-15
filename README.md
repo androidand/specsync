@@ -97,6 +97,62 @@ reports the divergence. It refuses to write to the upstream parent without an
 explicit `-repo` — a fork user's internal planning content should not silently
 appear on someone else's repository.
 
+### Commands
+
+<!-- specsync:commands:start -->
+**See what is going on.** Start with `specsync changes`.
+
+| Command | What it does |
+|---|---|
+| `audit` | Audit OpenSpec changes for structural issues. |
+| `audit-tasks` | Audit that task status matches code changes (dogfooding). |
+| `changes` | List all OpenSpec changes with status. |
+| `ideas` | List open stage:intake issues for the repo. |
+| `relate` | Show the work connected to a change or a file path. |
+| `scan` | Scan for existing work in a code area or topic. |
+| `status` | Show each change with its issue, branch and worktree. |
+| `trace` | Trace dependencies and relationships of a change. |
+
+**Plan work.** Start with `specsync pull -issue <n>`.
+
+| Command | What it does |
+|---|---|
+| `adopt` | Bind an existing local change to an existing tracker issue, when neither one knows about the other. |
+| `epic` | Create a coordination issue and wire children to it. |
+| `idea` | Capture a free-text idea as a stage:intake issue. |
+| `link` | Cross-link two or more OpenSpec changes. |
+| `note` | Append a discovery line to a change's discoveries.md. |
+| `pull` | Pull an issue into a local OpenSpec change. |
+| `set-priority` | Set or unset a change's numeric priority override. |
+| `set-stage` | Set the workflow stage of a change. |
+| `spinoff` | Spin off emergent work from a discovery. |
+
+**Sync with the tracker.** Start with `specsync -dry-run -change <slug>`.
+
+| Command | What it does |
+|---|---|
+| `sync` | Synchronize an OpenSpec change with GitHub Issues. |
+
+**Review and release.** Start with `specsync verify`.
+
+| Command | What it does |
+|---|---|
+| `archive` | Archive a completed change: final push, close, then retention. |
+| `changelog` | Generate release notes from OpenSpec changes and commits. |
+| `pr-body` | Generate the correct PR body fragment for a change. |
+| `release-plan` | Inspect release impact and generate release notes. |
+| `validate` | Validate OpenSpec change structure. |
+| `verify` | Verify PR references to their change issues. |
+
+**Housekeeping.** Start with `specsync doctor`.
+
+| Command | What it does |
+|---|---|
+| `agent-help` | Show how to use any specsync command, for people and agents. |
+| `doctor` | Diagnose skill installation, environment, and context health. |
+| `install-skill` | Install the specsync skill for your coding agent. |
+<!-- specsync:commands:end -->
+
 ### First run, end to end
 
 Say you already have a change at `openspec/changes/dark-mode/` (write one by

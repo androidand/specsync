@@ -44,7 +44,7 @@ func (*pullCmd) Spec() Spec {
 		Examples: []string{
 			"specsync pull -issue 42 -dry-run",
 			"specsync pull -issue 42",
-			"specsync pull -issue 42 -json",
+			"specsync pull -issue 42 -dry-run",
 		},
 	}
 }
