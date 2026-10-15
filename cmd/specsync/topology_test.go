@@ -76,3 +76,17 @@ func TestPrintTopologyTable_StatusLinesAlwaysPrinted(t *testing.T) {
 		t.Errorf("expected the status line surfaced, got:\n%s", out)
 	}
 }
+
+func TestPrintTopologyTable_AttentionLine(t *testing.T) {
+	topo := specsync.Topology{Changes: []specsync.ChangeTopology{
+		{Slug: "needs-push", Stage: "active", Attention: []string{"unpushed", "uncommitted"}},
+		{Slug: "all-clear", Stage: "active"},
+	}}
+	out := captureStdout(t, func() { printTopologyTable(topo) })
+	if !strings.Contains(out, "attention: unpushed, uncommitted") {
+		t.Errorf("expected an attention line, got:\n%s", out)
+	}
+	if strings.Count(out, "attention:") != 1 {
+		t.Errorf("a row without attention must not print the line, got:\n%s", out)
+	}
+}

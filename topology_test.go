@@ -363,3 +363,90 @@ func TestBuildTopology_EpicResolvedViaLabelOnUnresolvedRelatedLink(t *testing.T)
 		t.Fatalf("expected the related link to resolve as Epic, got %+v", topo.Changes)
 	}
 }
+
+func TestChangeTopology_LocalAndAttentionOmittedWhenAbsent(t *testing.T) {
+	b, err := json.Marshal(ChangeTopology{Slug: "x", Title: "X", Stage: "active"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range []string{`"local"`, `"attention"`} {
+		if strings.Contains(string(b), field) {
+			t.Errorf("expected %s to be omitted, got %s", field, b)
+		}
+	}
+}
+
+func localStateFixture(t *testing.T) (TopologyOptions, string) {
+	t.Helper()
+	root := t.TempDir()
+	cdir := filepath.Join(root, "changes", "add-field-forms")
+	mustWrite(t, filepath.Join(cdir, "proposal.md"), "# Add field forms\n")
+	worktreePath := filepath.Join(root, "..", "worktrees", "add-field-forms")
+	porcelain := "worktree " + filepath.Dir(root) + "\nHEAD abc\nbranch refs/heads/main\n\n" +
+		"worktree " + worktreePath + "\nHEAD def\nbranch refs/heads/feat/4231-add-field-forms\n"
+	return TopologyOptions{
+		OpenSpecDir:      root,
+		readCoordination: func(context.Context) (*Coordination, error) { return nil, nil },
+		gitWorktreeList:  fakeGitWorktreeList(map[string]string{filepath.Dir(root): porcelain}, nil),
+		gitRemoteOrigin:  fakeGitRemoteOrigin(map[string]string{filepath.Dir(root): "acme/portal"}),
+		run:              func(context.Context, ...string) (string, error) { return "", errors.New("gh offline") },
+	}, worktreePath
+}
+
+func TestBuildTopology_AttachesLocalStateAndAttention(t *testing.T) {
+	opts, worktreePath := localStateFixture(t)
+	var asked []string
+	opts.localState = func(_ context.Context, dir string) (*LocalState, error) {
+		asked = append(asked, dir)
+		return &LocalState{Upstream: "origin/x", Ahead: 2, Modified: 1}, nil
+	}
+	topo, err := BuildTopology(context.Background(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	row := topo.Changes[0]
+	if row.Local == nil || row.Local.Ahead != 2 {
+		t.Fatalf("local = %+v", row.Local)
+	}
+	if want := []string{"unpushed", "uncommitted"}; !reflect.DeepEqual(row.Attention, want) {
+		t.Fatalf("attention = %v, want %v", row.Attention, want)
+	}
+	if !reflect.DeepEqual(asked, []string{worktreePath}) {
+		t.Fatalf("collector asked for %v, want only the change's worktree", asked)
+	}
+}
+
+func TestBuildTopology_LocalStateFailureNarrowsTheRow(t *testing.T) {
+	opts, _ := localStateFixture(t)
+	opts.localState = func(context.Context, string) (*LocalState, error) { return nil, errors.New("not a repo") }
+	topo, err := BuildTopology(context.Background(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	row := topo.Changes[0]
+	if row.Local != nil || row.Attention != nil {
+		t.Fatalf("a failed collector must leave local and attention empty: %+v", row)
+	}
+	if row.Worktree == "" {
+		t.Fatal("the row must keep its worktree")
+	}
+	found := false
+	for _, s := range topo.Status {
+		found = found || strings.Contains(s, "local state unavailable")
+	}
+	if !found {
+		t.Fatalf("expected a status line about local state, got %v", topo.Status)
+	}
+}
+
+func TestBuildTopology_NoWorktreeMeansNoLocalState(t *testing.T) {
+	opts, _ := localStateFixture(t)
+	opts.gitWorktreeList = fakeGitWorktreeList(map[string]string{filepath.Dir(opts.OpenSpecDir): ""}, nil)
+	opts.localState = func(context.Context, string) (*LocalState, error) {
+		t.Fatal("collector must not run without a worktree")
+		return nil, nil
+	}
+	if _, err := BuildTopology(context.Background(), opts); err != nil {
+		t.Fatal(err)
+	}
+}
