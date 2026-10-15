@@ -1357,7 +1357,7 @@
     },
     "status": {
       "command": "status",
-      "description": "Show each change with its issue, branch and worktree.",
+      "description": "Show each change with its issue, branch, worktree and local git state.",
       "mutates": false,
       "workflow": {
         "position": "planning",

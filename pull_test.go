@@ -653,6 +653,9 @@ func (s *stubNonGithubProvider) Get(context.Context, string) (FetchedItem, error
 
 func TestPull_CannotResolveFromBranch(t *testing.T) {
 	dir := t.TempDir()
+	prev := currentBranchFn
+	currentBranchFn = func() (string, error) { return "scratch", nil }
+	defer func() { currentBranchFn = prev }()
 	// On a branch that doesn't match the pattern, Pull should error.
 	_, err := Pull(context.Background(), PullOptions{
 		OpenSpecDir: dir,

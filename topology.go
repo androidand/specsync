@@ -33,6 +33,9 @@ type ChangeTopology struct {
 	Worktree string         `json:"worktree,omitempty"`
 	Epic     string         `json:"epic,omitempty"`
 	Linked   []string       `json:"linked,omitempty"`
+	// Local and Attention come from git alone, for the row's worktree.
+	Local     *LocalState `json:"local,omitempty"`
+	Attention []string    `json:"attention,omitempty"`
 }
 
 // TopologyIssue is the tracker reference for one change. State is set only
@@ -58,6 +61,7 @@ type TopologyOptions struct {
 	gitWorktreeList  func(ctx context.Context, repoDir string) (string, error)
 	gitRemoteOrigin  func(ctx context.Context, repoDir string) (string, error)
 	run              func(ctx context.Context, args ...string) (string, error) // gh
+	localState       func(ctx context.Context, worktree string) (*LocalState, error)
 }
 
 // storeEntry is one coordinated store to scan: its repo root (for git
@@ -90,6 +94,11 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 	}
 	if opts.run == nil {
 		opts.run = runGH
+	}
+	if opts.localState == nil {
+		opts.localState = func(ctx context.Context, dir string) (*LocalState, error) {
+			return CollectLocalState(ctx, dir, LocalStateOptions{})
+		}
 	}
 
 	var status []string
@@ -207,6 +216,12 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 			if branch, path, matched := matchWorktree(entries, c.Slug); matched {
 				row.Branch = branch
 				row.Worktree = path
+				if ls, err := opts.localState(ctx, path); err != nil {
+					addStatus("local state unavailable for %s: %v", c.Slug, err)
+				} else {
+					row.Local = ls
+					row.Attention = LocalAttention(*ls)
+				}
 			}
 		}
 

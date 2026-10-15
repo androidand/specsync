@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	specsync "github.com/androidand/specsync"
 )
@@ -26,7 +27,7 @@ func (*statusCmd) Spec() Spec {
 	return Spec{
 		Name:     "status",
 		Group:    GroupOverview,
-		Summary:  "Show each change with its issue, branch and worktree.",
+		Summary:  "Show each change with its issue, branch, worktree and local git state.",
 		Workflow: AgentCommandWorkflow{Position: "planning", RelatedAfter: []string{"changes", "relate"}},
 		Safety:   []string{"Read-only: never writes to disk or the tracker"},
 		Examples: []string{
@@ -106,6 +107,9 @@ func printTopologyTable(topo specsync.Topology) {
 				repo = "-"
 			}
 			fmt.Printf("%-32s %-11s %-27s %-11s %-41s %s\n", c.Slug, c.Stage, repo, issue, branch, worktree)
+			if len(c.Attention) > 0 {
+				fmt.Printf("    ↳ attention: %s\n", strings.Join(c.Attention, ", "))
+			}
 			if c.Epic != "" {
 				fmt.Printf("    ↳ epic: %s\n", c.Epic)
 			}

@@ -74,7 +74,7 @@ specsync agent-help                # overview
 - `ideas` — List open stage:intake issues for the repo.
 - `relate` — Show the work connected to a change or a file path.
 - `scan` — Scan for existing work in a code area or topic.
-- `status` — Show each change with its issue, branch and worktree.
+- `status` — Show each change with its issue, branch, worktree and local git state.
 - `trace` — Trace dependencies and relationships of a change.
 
 **Plan work** (start: `specsync pull -issue <n>`)
