@@ -90,3 +90,27 @@ func TestPrintTopologyTable_AttentionLine(t *testing.T) {
 		t.Errorf("a row without attention must not print the line, got:\n%s", out)
 	}
 }
+
+func TestPrintTopologyTable_NamesOverlapAndConflictFiles(t *testing.T) {
+	topo := specsync.Topology{Changes: []specsync.ChangeTopology{{
+		Slug: "stale", Stage: "active",
+		Attention: []string{"behind-base", "base-touches-your-files", "conflicts-with-base"},
+		Local: &specsync.LocalState{
+			BaseTouchesYourFiles: []string{"src/a.go", "src/b.go"},
+			Conflicts:            []string{"src/b.go"},
+		},
+	}, {
+		Slug: "old-git", Stage: "active",
+		Local: &specsync.LocalState{ConflictCheckUnavailable: true},
+	}}}
+	out := captureStdout(t, func() { printTopologyTable(topo) })
+	for _, want := range []string{
+		"base touches your files: src/a.go, src/b.go",
+		"would conflict in: src/b.go",
+		"conflict check unavailable",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("expected %q in:\n%s", want, out)
+		}
+	}
+}

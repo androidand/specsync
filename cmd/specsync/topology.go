@@ -110,6 +110,17 @@ func printTopologyTable(topo specsync.Topology) {
 			if len(c.Attention) > 0 {
 				fmt.Printf("    ↳ attention: %s\n", strings.Join(c.Attention, ", "))
 			}
+			if l := c.Local; l != nil {
+				if len(l.BaseTouchesYourFiles) > 0 {
+					fmt.Printf("    ↳ base touches your files: %s\n", strings.Join(l.BaseTouchesYourFiles, ", "))
+				}
+				if len(l.Conflicts) > 0 {
+					fmt.Printf("    ↳ would conflict in: %s\n", strings.Join(l.Conflicts, ", "))
+				}
+				if l.ConflictCheckUnavailable {
+					fmt.Println("    ↳ conflict check unavailable (needs git 2.38 or newer)")
+				}
+			}
 			if c.Epic != "" {
 				fmt.Printf("    ↳ epic: %s\n", c.Epic)
 			}
