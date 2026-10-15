@@ -18,7 +18,7 @@ func TestAgentHelpGolden(t *testing.T) {
 	cmds := availableCommands()
 	all := map[string]AgentCommandHelp{}
 	for _, c := range cmds {
-		all[c] = commandMetadata[c]
+		all[c] = mustHelp(c)
 	}
 	got, err := json.MarshalIndent(map[string]any{"commands": cmds, "help": all}, "", "  ")
 	if err != nil {
@@ -43,4 +43,9 @@ func TestAgentHelpGolden(t *testing.T) {
 	if !bytes.Equal(want, got) {
 		t.Fatalf("agent-help output changed; if deliberate, run: go test ./cmd/specsync -run TestAgentHelpGolden -update")
 	}
+}
+
+func mustHelp(name string) AgentCommandHelp {
+	h, _ := helpFor(name)
+	return h
 }
