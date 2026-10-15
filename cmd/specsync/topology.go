@@ -110,6 +110,12 @@ func printTopologyTable(topo specsync.Topology) {
 			if len(c.Attention) > 0 {
 				fmt.Printf("    ↳ attention: %s\n", strings.Join(c.Attention, ", "))
 			}
+			if c.Sync != nil {
+				fmt.Printf("    ↳ suggest: %s\n", c.Sync.Summary)
+				for _, cmd := range c.Sync.Commands {
+					fmt.Printf("        $ %s\n", cmd)
+				}
+			}
 			if l := c.Local; l != nil {
 				if len(l.BaseTouchesYourFiles) > 0 {
 					fmt.Printf("    ↳ base touches your files: %s\n", strings.Join(l.BaseTouchesYourFiles, ", "))

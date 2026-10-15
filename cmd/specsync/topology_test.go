@@ -114,3 +114,25 @@ func TestPrintTopologyTable_NamesOverlapAndConflictFiles(t *testing.T) {
 		}
 	}
 }
+
+func TestPrintTopologyTable_SyncSuggestionShowsCommandsAndForceNotice(t *testing.T) {
+	topo := specsync.Topology{Changes: []specsync.ChangeTopology{{
+		Slug: "stale", Stage: "active",
+		Sync: &specsync.SyncAdvice{
+			Action:    "rebase-onto-base",
+			Summary:   "rebase onto origin/main; a force push with lease is needed",
+			Commands:  []string{"git rebase origin/main", "git push --force-with-lease"},
+			ForcePush: true,
+		},
+	}}}
+	out := captureStdout(t, func() { printTopologyTable(topo) })
+	for _, want := range []string{
+		"suggest: rebase onto origin/main; a force push with lease is needed",
+		"$ git rebase origin/main",
+		"$ git push --force-with-lease",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("expected %q in:\n%s", want, out)
+		}
+	}
+}

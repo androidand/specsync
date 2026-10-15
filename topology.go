@@ -36,6 +36,8 @@ type ChangeTopology struct {
 	// Local and Attention come from git alone, for the row's worktree.
 	Local     *LocalState `json:"local,omitempty"`
 	Attention []string    `json:"attention,omitempty"`
+	// Sync is advice for bringing the branch up to date. It is never executed.
+	Sync *SyncAdvice `json:"sync,omitempty"`
 }
 
 // TopologyIssue is the tracker reference for one change. State is set only
@@ -62,6 +64,9 @@ type TopologyOptions struct {
 	gitRemoteOrigin  func(ctx context.Context, repoDir string) (string, error)
 	run              func(ctx context.Context, args ...string) (string, error) // gh
 	localState       func(ctx context.Context, worktree string) (*LocalState, error)
+
+	// Sync is the `sync:` config for suggestions; zero means the defaults.
+	Sync SyncConfig
 }
 
 // storeEntry is one coordinated store to scan: its repo root (for git
@@ -221,6 +226,9 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 				} else {
 					row.Local = ls
 					row.Attention = LocalAttention(*ls)
+					// ReviewStarted needs the provider's request state; until
+					// that is wired in, advice assumes no review has begun.
+					row.Sync = SuggestSync(*ls, SyncInput{}, opts.Sync)
 				}
 			}
 		}

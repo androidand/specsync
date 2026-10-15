@@ -450,3 +450,35 @@ func TestBuildTopology_NoWorktreeMeansNoLocalState(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestBuildTopology_AttachesSyncSuggestionFromLocalState(t *testing.T) {
+	opts, _ := localStateFixture(t)
+	opts.localState = func(context.Context, string) (*LocalState, error) {
+		return &LocalState{Upstream: "origin/x", Base: "origin/main", BehindBase: 2}, nil
+	}
+	topo, err := BuildTopology(context.Background(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := topo.Changes[0].Sync
+	if got == nil || got.Action != "rebase-onto-base" || !got.ForcePush {
+		t.Fatalf("sync = %+v", got)
+	}
+
+	opts.Sync = SyncConfig{Strategy: "merge"}
+	topo, _ = BuildTopology(context.Background(), opts)
+	if got := topo.Changes[0].Sync; got == nil || got.Action != "merge-base" {
+		t.Fatalf("configured strategy not used: %+v", got)
+	}
+}
+
+func TestBuildTopology_UpToDateRowHasNoSyncSuggestion(t *testing.T) {
+	opts, _ := localStateFixture(t)
+	opts.localState = func(context.Context, string) (*LocalState, error) {
+		return &LocalState{Upstream: "origin/x", Base: "origin/main"}, nil
+	}
+	topo, _ := BuildTopology(context.Background(), opts)
+	if topo.Changes[0].Sync != nil {
+		t.Fatalf("expected no suggestion, got %+v", topo.Changes[0].Sync)
+	}
+}
