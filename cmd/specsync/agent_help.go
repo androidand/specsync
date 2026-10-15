@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 )
 
@@ -848,39 +849,6 @@ var commandMetadata = map[string]AgentCommandHelp{
 			"specsync set-priority my-change unset",
 		},
 	},
-	"note": {
-		Command:     "note",
-		Description: "Append a discovery line to a change's discoveries.md.",
-		Mutates:     true,
-		Workflow: AgentCommandWorkflow{
-			Position:      "implementation",
-			RelatedBefore: []string{},
-			RelatedAfter:  []string{"spinoff"},
-		},
-		Flags: []AgentCommandFlag{
-			{
-				Name:        "openspec",
-				Type:        "string",
-				Required:    false,
-				Default:     "openspec",
-				Description: "Path to the openspec/ directory",
-			},
-			{
-				Name:        "dry-run",
-				Type:        "boolean",
-				Required:    false,
-				Default:     false,
-				Description: "Show what would be written without modifying files",
-			},
-		},
-		SafetyRules: []string{
-			"Takes positional args: <change> <text>, not a -text flag",
-		},
-		Examples: []string{
-			"specsync note my-change 'Found edge case in X' -dry-run",
-			"specsync note my-change 'Found edge case in X'",
-		},
-	},
 }
 
 // runAgentHelp handles the agent-help command.
@@ -903,7 +871,7 @@ func runAgentHelp(args []string) {
 		return
 	}
 
-	help, ok := commandMetadata[command]
+	help, ok := helpFor(command)
 	if !ok {
 		fmt.Fprintf(os.Stderr, "specsync agent-help: unknown command %q\n", command)
 		fmt.Fprintf(os.Stderr, "Available commands: %s\n", strings.Join(availableCommands(), ", "))
@@ -923,19 +891,29 @@ func runAgentHelp(args []string) {
 
 // availableCommands returns all available command names.
 func availableCommands() []string {
-	commands := make([]string, 0, len(commandMetadata))
+	seen := map[string]bool{}
+	commands := make([]string, 0, len(commandMetadata)+len(registry))
 	for cmd := range commandMetadata {
+		seen[cmd] = true
 		commands = append(commands, cmd)
 	}
-	// Sort for deterministic output
-	for i := 0; i < len(commands)-1; i++ {
-		for j := i + 1; j < len(commands); j++ {
-			if commands[i] > commands[j] {
-				commands[i], commands[j] = commands[j], commands[i]
-			}
+	for cmd := range registry {
+		if !seen[cmd] {
+			commands = append(commands, cmd)
 		}
 	}
+	sort.Strings(commands)
 	return commands
+}
+
+// helpFor returns the help entry for a command: derived from its declaration
+// when it is registered, from the legacy table otherwise.
+func helpFor(name string) (AgentCommandHelp, bool) {
+	if c, ok := lookupCommand(name); ok {
+		return helpFromCommand(c), true
+	}
+	h, ok := commandMetadata[name]
+	return h, ok
 }
 
 // renderAgentHelpOverview renders high-level guidance.
@@ -943,7 +921,7 @@ func renderAgentHelpOverview(asJSON bool) {
 	if asJSON {
 		overview := map[string]interface{}{
 			"description": "SpecSync CLI for managing OpenSpec changes and GitHub synchronization",
-			"subcommands": len(commandMetadata),
+			"subcommands": len(availableCommands()),
 			"commands":    availableCommands(),
 			"tips": []string{
 				"Use `specsync agent-help <command>` for detailed help on any command",
@@ -969,7 +947,7 @@ For help on any command, use:
 
 Available commands:`)
 		for _, cmd := range availableCommands() {
-			if help, ok := commandMetadata[cmd]; ok {
+			if help, ok := helpFor(cmd); ok {
 				fmt.Printf("  %-20s %s\n", cmd, help.Description)
 			}
 		}

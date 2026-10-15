@@ -64,13 +64,13 @@ func resolveSubcommand(args []string) (cmd string, rest []string, err error) {
 	if isVersionArg(first) {
 		return "version", args[1:], nil
 	}
-	if knownSubcommands[first] {
+	if _, ok := lookupCommand(first); ok || knownSubcommands[first] {
 		return first, args[1:], nil
 	}
 	if strings.HasPrefix(first, "-") {
 		return "sync", args, nil
 	}
-	if suggestion, ok := knownConfusions[first]; ok {
+	if suggestion, ok := confusionFor(first); ok {
 		return "", nil, fmt.Errorf("unknown subcommand %q — did you mean %q? specsync's sync also reconciles tracker state back into tasks.md, so it isn't a one-way push", first, suggestion)
 	}
 	return "", nil, fmt.Errorf("unknown subcommand %q", first)
@@ -96,6 +96,13 @@ func main() {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "specsync: %v\n\nRun with no subcommand (optionally with flags) to sync, or use one of: pull, adopt, link, scan, trace, release-plan, changelog, install-skill, changes, set-stage, set-priority, note, audit, audit-tasks, validate, spinoff, pr-body, verify, idea, ideas, archive, epic, topology\n", err)
 		os.Exit(2)
+	}
+
+	if c, ok := lookupCommand(cmd); ok {
+		if err := c.Run(context.Background(), rest); err != nil {
+			fail(err)
+		}
+		return
 	}
 
 	switch cmd {
@@ -1613,44 +1620,6 @@ func runSetPriority(args []string) {
 		fail(err)
 	}
 	fmt.Printf("set-priority: %s → %s\n", changeName, priorityArg)
-}
-
-// runNote appends a discovery line to the ## Discoveries section of a change.
-func runNote(args []string) {
-	fs := flag.NewFlagSet("note", flag.ExitOnError)
-	openspec, storeFlag := addRootFlags(fs)
-	dryRun := fs.Bool("dry-run", false, "show what would be written without modifying files")
-	if err := fs.Parse(args); err != nil {
-		fail(err)
-	}
-	checkArgs(fs, args, -1)
-	if fs.NArg() < 2 {
-		fail(fmt.Errorf("usage: specsync note <change> <text>"))
-	}
-	changeName, text := fs.Arg(0), fs.Arg(1)
-
-	c, err := specsync.LoadChangeBySlug(resolveRoot(fs, openspec, storeFlag).Dir, changeName)
-	if err != nil {
-		fail(err)
-	}
-
-	discPath := filepath.Join(c.Dir, "discoveries.md")
-	existingBytes, _ := os.ReadFile(discPath)
-	existing := strings.TrimSpace(string(existingBytes))
-	if existing != "" {
-		existing += "\n"
-	}
-	newContent := existing + "- " + text + "\n"
-
-	if *dryRun {
-		fmt.Printf("[dry-run] would append to %s:\n%s\n", discPath, newContent)
-		return
-	}
-
-	if err := os.WriteFile(discPath, []byte(newContent), 0o644); err != nil {
-		fail(err)
-	}
-	fmt.Printf("note: appended to %s/discoveries.md\n", changeName)
 }
 
 // runSpinoff spawns a new linked change from a discovery or task in an
