@@ -483,18 +483,25 @@
       },
       "flags": [
         {
-          "name": "openspec",
-          "type": "string",
-          "required": false,
-          "default": "openspec",
-          "description": "Path to the openspec/ directory"
-        },
-        {
           "name": "dry-run",
           "type": "boolean",
           "required": false,
           "default": false,
-          "description": "Show what would be written without modifying files"
+          "description": "show what would be written without modifying files"
+        },
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "store",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "registered OpenSpec store id to operate on (default: openspec/config.yaml `store:`, else ./openspec)"
         }
       ],
       "safety_rules": [
