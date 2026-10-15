@@ -396,7 +396,7 @@ func localStateFixture(t *testing.T) (TopologyOptions, string) {
 func TestBuildTopology_AttachesLocalStateAndAttention(t *testing.T) {
 	opts, worktreePath := localStateFixture(t)
 	var asked []string
-	opts.localState = func(_ context.Context, dir string) (*LocalState, error) {
+	opts.localState = func(_ context.Context, dir string, _ LocalStateOptions) (*LocalState, error) {
 		asked = append(asked, dir)
 		return &LocalState{Upstream: "origin/x", Ahead: 2, Modified: 1}, nil
 	}
@@ -418,7 +418,7 @@ func TestBuildTopology_AttachesLocalStateAndAttention(t *testing.T) {
 
 func TestBuildTopology_LocalStateFailureNarrowsTheRow(t *testing.T) {
 	opts, _ := localStateFixture(t)
-	opts.localState = func(context.Context, string) (*LocalState, error) { return nil, errors.New("not a repo") }
+	opts.localState = func(context.Context, string, LocalStateOptions) (*LocalState, error) { return nil, errors.New("not a repo") }
 	topo, err := BuildTopology(context.Background(), opts)
 	if err != nil {
 		t.Fatal(err)
@@ -442,7 +442,7 @@ func TestBuildTopology_LocalStateFailureNarrowsTheRow(t *testing.T) {
 func TestBuildTopology_NoWorktreeMeansNoLocalState(t *testing.T) {
 	opts, _ := localStateFixture(t)
 	opts.gitWorktreeList = fakeGitWorktreeList(map[string]string{filepath.Dir(opts.OpenSpecDir): ""}, nil)
-	opts.localState = func(context.Context, string) (*LocalState, error) {
+	opts.localState = func(context.Context, string, LocalStateOptions) (*LocalState, error) {
 		t.Fatal("collector must not run without a worktree")
 		return nil, nil
 	}
@@ -453,7 +453,7 @@ func TestBuildTopology_NoWorktreeMeansNoLocalState(t *testing.T) {
 
 func TestBuildTopology_AttachesSyncSuggestionFromLocalState(t *testing.T) {
 	opts, _ := localStateFixture(t)
-	opts.localState = func(context.Context, string) (*LocalState, error) {
+	opts.localState = func(context.Context, string, LocalStateOptions) (*LocalState, error) {
 		return &LocalState{Upstream: "origin/x", Base: "origin/main", BehindBase: 2}, nil
 	}
 	topo, err := BuildTopology(context.Background(), opts)
@@ -474,7 +474,7 @@ func TestBuildTopology_AttachesSyncSuggestionFromLocalState(t *testing.T) {
 
 func TestBuildTopology_UpToDateRowHasNoSyncSuggestion(t *testing.T) {
 	opts, _ := localStateFixture(t)
-	opts.localState = func(context.Context, string) (*LocalState, error) {
+	opts.localState = func(context.Context, string, LocalStateOptions) (*LocalState, error) {
 		return &LocalState{Upstream: "origin/x", Base: "origin/main"}, nil
 	}
 	topo, _ := BuildTopology(context.Background(), opts)
@@ -486,7 +486,7 @@ func TestBuildTopology_UpToDateRowHasNoSyncSuggestion(t *testing.T) {
 func requestFixture(t *testing.T, calls *[]string) TopologyOptions {
 	t.Helper()
 	opts, _ := localStateFixture(t)
-	opts.localState = func(context.Context, string) (*LocalState, error) {
+	opts.localState = func(context.Context, string, LocalStateOptions) (*LocalState, error) {
 		return &LocalState{Upstream: "origin/x", Base: "origin/main", BehindBase: 1}, nil
 	}
 	opts.changeRequests = func(_ context.Context, repo string) (*ChangeRequestSet, error) {
@@ -653,5 +653,43 @@ func TestBuildTopology_RequestFailureStatusShowsTheReasonNotTheCommand(t *testin
 	joined := strings.Join(topo.Status, "\n")
 	if !strings.Contains(joined, "GraphQL: rate limited") || strings.Contains(joined, "--json") {
 		t.Fatalf("status should carry the reason only, got %q", joined)
+	}
+}
+
+func TestBuildTopology_PullRequestBaseBecomesTheBase(t *testing.T) {
+	var asked []string
+	opts := requestFixture(t, &asked)
+	var gotBase string
+	opts.localState = func(_ context.Context, _ string, lo LocalStateOptions) (*LocalState, error) {
+		gotBase = lo.Base
+		return &LocalState{Upstream: "origin/x", Base: lo.Base}, nil
+	}
+	opts.changeRequests = func(context.Context, string) (*ChangeRequestSet, error) {
+		return &ChangeRequestSet{Requests: []ChangeRequest{{
+			Number: 7, State: "open", Branch: "feat/4231-add-field-forms", Base: "release/2",
+		}}}, nil
+	}
+	if _, err := BuildTopology(context.Background(), opts); err != nil {
+		t.Fatal(err)
+	}
+	if gotBase != "origin/release/2" {
+		t.Fatalf("local state base = %q, want the PR's base as a remote-tracking ref", gotBase)
+	}
+}
+
+func TestBuildTopology_NoPullRequestLeavesBaseToTheCollector(t *testing.T) {
+	var asked []string
+	opts := requestFixture(t, &asked)
+	var gotBase = "unset"
+	opts.localState = func(_ context.Context, _ string, lo LocalStateOptions) (*LocalState, error) {
+		gotBase = lo.Base
+		return &LocalState{}, nil
+	}
+	opts.changeRequests = func(context.Context, string) (*ChangeRequestSet, error) { return &ChangeRequestSet{}, nil }
+	if _, err := BuildTopology(context.Background(), opts); err != nil {
+		t.Fatal(err)
+	}
+	if gotBase != "" {
+		t.Fatalf("base = %q, want empty so origin/HEAD is used", gotBase)
 	}
 }

@@ -83,19 +83,25 @@ func CollectLocalState(ctx context.Context, dir string, opts LocalStateOptions) 
 		}
 	}
 
-	base := opts.Base
-	if base == "" {
-		if out, err := gitIn(ctx, dir, "symbolic-ref", "--short", "refs/remotes/origin/HEAD"); err == nil {
-			base = strings.TrimSpace(out)
-		}
+	// The base is the override when it resolves (for example a pull request's
+	// base), else origin/HEAD, else omitted.
+	candidates := []string{opts.Base}
+	if out, err := gitIn(ctx, dir, "symbolic-ref", "--short", "refs/remotes/origin/HEAD"); err == nil {
+		candidates = append(candidates, strings.TrimSpace(out))
 	}
-	if base != "" {
-		if out, err := gitIn(ctx, dir, "rev-list", "--count", "HEAD.."+base); err == nil {
-			ls.Base = base
-			ls.BehindBase, _ = strconv.Atoi(strings.TrimSpace(out))
-			ls.Size = branchSize(ctx, dir, base)
-			collectFreshness(ctx, dir, base, ls)
+	for _, base := range candidates {
+		if base == "" {
+			continue
 		}
+		out, err := gitIn(ctx, dir, "rev-list", "--count", "HEAD.."+base)
+		if err != nil {
+			continue
+		}
+		ls.Base = base
+		ls.BehindBase, _ = strconv.Atoi(strings.TrimSpace(out))
+		ls.Size = branchSize(ctx, dir, base)
+		collectFreshness(ctx, dir, base, ls)
+		break
 	}
 
 	if out, err := gitIn(ctx, dir, "log", "-1", "--format=%cI"); err == nil {

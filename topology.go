@@ -65,7 +65,7 @@ type TopologyOptions struct {
 	gitWorktreeList  func(ctx context.Context, repoDir string) (string, error)
 	gitRemoteOrigin  func(ctx context.Context, repoDir string) (string, error)
 	run              func(ctx context.Context, args ...string) (string, error) // gh
-	localState       func(ctx context.Context, worktree string) (*LocalState, error)
+	localState       func(ctx context.Context, worktree string, lo LocalStateOptions) (*LocalState, error)
 
 	// LocalOnly (-state=off) skips every gh call and the provider: local git
 	// facts only, instant and offline.
@@ -122,9 +122,7 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 		}
 	}
 	if opts.localState == nil {
-		opts.localState = func(ctx context.Context, dir string) (*LocalState, error) {
-			return CollectLocalState(ctx, dir, LocalStateOptions{})
-		}
+		opts.localState = CollectLocalState
 	}
 
 	var status []string
@@ -244,14 +242,6 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 			if branch, path, matched := matchWorktree(entries, c.Slug); matched {
 				row.Branch = branch
 				row.Worktree = path
-				var ls *LocalState
-				if got, err := opts.localState(ctx, path); err != nil {
-					addStatus("local state unavailable for %s: %v", c.Slug, err)
-				} else {
-					ls = got
-					row.Local = ls
-				}
-
 				var cr *ChangeRequest
 				if !opts.LocalOnly && row.Repo != "" && !requestsFailed[row.Repo] {
 					set, seen := requestSets[row.Repo]
@@ -272,6 +262,19 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 						cr = set.ForBranch(row.Branch)
 						row.PR = cr
 					}
+				}
+
+				// An open request's base is the branch this work is measured against.
+				base := ""
+				if cr != nil && cr.State == "open" && cr.Base != "" {
+					base = "origin/" + cr.Base
+				}
+				var ls *LocalState
+				if got, err := opts.localState(ctx, path, LocalStateOptions{Base: base}); err != nil {
+					addStatus("local state unavailable for %s: %v", c.Slug, err)
+				} else {
+					ls = got
+					row.Local = ls
 				}
 
 				row.Attention = RowAttention(ls, cr)

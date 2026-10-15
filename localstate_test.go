@@ -221,3 +221,27 @@ func TestCollectLocalState_ReadOnly(t *testing.T) {
 		t.Fatalf("collecting state changed the repo:\n%s\n---\n%s", before, after)
 	}
 }
+
+func TestLocalState_BaseOverrideAndFallback(t *testing.T) {
+	clone, _ := repoWithOrigin(t)
+	gitFixture(t, clone, "checkout", "-q", "-b", "release")
+	commitFile(t, clone, "r.txt", "r\n")
+	gitFixture(t, clone, "push", "-q", "origin", "release")
+	gitFixture(t, clone, "checkout", "-q", "feature")
+
+	ls, err := CollectLocalState(context.Background(), clone, LocalStateOptions{Base: "origin/release", VolatileDirs: []string{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ls.Base != "origin/release" || ls.BehindBase != 1 {
+		t.Fatalf("base/behindBase = %q/%d, want origin/release/1", ls.Base, ls.BehindBase)
+	}
+
+	ls, err = CollectLocalState(context.Background(), clone, LocalStateOptions{Base: "origin/does-not-exist", VolatileDirs: []string{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ls.Base != "origin/main" {
+		t.Fatalf("an unknown base must fall back to origin/HEAD, got %q", ls.Base)
+	}
+}
