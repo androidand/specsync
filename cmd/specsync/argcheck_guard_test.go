@@ -15,9 +15,8 @@ import (
 // keep this list short and every entry justified, since it's the one place
 // a future subcommand could quietly opt back out of the check.
 var subcommandsExemptFromArgCheck = map[string]string{
-	"runDoctor":    "reorders flags first (reorderFlagsFirst) and errors loudly on any unrecognized subcommand word — the silent-drop failure mode doesn't apply",
-	"runAgentHelp": "reorders flags first (reorderFlagsFirst) and errors loudly on any unrecognized subcommand word — the silent-drop failure mode doesn't apply",
-	"runRelate":    "dead code: not dispatched from main() or knownSubcommands",
+	"doctorCmd":    "reorders flags first (reorderFlagsFirst) and errors loudly on any unrecognized subcommand word — the silent-drop failure mode doesn't apply",
+	"agentHelpCmd": "reorders flags first (reorderFlagsFirst) and errors loudly on any unrecognized subcommand word — the silent-drop failure mode doesn't apply",
 }
 
 // TestEveryRunFuncChecksArgs guards against the exact way this incident's
@@ -47,11 +46,17 @@ func TestEveryRunFuncChecksArgs(t *testing.T) {
 		}
 		for _, decl := range f.Decls {
 			fn, ok := decl.(*ast.FuncDecl)
-			if !ok || fn.Body == nil || fn.Recv != nil {
+			if !ok || fn.Body == nil || !takesArgsSlice(fn) {
 				continue
 			}
+			// A command's handler is the run method of its Cmd type.
 			name := fn.Name.Name
-			if !strings.HasPrefix(name, "run") || !takesArgsSlice(fn) {
+			if fn.Recv != nil {
+				if name != "run" {
+					continue
+				}
+				name = recvTypeName(fn)
+			} else if !strings.HasPrefix(name, "run") {
 				continue
 			}
 			if _, exempt := subcommandsExemptFromArgCheck[name]; exempt {
@@ -94,4 +99,16 @@ func callsCheckArgs(body ast.Node) bool {
 		return true
 	})
 	return found
+}
+
+// recvTypeName returns the receiver's type name, without any pointer.
+func recvTypeName(fn *ast.FuncDecl) string {
+	t := fn.Recv.List[0].Type
+	if star, ok := t.(*ast.StarExpr); ok {
+		t = star.X
+	}
+	if id, ok := t.(*ast.Ident); ok {
+		return id.Name
+	}
+	return ""
 }

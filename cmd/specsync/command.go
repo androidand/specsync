@@ -46,6 +46,13 @@ var groupInfo = []struct {
 	{GroupHousekeeping, "Housekeeping", "specsync doctor"},
 }
 
+// Arg is a positional argument.
+type Arg struct {
+	Name        string
+	Description string
+	Required    bool
+}
+
 // Spec describes a command.
 type Spec struct {
 	Name     string
@@ -54,11 +61,13 @@ type Spec struct {
 	Intents  []string // phrases a person would use to look for it
 	Mutates  bool
 	Workflow AgentCommandWorkflow
+	Args     []Arg    // positional arguments, in order
 	Required []string // names of flags that must be given
 	Safety   []string
 	Examples []string // full command lines
-	// Confusions maps a habit word (e.g. git's "push") to the hint shown when
-	// someone types it. It is not an alias: the word still fails to dispatch.
+	// Confusions maps a habit word (e.g. git's "push") to the note shown when
+	// someone types it and this command is what they meant. It is not an
+	// alias: the word still fails to dispatch.
 	Confusions map[string]string
 	JSONOutput map[string]interface{}
 }
@@ -134,6 +143,11 @@ func validateCommand(c Command) error {
 	if len(s.Examples) == 0 {
 		return fmt.Errorf("%s has no examples", who)
 	}
+	for _, a := range s.Args {
+		if a.Name == "" || strings.TrimSpace(a.Description) == "" {
+			return fmt.Errorf("%s: argument %q needs a name and a description", who, a.Name)
+		}
+	}
 	fs := flag.NewFlagSet(s.Name, flag.ContinueOnError)
 	c.Flags(fs)
 	have := map[string]bool{}
@@ -189,8 +203,13 @@ func helpFromCommand(c Command) AgentCommandHelp {
 		}
 		flags = append(flags, af)
 	})
+	var args []AgentCommandArg
+	for _, a := range s.Args {
+		args = append(args, AgentCommandArg(a))
+	}
 	return AgentCommandHelp{
 		Command:     s.Name,
+		Args:        args,
 		Description: s.Summary,
 		Mutates:     s.Mutates,
 		Workflow:    s.Workflow,
@@ -201,14 +220,22 @@ func helpFromCommand(c Command) AgentCommandHelp {
 	}
 }
 
-// confusionFor returns the hint for a habit word declared by a command, or
-// from the legacy table for commands not yet ported.
-func confusionFor(word string) (string, bool) {
-	for _, c := range registry {
-		if hint, ok := c.Spec().Confusions[word]; ok {
-			return hint, true
+// confusionFor returns the command a habit word is confused with, and the
+// note explaining why the word is not an alias, from the declarations.
+func confusionFor(word string) (command, note string, ok bool) {
+	for _, cmd := range registeredCommands() {
+		if note, ok := cmd.Spec().Confusions[word]; ok {
+			return cmd.Spec().Name, note, true
 		}
 	}
-	hint, ok := knownConfusions[word]
-	return hint, ok
+	return "", "", false
+}
+
+// commandNames returns every registered command name, ordered by group.
+func commandNames() []string {
+	var names []string
+	for _, c := range registeredCommands() {
+		names = append(names, c.Spec().Name)
+	}
+	return names
 }
