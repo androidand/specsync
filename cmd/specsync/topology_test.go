@@ -166,7 +166,7 @@ func TestStatusCmd_StateFlag(t *testing.T) {
 	if fs.Lookup("state") == nil {
 		t.Fatal("status must define -state")
 	}
-	for in, want := range map[string]bool{"on": true, "off": true, "": true, "OFF": false, "maybe": false} {
+	for in, want := range map[string]bool{"on": true, "off": true, "fresh": true, "": true, "OFF": false, "maybe": false} {
 		if got := validState(in); got != want {
 			t.Errorf("validState(%q) = %v, want %v", in, got, want)
 		}

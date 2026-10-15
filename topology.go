@@ -71,6 +71,11 @@ type TopologyOptions struct {
 	// facts only, instant and offline.
 	LocalOnly bool
 
+	// Cache, when set, serves a repo's request listing for a short time.
+	// RefreshRequests skips reading it (the fresh listing is still stored).
+	Cache           RequestCache
+	RefreshRequests bool
+
 	// changeRequests lists one repo's requests. nil set means the provider
 	// cannot list them, which is silent. The default asks the GitHub provider.
 	changeRequests func(ctx context.Context, repo string) (*ChangeRequestSet, error)
@@ -246,7 +251,19 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 				if !opts.LocalOnly && row.Repo != "" && !requestsFailed[row.Repo] {
 					set, seen := requestSets[row.Repo]
 					if !seen {
-						got, err := opts.changeRequests(ctx, row.Repo)
+						var got *ChangeRequestSet
+						var err error
+						if opts.Cache != nil && !opts.RefreshRequests {
+							if cached, ok := opts.Cache.Get(row.Repo); ok {
+								got = &cached
+							}
+						}
+						if got == nil {
+							got, err = opts.changeRequests(ctx, row.Repo)
+							if err == nil && got != nil && opts.Cache != nil {
+								opts.Cache.Put(row.Repo, *got)
+							}
+						}
 						if err != nil {
 							requestsFailed[row.Repo] = true
 							addStatus("request state omitted for %s: %s", row.Repo, errReason(err))

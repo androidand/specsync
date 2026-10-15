@@ -35,6 +35,7 @@ func (*statusCmd) Spec() Spec {
 			"specsync status",
 			"specsync status -change my-change -json",
 			"specsync status -state=off",
+			"specsync status -state=fresh",
 		},
 	}
 }
@@ -44,7 +45,7 @@ func (cm *statusCmd) Flags(fs *flag.FlagSet) {
 	cm.change = fs.String("change", "", "scope to one change (default: every change)")
 	cm.all = fs.Bool("all", false, "include archived changes")
 	cm.asJSON = fs.Bool("json", false, "output as JSON")
-	cm.state = fs.String("state", "on", "off skips the tracker and pull request lookups: local git facts only, offline")
+	cm.state = fs.String("state", "on", "on (default) reuses pull request data for up to a minute; fresh refetches it; off skips the tracker and pull request lookups: local git facts only, offline")
 }
 
 func (cm *statusCmd) Run(_ context.Context, args []string) error {
@@ -60,16 +61,18 @@ func (cm *statusCmd) run(args []string) {
 	}
 	checkArgs(fs, args, 0)
 	if !validState(*state) {
-		fail(fmt.Errorf("-state must be on or off, got %q", *state))
+		fail(fmt.Errorf("-state must be on, fresh or off, got %q", *state))
 	}
 
 	ctx := context.Background()
 
 	topo, err := specsync.BuildTopology(ctx, specsync.TopologyOptions{
-		OpenSpecDir: *openspec,
-		Slug:        *change,
-		All:         *all,
-		LocalOnly:   *state == "off",
+		OpenSpecDir:     *openspec,
+		Slug:            *change,
+		All:             *all,
+		LocalOnly:       *state == "off",
+		Cache:           requestCache(),
+		RefreshRequests: *state == "fresh",
 	})
 	if err != nil {
 		fail(err)
@@ -106,7 +109,7 @@ func requestLine(pr *specsync.ChangeRequest) string {
 }
 
 // validState reports whether v is an accepted -state value.
-func validState(v string) bool { return v == "" || v == "on" || v == "off" }
+func validState(v string) bool { return v == "" || v == "on" || v == "off" || v == "fresh" }
 
 func printTopologyTable(topo specsync.Topology) {
 	if len(topo.Changes) == 0 {
@@ -183,4 +186,14 @@ func joinCommaOr(vals []string, empty string) string {
 		out += ", " + v
 	}
 	return out
+}
+
+// requestCache returns the on-disk request cache, or nil (no caching) when the
+// user has no cache directory. A nil *FileRequestCache must not become a
+// non-nil interface.
+func requestCache() specsync.RequestCache {
+	if c := specsync.DefaultRequestCache(); c != nil {
+		return c
+	}
+	return nil
 }

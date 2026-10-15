@@ -1440,7 +1440,7 @@
           "type": "string",
           "required": false,
           "default": "on",
-          "description": "off skips the tracker and pull request lookups: local git facts only, offline"
+          "description": "on (default) reuses pull request data for up to a minute; fresh refetches it; off skips the tracker and pull request lookups: local git facts only, offline"
         }
       ],
       "safety_rules": [
@@ -1449,7 +1449,8 @@
       "examples": [
         "specsync status",
         "specsync status -change my-change -json",
-        "specsync status -state=off"
+        "specsync status -state=off",
+        "specsync status -state=fresh"
       ]
     },
     "sync": {

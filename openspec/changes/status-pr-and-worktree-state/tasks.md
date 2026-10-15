@@ -5,7 +5,7 @@
 - [x] 1.1 Add an optional provider capability to list change requests; implement it for GitHub with one `gh pr list --state all --json ...` per repo (page of 100; `commits` is left out of the query because GitHub rejects more than about 40 requests per page with it), mapped by head branch, through the existing `GHRunner` so it is mockable; providers without it are skipped
 - [x] 1.2 Add a `LocalState` collector per worktree: modified/untracked counts, upstream, ahead/behind, base and behind-base, size against the merge base, last commit time, volatile-path check
 - [x] 1.3 Resolve the base branch: PR base, else `origin/HEAD`, else omit
-- [ ] 1.4 Cache the per-repo PR listing with a short TTL via `cache.go`
+- [x] 1.4 Cache the per-repo PR listing with a short TTL (a file in the user cache directory, never in a repo; `-state=fresh` bypasses it)
 
 - [x] 1.5 Freshness facts: behind upstream, diverged, behind base and when the base moved, overlapping files, shared-branch check
 - [x] 1.6 Conflict prediction with `git merge-tree --write-tree`; unavailable on old git is reported, not guessed
