@@ -38,6 +38,8 @@ type ChangeTopology struct {
 	Attention []string    `json:"attention,omitempty"`
 	// Sync is advice for bringing the branch up to date. It is never executed.
 	Sync *SyncAdvice `json:"sync,omitempty"`
+	// PR is the change request on the row's branch, from the work provider.
+	PR *ChangeRequest `json:"pr,omitempty"`
 }
 
 // TopologyIssue is the tracker reference for one change. State is set only
@@ -64,6 +66,14 @@ type TopologyOptions struct {
 	gitRemoteOrigin  func(ctx context.Context, repoDir string) (string, error)
 	run              func(ctx context.Context, args ...string) (string, error) // gh
 	localState       func(ctx context.Context, worktree string) (*LocalState, error)
+
+	// LocalOnly (-state=off) skips every gh call and the provider: local git
+	// facts only, instant and offline.
+	LocalOnly bool
+
+	// changeRequests lists one repo's requests. nil set means the provider
+	// cannot list them, which is silent. The default asks the GitHub provider.
+	changeRequests func(ctx context.Context, repo string) (*ChangeRequestSet, error)
 
 	// Sync is the `sync:` config for suggestions; zero means the defaults.
 	Sync SyncConfig
@@ -99,6 +109,17 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 	}
 	if opts.run == nil {
 		opts.run = runGH
+	}
+	if opts.changeRequests == nil {
+		run := opts.run
+		opts.changeRequests = func(ctx context.Context, repo string) (*ChangeRequestSet, error) {
+			var src ChangeRequestSource = NewGitHubProviderFuncWithRepo(repo, run)
+			set, err := src.ChangeRequests(ctx)
+			if err != nil {
+				return nil, err
+			}
+			return &set, nil
+		}
 	}
 	if opts.localState == nil {
 		opts.localState = func(ctx context.Context, dir string) (*LocalState, error) {
@@ -161,7 +182,9 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 	repos := map[string]string{}
 	repoFailed := map[string]bool{}
 	epicLabel := map[string]bool{}
-	ghDown := false
+	ghDown := opts.LocalOnly
+	requestSets := map[string]*ChangeRequestSet{}
+	requestsFailed := map[string]bool{}
 
 	var rows []ChangeTopology
 	for _, l := range all {
@@ -221,14 +244,39 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 			if branch, path, matched := matchWorktree(entries, c.Slug); matched {
 				row.Branch = branch
 				row.Worktree = path
-				if ls, err := opts.localState(ctx, path); err != nil {
+				var ls *LocalState
+				if got, err := opts.localState(ctx, path); err != nil {
 					addStatus("local state unavailable for %s: %v", c.Slug, err)
 				} else {
+					ls = got
 					row.Local = ls
-					row.Attention = LocalAttention(*ls)
-					// ReviewStarted needs the provider's request state; until
-					// that is wired in, advice assumes no review has begun.
-					row.Sync = SuggestSync(*ls, SyncInput{}, opts.Sync)
+				}
+
+				var cr *ChangeRequest
+				if !opts.LocalOnly && row.Repo != "" && !requestsFailed[row.Repo] {
+					set, seen := requestSets[row.Repo]
+					if !seen {
+						got, err := opts.changeRequests(ctx, row.Repo)
+						if err != nil {
+							requestsFailed[row.Repo] = true
+							addStatus("request state omitted for %s: %s", row.Repo, errReason(err))
+						} else {
+							set = got
+							requestSets[row.Repo] = got
+							if got != nil && got.Truncated {
+								addStatus("request listing for %s may be truncated; older requests can be missing", row.Repo)
+							}
+						}
+					}
+					if set != nil {
+						cr = set.ForBranch(row.Branch)
+						row.PR = cr
+					}
+				}
+
+				row.Attention = RowAttention(ls, cr)
+				if ls != nil {
+					row.Sync = SuggestSync(*ls, SyncInput{ReviewStarted: cr != nil && cr.ReviewStarted}, opts.Sync)
 				}
 			}
 		}
@@ -370,4 +418,11 @@ func matchWorktree(entries []worktreeEntry, slug string) (branch, path string, o
 		}
 	}
 	return "", "", false
+}
+
+// errReason returns the last non-empty line of an error: for a failed gh call
+// that is gh's own message, without the echoed command line.
+func errReason(err error) string {
+	lines := strings.Split(strings.TrimSpace(err.Error()), "\n")
+	return strings.TrimSpace(lines[len(lines)-1])
 }

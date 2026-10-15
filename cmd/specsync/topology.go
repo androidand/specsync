@@ -19,6 +19,7 @@ import (
 type statusCmd struct {
 	openspec, change *string
 	all, asJSON      *bool
+	state            *string
 }
 
 func init() { Register(&statusCmd{}) }
@@ -33,6 +34,7 @@ func (*statusCmd) Spec() Spec {
 		Examples: []string{
 			"specsync status",
 			"specsync status -change my-change -json",
+			"specsync status -state=off",
 		},
 	}
 }
@@ -42,6 +44,7 @@ func (cm *statusCmd) Flags(fs *flag.FlagSet) {
 	cm.change = fs.String("change", "", "scope to one change (default: every change)")
 	cm.all = fs.Bool("all", false, "include archived changes")
 	cm.asJSON = fs.Bool("json", false, "output as JSON")
+	cm.state = fs.String("state", "on", "off skips the tracker and pull request lookups: local git facts only, offline")
 }
 
 func (cm *statusCmd) Run(_ context.Context, args []string) error {
@@ -51,11 +54,14 @@ func (cm *statusCmd) Run(_ context.Context, args []string) error {
 
 func (cm *statusCmd) run(args []string) {
 	fs := flagSetFor(cm)
-	openspec, change, all, asJSON := cm.openspec, cm.change, cm.all, cm.asJSON
+	openspec, change, all, asJSON, state := cm.openspec, cm.change, cm.all, cm.asJSON, cm.state
 	if err := fs.Parse(args); err != nil {
 		fail(err)
 	}
 	checkArgs(fs, args, 0)
+	if !validState(*state) {
+		fail(fmt.Errorf("-state must be on or off, got %q", *state))
+	}
 
 	ctx := context.Background()
 
@@ -63,6 +69,7 @@ func (cm *statusCmd) run(args []string) {
 		OpenSpecDir: *openspec,
 		Slug:        *change,
 		All:         *all,
+		LocalOnly:   *state == "off",
 	})
 	if err != nil {
 		fail(err)
@@ -78,6 +85,25 @@ func (cm *statusCmd) run(args []string) {
 		os.Exit(1)
 	}
 }
+
+// requestLine summarises a change request on one line.
+func requestLine(pr *specsync.ChangeRequest) string {
+	line := fmt.Sprintf("pr #%d %s", pr.Number, pr.State)
+	if pr.Draft {
+		return line + " (draft)"
+	}
+	line += fmt.Sprintf(": checks %d pass, %d fail, %d pending", pr.Checks.Pass, pr.Checks.Fail, pr.Checks.Pending)
+	if pr.ReviewDecision != "" {
+		line += "; review " + pr.ReviewDecision
+	}
+	if pr.Mergeable != "" && pr.Mergeable != "unknown" {
+		line += "; " + pr.Mergeable
+	}
+	return line
+}
+
+// validState reports whether v is an accepted -state value.
+func validState(v string) bool { return v == "" || v == "on" || v == "off" }
 
 func printTopologyTable(topo specsync.Topology) {
 	if len(topo.Changes) == 0 {
@@ -108,6 +134,12 @@ func printTopologyTable(topo specsync.Topology) {
 			fmt.Printf("%-32s %-11s %-27s %-11s %-41s %s\n", c.Slug, c.Stage, repo, issue, branch, worktree)
 			if len(c.Attention) > 0 {
 				fmt.Printf("    ↳ attention: %s\n", strings.Join(c.Attention, ", "))
+			}
+			if pr := c.PR; pr != nil {
+				fmt.Printf("    ↳ %s\n", requestLine(pr))
+				if len(pr.Checks.Failing) > 0 {
+					fmt.Printf("        failing checks: %s\n", strings.Join(pr.Checks.Failing, ", "))
+				}
 			}
 			if c.Sync != nil {
 				fmt.Printf("    ↳ suggest: %s\n", c.Sync.Summary)

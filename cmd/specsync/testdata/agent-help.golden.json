@@ -1434,6 +1434,13 @@
           "required": false,
           "default": "openspec",
           "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "state",
+          "type": "string",
+          "required": false,
+          "default": "on",
+          "description": "off skips the tracker and pull request lookups: local git facts only, offline"
         }
       ],
       "safety_rules": [
@@ -1441,7 +1448,8 @@
       ],
       "examples": [
         "specsync status",
-        "specsync status -change my-change -json"
+        "specsync status -change my-change -json",
+        "specsync status -state=off"
       ]
     },
     "sync": {

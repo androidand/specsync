@@ -482,3 +482,176 @@ func TestBuildTopology_UpToDateRowHasNoSyncSuggestion(t *testing.T) {
 		t.Fatalf("expected no suggestion, got %+v", topo.Changes[0].Sync)
 	}
 }
+
+func requestFixture(t *testing.T, calls *[]string) TopologyOptions {
+	t.Helper()
+	opts, _ := localStateFixture(t)
+	opts.localState = func(context.Context, string) (*LocalState, error) {
+		return &LocalState{Upstream: "origin/x", Base: "origin/main", BehindBase: 1}, nil
+	}
+	opts.changeRequests = func(_ context.Context, repo string) (*ChangeRequestSet, error) {
+		*calls = append(*calls, repo)
+		return &ChangeRequestSet{Requests: []ChangeRequest{{
+			Number: 7, State: "open", Branch: "feat/4231-add-field-forms",
+			ReviewDecision: "approved", Mergeable: "mergeable", ReviewStarted: true,
+			Checks: ChangeRequestChecks{Pass: 4},
+		}}}, nil
+	}
+	return opts
+}
+
+func TestBuildTopology_AttachesRequestByBranch(t *testing.T) {
+	var asked []string
+	topo, err := BuildTopology(context.Background(), requestFixture(t, &asked))
+	if err != nil {
+		t.Fatal(err)
+	}
+	row := topo.Changes[0]
+	if row.PR == nil || row.PR.Number != 7 || row.PR.Checks.Pass != 4 {
+		t.Fatalf("pr = %+v", row.PR)
+	}
+	if !reflect.DeepEqual(asked, []string{"acme/portal"}) {
+		t.Fatalf("expected one listing for the row's repo, got %v", asked)
+	}
+	if want := []string{"behind-base", "ready-to-merge"}; !reflect.DeepEqual(row.Attention, want) {
+		t.Fatalf("attention = %v, want %v", row.Attention, want)
+	}
+	// review has started, so advice merges the base instead of rebasing
+	if row.Sync == nil || row.Sync.Action != "merge-base" || row.Sync.ForcePush {
+		t.Fatalf("sync = %+v", row.Sync)
+	}
+}
+
+func TestBuildTopology_NoRequestForBranchOmitsPR(t *testing.T) {
+	var asked []string
+	opts := requestFixture(t, &asked)
+	opts.changeRequests = func(context.Context, string) (*ChangeRequestSet, error) {
+		return &ChangeRequestSet{}, nil
+	}
+	topo, err := BuildTopology(context.Background(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if topo.Changes[0].PR != nil {
+		t.Fatalf("expected no pr, got %+v", topo.Changes[0].PR)
+	}
+	for _, s := range topo.Status {
+		if strings.Contains(s, "request") {
+			t.Fatalf("no PR is not an error, got status %q", s)
+		}
+	}
+}
+
+func TestBuildTopology_ProviderWithoutCapabilityIsSilent(t *testing.T) {
+	var asked []string
+	opts := requestFixture(t, &asked)
+	opts.changeRequests = func(context.Context, string) (*ChangeRequestSet, error) { return nil, nil }
+	topo, err := BuildTopology(context.Background(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if topo.Changes[0].PR != nil || topo.Changes[0].Local == nil {
+		t.Fatalf("rows carry local facts only: %+v", topo.Changes[0])
+	}
+	for _, s := range topo.Status {
+		if strings.Contains(s, "request") {
+			t.Fatalf("unexpected status %q", s)
+		}
+	}
+}
+
+func TestBuildTopology_RequestListingFailureNarrowsRows(t *testing.T) {
+	var asked []string
+	opts := requestFixture(t, &asked)
+	opts.changeRequests = func(context.Context, string) (*ChangeRequestSet, error) {
+		return nil, errors.New("gh: not logged in")
+	}
+	topo, err := BuildTopology(context.Background(), opts)
+	if err != nil {
+		t.Fatalf("a failed provider must not fail the command: %v", err)
+	}
+	row := topo.Changes[0]
+	if row.PR != nil || row.Local == nil || row.Worktree == "" {
+		t.Fatalf("row should keep local facts: %+v", row)
+	}
+	found := false
+	for _, s := range topo.Status {
+		found = found || (strings.Contains(s, "request state omitted") && strings.Contains(s, "not logged in"))
+	}
+	if !found {
+		t.Fatalf("expected a status line saying why, got %v", topo.Status)
+	}
+}
+
+func TestBuildTopology_TruncatedListingIsReported(t *testing.T) {
+	var asked []string
+	opts := requestFixture(t, &asked)
+	opts.changeRequests = func(context.Context, string) (*ChangeRequestSet, error) {
+		return &ChangeRequestSet{Truncated: true}, nil
+	}
+	topo, _ := BuildTopology(context.Background(), opts)
+	found := false
+	for _, s := range topo.Status {
+		found = found || strings.Contains(s, "truncated")
+	}
+	if !found {
+		t.Fatalf("expected a truncation status line, got %v", topo.Status)
+	}
+}
+
+func TestBuildTopology_LocalOnlyStartsNoGHAndNoListing(t *testing.T) {
+	var asked []string
+	opts := requestFixture(t, &asked)
+	opts.LocalOnly = true
+	ghCalls := 0
+	opts.run = func(context.Context, ...string) (string, error) { ghCalls++; return "", nil }
+	cdir := filepath.Join(opts.OpenSpecDir, "changes", "add-field-forms")
+	mustWrite(t, filepath.Join(cdir, ".specsync", "refs.json"),
+		`{"github:acme/portal":{"provider":"github:acme/portal","id":"4231","url":"https://github.com/acme/portal/issues/4231"}}`)
+	topo, err := BuildTopology(context.Background(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(asked) != 0 || ghCalls != 0 {
+		t.Fatalf("-state=off must not call the provider or gh: listings=%v gh=%d", asked, ghCalls)
+	}
+	row := topo.Changes[0]
+	if row.Local == nil || row.PR != nil || len(row.Attention) == 0 {
+		t.Fatalf("local facts and flags must remain: %+v", row)
+	}
+	if row.Issue == nil || row.Issue.State != "" {
+		t.Fatalf("the issue is kept but its live state is not fetched: %+v", row.Issue)
+	}
+}
+
+func TestBuildTopology_OneListingPerRepo(t *testing.T) {
+	var asked []string
+	opts := requestFixture(t, &asked)
+	root := opts.OpenSpecDir
+	porcelain := "worktree " + filepath.Dir(root) + "\nHEAD abc\nbranch refs/heads/main\n\n" +
+		"worktree " + filepath.Join(root, "..", "worktrees", "add-field-forms") + "\nHEAD d\nbranch refs/heads/feat/4231-add-field-forms\n"
+	for i, slug := range []string{"second-change", "third-change"} {
+		mustWrite(t, filepath.Join(root, "changes", slug, "proposal.md"), "# "+slug+"\n")
+		porcelain += "\nworktree " + filepath.Join(root, "..", "worktrees", slug) + "\nHEAD e\nbranch refs/heads/feat/" + string(rune('5'+i)) + "-" + slug + "\n"
+	}
+	opts.gitWorktreeList = fakeGitWorktreeList(map[string]string{filepath.Dir(root): porcelain}, nil)
+	if _, err := BuildTopology(context.Background(), opts); err != nil {
+		t.Fatal(err)
+	}
+	if len(asked) != 1 {
+		t.Fatalf("three changes with worktrees in one repo must share one listing, got %v", asked)
+	}
+}
+
+func TestBuildTopology_RequestFailureStatusShowsTheReasonNotTheCommand(t *testing.T) {
+	var asked []string
+	opts := requestFixture(t, &asked)
+	opts.changeRequests = func(context.Context, string) (*ChangeRequestSet, error) {
+		return nil, errors.New("gh pr list --repo acme/portal --state all --json a,b,c: exit status 1\nGraphQL: rate limited\n")
+	}
+	topo, _ := BuildTopology(context.Background(), opts)
+	joined := strings.Join(topo.Status, "\n")
+	if !strings.Contains(joined, "GraphQL: rate limited") || strings.Contains(joined, "--json") {
+		t.Fatalf("status should carry the reason only, got %q", joined)
+	}
+}

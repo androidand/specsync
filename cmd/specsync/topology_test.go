@@ -136,3 +136,39 @@ func TestPrintTopologyTable_SyncSuggestionShowsCommandsAndForceNotice(t *testing
 		}
 	}
 }
+
+func TestPrintTopologyTable_RequestLine(t *testing.T) {
+	topo := specsync.Topology{Changes: []specsync.ChangeTopology{{
+		Slug: "has-pr", Stage: "active",
+		PR: &specsync.ChangeRequest{
+			Number: 7, State: "open", URL: "https://github.com/acme/portal/pull/7",
+			ReviewDecision: "changes_requested", Mergeable: "conflicting",
+			Checks: specsync.ChangeRequestChecks{Pass: 3, Fail: 2, Pending: 1, Failing: []string{"ci/legacy", "unit"}},
+		},
+	}, {
+		Slug: "draft-pr", Stage: "active",
+		PR: &specsync.ChangeRequest{Number: 9, State: "open", Draft: true},
+	}}}
+	out := captureStdout(t, func() { printTopologyTable(topo) })
+	for _, want := range []string{
+		"pr #7 open: checks 3 pass, 2 fail, 1 pending; review changes_requested; conflicting",
+		"failing checks: ci/legacy, unit",
+		"pr #9 open (draft)",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("expected %q in:\n%s", want, out)
+		}
+	}
+}
+
+func TestStatusCmd_StateFlag(t *testing.T) {
+	fs := flagSetFor(&statusCmd{})
+	if fs.Lookup("state") == nil {
+		t.Fatal("status must define -state")
+	}
+	for in, want := range map[string]bool{"on": true, "off": true, "": true, "OFF": false, "maybe": false} {
+		if got := validState(in); got != want {
+			t.Errorf("validState(%q) = %v, want %v", in, got, want)
+		}
+	}
+}

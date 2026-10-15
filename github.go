@@ -37,6 +37,9 @@ type GitHubProvider struct {
 	// and Status schema per run so repeated projections don't re-query the schema.
 	boardMu    sync.Mutex
 	boardCache map[string]*boardSchema
+
+	// changeRequestLimit overrides the page size of ChangeRequests; 0 = default.
+	changeRequestLimit int
 }
 
 // NewGitHubProvider returns a provider that drives the real `gh` binary,
