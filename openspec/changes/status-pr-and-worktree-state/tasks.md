@@ -17,22 +17,22 @@
 - [x] 2.1 (done) Compute `attention` from the fixed vocabulary; keep the rules in one table and document them
 - [x] 2.2 (done) Add the optional `pr`, `local` and `attention` fields to `ChangeTopology`; omit when unavailable
 - [x] 2.3 Add `-state=off`; confirm no `gh` process is started in that mode
-- [ ] 2.4 Rename `topology` to `status` (no alias; add a habit-word hint). Show the current work from the collector. Related work and `overview` are in `work-relations-and-overview`
-- [ ] 2.5 Register `status` in dispatch, `agent-help`, and the unknown-subcommand list
+- [x] 2.4 Rename `topology` to `status` (no alias; add a habit-word hint). Show the current work from the collector. Related work and `overview` are in `work-relations-and-overview`
+- [x] 2.5 Register `status` in dispatch, `agent-help`, and the unknown-subcommand list
 
 ## 3. Tests
 
-- [ ] 3.1 Fixture repo with a mocked runner: open PR, no PR, merged PR with clean tree, truncated listing
-- [ ] 3.2a Freshness fixtures: upstream moved, diverged, base moved with and without overlap, predicted conflict, shared branch, review started
-- [ ] 3.2b Advice table: one fixture per row, and that nothing is executed
-- [ ] 3.2 Git fixtures: ahead, behind, no upstream, dirty, untracked, volatile path
-- [ ] 3.3 Determinism: identical facts yield byte-identical output and ordering
-- [ ] 3.4 `gh` missing yields rows without `pr`, a status line, and exit 0
-- [ ] 3.5 `status -json` golden file shows additive fields only
+- [x] 3.1 Fixture repo with a mocked runner: open PR, no PR, merged PR with clean tree, truncated listing
+- [x] 3.2a Freshness fixtures: upstream moved, diverged, base moved with and without overlap, predicted conflict, shared branch, review started
+- [x] 3.2b Advice table: one fixture per row, and that nothing is executed
+- [x] 3.2 Git fixtures: ahead, behind, no upstream, dirty, untracked, volatile path
+- [x] 3.3 Determinism: identical facts yield byte-identical output and ordering
+- [x] 3.4 `gh` missing yields rows without `pr`, a status line, and exit 0
+- [x] 3.5 `status -json` golden file shows additive fields only
 
 ## 4. Docs
 
-- [ ] 4.1 Implement each new command or flag once, as a `Command` type per `make-commands-discoverable`; README, `agent-help`, the overview and the skill are generated, never hand-written
-- [ ] 4.2 Update the skill so agents prefer `status`/`status -json` over hand-run `git`/`gh`
-- [ ] 4.3 Update `site/features.json`
+- [x] 4.1 Implement each new command or flag once, as a `Command` type per `make-commands-discoverable`; README, `agent-help`, the overview and the skill are generated, never hand-written
+- [x] 4.2 Update the skill so agents prefer `status`/`status -json` over hand-run `git`/`gh`
+- [x] 4.3 Update `site/features.json`
 - [ ] 4.4 Run `specsync changelog -fail-on-unlinked-commits`

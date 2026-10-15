@@ -184,3 +184,94 @@ func TestRequestLine_UnresolvedThreads(t *testing.T) {
 		t.Fatalf("zero is not worth a mention: %q", got)
 	}
 }
+
+func currentRow() specsync.ChangeTopology {
+	return specsync.ChangeTopology{
+		Slug: "add-thing", Stage: "active", Repo: "acme/portal",
+		Issue:    &specsync.TopologyIssue{ID: "42", State: "open", URL: "https://github.com/acme/portal/issues/42"},
+		Branch:   "feat/42-add-thing",
+		Worktree: "/work/add-thing",
+		Tasks:    &specsync.TaskCount{Done: 2, Total: 5},
+		PR:       &specsync.ChangeRequest{Number: 7, State: "open", Checks: specsync.ChangeRequestChecks{Pass: 3}},
+		Local: &specsync.LocalState{
+			Modified: 2, Untracked: 1, Upstream: "origin/feat/42-add-thing", Ahead: 2,
+			Base: "origin/main", BehindBase: 4,
+			Size: &specsync.BranchSize{Files: 6, Additions: 100, Deletions: 7, Commits: 3},
+		},
+		Attention: []string{"unpushed", "uncommitted", "behind-base"},
+		Sync:      &specsync.SyncAdvice{Summary: "commit or stash your changes first"},
+	}
+}
+
+func TestPrintCurrentStatus_AttentionComesFirstWithCounts(t *testing.T) {
+	out := captureStdout(t, func() { printCurrentStatus(currentRow(), true) })
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if !strings.HasPrefix(lines[0], "add-thing") || !strings.Contains(lines[0], "active") || !strings.Contains(lines[0], "2/5 tasks") {
+		t.Errorf("header = %q", lines[0])
+	}
+	if !strings.HasPrefix(lines[1], "attention:") {
+		t.Fatalf("attention must be the first thing after the header, got:\n%s", out)
+	}
+	for _, want := range []string{"unpushed (2 commits)", "uncommitted (3 files)", "behind-base (4 commits)"} {
+		if !strings.Contains(lines[1], want) {
+			t.Errorf("attention line %q missing %q", lines[1], want)
+		}
+	}
+	for _, want := range []string{
+		"issue:", "#42 (open)",
+		"branch:", "feat/42-add-thing", "origin/feat/42-add-thing", "/work/add-thing",
+		"pr #7 open",
+		"6 files, +100 -7, 3 commits",
+		"suggest: commit or stash your changes first",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("expected %q in:\n%s", want, out)
+		}
+	}
+}
+
+func TestPrintCurrentStatus_NoAttentionLineWhenClear(t *testing.T) {
+	row := currentRow()
+	row.Attention = nil
+	row.Sync = nil
+	out := captureStdout(t, func() { printCurrentStatus(row, true) })
+	if strings.Contains(out, "attention:") || strings.Contains(out, "suggest:") {
+		t.Errorf("a clear row prints neither, got:\n%s", out)
+	}
+}
+
+func TestPrintCurrentStatus_BranchWithoutAChange(t *testing.T) {
+	row := specsync.ChangeTopology{
+		NoChange: true, Branch: "scratch/idea", Worktree: "/work/idea",
+		PR:    &specsync.ChangeRequest{Number: 3, State: "open"},
+		Local: &specsync.LocalState{Upstream: "origin/scratch/idea"},
+	}
+	out := captureStdout(t, func() { printCurrentStatus(row, true) })
+	for _, want := range []string{"no change", "scratch/idea", "pr #3 open"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("expected %q in:\n%s", want, out)
+		}
+	}
+}
+
+func TestPrintCurrentStatus_NoUpstreamAndNoRequest(t *testing.T) {
+	row := specsync.ChangeTopology{Slug: "x", Stage: "active", Branch: "feat/x", Worktree: "/w", Local: &specsync.LocalState{}}
+	out := captureStdout(t, func() { printCurrentStatus(row, true) })
+	if !strings.Contains(out, "not pushed") || !strings.Contains(out, "pr: none") {
+		t.Errorf("expected 'not pushed' and 'pr: none' in:\n%s", out)
+	}
+}
+
+func TestStatusCmd_EverythingFlag(t *testing.T) {
+	if flagSetFor(&statusCmd{}).Lookup("everything") == nil {
+		t.Fatal("status must define -everything")
+	}
+}
+
+func TestPrintCurrentStatus_OfflineSaysNothingAboutRequests(t *testing.T) {
+	row := specsync.ChangeTopology{Slug: "x", Stage: "active", Branch: "feat/x", Worktree: "/w", Local: &specsync.LocalState{Upstream: "origin/feat/x"}}
+	out := captureStdout(t, func() { printCurrentStatus(row, false) })
+	if strings.Contains(out, "pr:") {
+		t.Errorf("with -state=off a missing request is unknown, not none:\n%s", out)
+	}
+}

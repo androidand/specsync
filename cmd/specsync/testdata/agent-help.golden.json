@@ -1397,7 +1397,7 @@
     },
     "status": {
       "command": "status",
-      "description": "Show each change with its issue, branch, worktree and local git state.",
+      "description": "Show where your current work stands, or every change with -everything.",
       "mutates": false,
       "workflow": {
         "position": "planning",
@@ -1420,6 +1420,13 @@
           "required": false,
           "default": "",
           "description": "scope to one change (default: every change)"
+        },
+        {
+          "name": "everything",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "list every change instead of the current work"
         },
         {
           "name": "json",
@@ -1448,6 +1455,7 @@
       ],
       "examples": [
         "specsync status",
+        "specsync status -everything",
         "specsync status -change my-change -json",
         "specsync status -state=off",
         "specsync status -state=fresh"

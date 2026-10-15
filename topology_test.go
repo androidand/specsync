@@ -695,3 +695,179 @@ func TestBuildTopology_NoPullRequestLeavesBaseToTheCollector(t *testing.T) {
 		t.Fatalf("base = %q, want empty so origin/HEAD is used", gotBase)
 	}
 }
+
+// scopedFixture has two changes with worktrees. add-field-forms has none of the
+// tracker refs; other-change has one, so any gh call proves it was not skipped.
+func scopedFixture(t *testing.T) (opts TopologyOptions, mine, theirs string, ghCalls *int) {
+	t.Helper()
+	opts, mine = localStateFixture(t)
+	root := opts.OpenSpecDir
+	mustWrite(t, filepath.Join(root, "changes", "add-field-forms", "tasks.md"), "- [x] one\n- [x] two\n- [ ] three\n")
+	mustWrite(t, filepath.Join(root, "changes", "other-change", "proposal.md"), "# Other\n")
+	mustWrite(t, filepath.Join(root, "changes", "other-change", ".specsync", "refs.json"),
+		`{"github:acme/portal":{"provider":"github:acme/portal","id":"9","url":"https://github.com/acme/portal/issues/9"}}`)
+	theirs = filepath.Join(root, "..", "worktrees", "other-change")
+	porcelain := "worktree " + filepath.Dir(root) + "\nHEAD a\nbranch refs/heads/main\n\n" +
+		"worktree " + mine + "\nHEAD b\nbranch refs/heads/feat/4231-add-field-forms\n\n" +
+		"worktree " + theirs + "\nHEAD c\nbranch refs/heads/feat/9-other-change\n"
+	opts.gitWorktreeList = fakeGitWorktreeList(map[string]string{filepath.Dir(root): porcelain}, nil)
+	n := 0
+	ghCalls = &n
+	opts.run = func(context.Context, ...string) (string, error) { n++; return "", errors.New("gh offline") }
+	opts.localState = func(context.Context, string, LocalStateOptions) (*LocalState, error) {
+		return &LocalState{Upstream: "origin/x"}, nil
+	}
+	opts.changeRequests = func(context.Context, string) (*ChangeRequestSet, error) { return &ChangeRequestSet{}, nil }
+	return
+}
+
+func TestBuildTopology_DirScopesToTheCurrentWorktreeBeforeAnyLookup(t *testing.T) {
+	opts, mine, _, ghCalls := scopedFixture(t)
+	opts.Dir = filepath.Join(mine, "pkg")
+	opts.gitCurrent = func(context.Context, string) (string, string, error) {
+		return mine, "feat/4231-add-field-forms", nil
+	}
+	topo, err := BuildTopology(context.Background(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(topo.Changes) != 1 || topo.Changes[0].Slug != "add-field-forms" || topo.Changes[0].NoChange {
+		t.Fatalf("expected only the current change, got %+v", topo.Changes)
+	}
+	if *ghCalls != 0 {
+		t.Fatalf("other changes must be skipped before their gh lookups, saw %d calls", *ghCalls)
+	}
+	if got := topo.Changes[0].Tasks; got == nil || got.Done != 2 || got.Total != 3 {
+		t.Fatalf("tasks = %+v, want 2 of 3", got)
+	}
+}
+
+func TestBuildTopology_BranchWithoutAChangeGetsAnOrphanRow(t *testing.T) {
+	opts, _, _, _ := scopedFixture(t)
+	elsewhere := t.TempDir()
+	opts.Dir = elsewhere
+	opts.gitCurrent = func(context.Context, string) (string, string, error) { return elsewhere, "scratch/idea", nil }
+	opts.gitRemoteOrigin = fakeGitRemoteOrigin(map[string]string{elsewhere: "acme/portal", filepath.Dir(opts.OpenSpecDir): "acme/portal"})
+	opts.changeRequests = func(context.Context, string) (*ChangeRequestSet, error) {
+		return &ChangeRequestSet{Requests: []ChangeRequest{{Number: 3, Branch: "scratch/idea", State: "open"}}}, nil
+	}
+	topo, err := BuildTopology(context.Background(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(topo.Changes) != 1 {
+		t.Fatalf("expected one row, got %+v", topo.Changes)
+	}
+	row := topo.Changes[0]
+	if !row.NoChange || row.Slug != "" || row.Branch != "scratch/idea" || row.Worktree != elsewhere || row.Repo != "acme/portal" {
+		t.Fatalf("orphan row = %+v", row)
+	}
+	if row.Local == nil || row.PR == nil || row.PR.Number != 3 {
+		t.Fatalf("an orphan row still gets local state and its request: %+v", row)
+	}
+}
+
+func TestBuildTopology_DirOutsideGitFallsBackToEverythingWithAStatusLine(t *testing.T) {
+	opts, _, _, _ := scopedFixture(t)
+	opts.Dir = t.TempDir()
+	opts.gitCurrent = func(context.Context, string) (string, string, error) {
+		return "", "", errors.New("not a git repository")
+	}
+	topo, err := BuildTopology(context.Background(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(topo.Changes) != 2 {
+		t.Fatalf("expected every change, got %d", len(topo.Changes))
+	}
+	found := false
+	for _, s := range topo.Status {
+		found = found || strings.Contains(s, "not inside a git worktree")
+	}
+	if !found {
+		t.Fatalf("expected a status line, got %v", topo.Status)
+	}
+}
+
+func TestBuildTopology_ExplicitSlugBeatsDir(t *testing.T) {
+	opts, mine, _, _ := scopedFixture(t)
+	opts.Slug = "other-change"
+	opts.Dir = mine
+	opts.gitCurrent = func(context.Context, string) (string, string, error) { return mine, "x", nil }
+	topo, _ := BuildTopology(context.Background(), opts)
+	if len(topo.Changes) != 1 || topo.Changes[0].Slug != "other-change" {
+		t.Fatalf("got %+v", topo.Changes)
+	}
+}
+
+func TestBuildTopology_IdenticalFactsGiveByteIdenticalOutput(t *testing.T) {
+	render := func() string {
+		opts, _, _, _ := scopedFixture(t)
+		// same fixture shape each time; paths differ per TempDir, so blank them
+		topo, err := BuildTopology(context.Background(), opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i := range topo.Changes {
+			topo.Changes[i].Store, topo.Changes[i].Worktree = "", ""
+		}
+		b, _ := json.Marshal(topo)
+		return string(b)
+	}
+	first := render()
+	for i := 0; i < 5; i++ {
+		if got := render(); got != first {
+			t.Fatalf("run %d differs:\n%s\n%s", i, first, got)
+		}
+	}
+}
+
+// TestChangeTopology_JSONShapeGolden pins the wire shape of a fully populated
+// row so later changes to -json are additive: fields may be added, never
+// renamed or removed. Regenerate with UPDATE_GOLDEN=1 after a deliberate change.
+func TestChangeTopology_JSONShapeGolden(t *testing.T) {
+	two := 2
+	row := ChangeTopology{
+		Slug: "add-thing", Title: "Add thing", Stage: "active", Store: "/repo", Repo: "acme/portal",
+		Issue:  &TopologyIssue{Provider: "github:acme/portal", ID: "42", URL: "https://github.com/acme/portal/issues/42", State: "open"},
+		Branch: "feat/42-add-thing", Worktree: "/work/add-thing", Epic: "https://github.com/acme/planning/issues/1", Linked: []string{"other"},
+		Tasks: &TaskCount{Done: 2, Total: 5},
+		Local: &LocalState{
+			Modified: 1, Untracked: 2, Upstream: "origin/feat/42-add-thing", Ahead: 1, UpstreamBehind: 0,
+			Base: "origin/main", BehindBase: 3, Size: &BranchSize{Files: 4, Additions: 50, Deletions: 6, Commits: 2},
+			LastCommit: "2026-01-02T03:04:05Z", VolatilePath: true, BaseMovedAt: "2026-01-02T03:00:00Z",
+			BaseTouchesYourFiles: []string{"a.go"}, Conflicts: []string{"a.go"}, ConflictCheckUnavailable: true, SharedBranch: true,
+		},
+		Attention: []string{"unpushed", "conflicts-with-base"},
+		Sync:      &SyncAdvice{Action: "merge-base", Summary: "merge origin/main", Commands: []string{"git merge origin/main"}, ForcePush: false},
+		PR: &ChangeRequest{
+			Number: 7, URL: "https://github.com/acme/portal/pull/7", State: "open", Draft: true, Branch: "feat/42-add-thing", Base: "main",
+			ReviewDecision: "approved", Mergeable: "mergeable",
+			Checks:        ChangeRequestChecks{Pass: 3, Fail: 1, Pending: 0, Failing: []string{"unit"}},
+			Size:          ChangeRequestSize{Files: 4, Additions: 50, Deletions: 6, Commits: 2},
+			ReviewStarted: true, Closes: []string{"42"}, UnresolvedThreads: &two,
+		},
+	}
+	got, err := json.MarshalIndent(Topology{Changes: []ChangeTopology{row}, Status: []string{"a status line"}}, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got = append(got, '\n')
+	path := filepath.Join("testdata", "status-row.golden.json")
+	if os.Getenv("UPDATE_GOLDEN") != "" {
+		if err := os.MkdirAll("testdata", 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, got, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	want, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read golden: %v (run with UPDATE_GOLDEN=1 to create it)", err)
+	}
+	if string(want) != string(got) {
+		t.Fatalf("status -json shape changed; additive changes only. If deliberate: UPDATE_GOLDEN=1 go test . -run JSONShapeGolden\n%s", got)
+	}
+}
