@@ -141,7 +141,7 @@ func TestGraph_BuildGHEdges_PRWithMergeCommit(t *testing.T) {
 	runner := &mockGHRunner{
 		responses: map[string]string{
 			joinArgs([]string{"api", "repos/owner/repo/issues/42", "--jq", ".pull_requests // [] | .[] | {number: .number, title: .title, mergedAt: .merged_at}"}): prListOut,
-			joinArgs([]string{"--json", "mergeCommit", "--repo", "owner/repo", "pr", "view", "100"}):    mergeCommitOut,
+			joinArgs([]string{"--json", "mergeCommit", "--repo", "owner/repo", "pr", "view", "100"}):                                                               mergeCommitOut,
 		},
 	}
 	ctx := context.Background()
@@ -199,7 +199,7 @@ func TestGraph_BuildGHEdges_PRNotMerged(t *testing.T) {
 	runner := &mockGHRunner{
 		responses: map[string]string{
 			joinArgs([]string{"api", "repos/owner/repo/issues/42", "--jq", ".pull_requests // [] | .[] | {number: .number, title: .title, mergedAt: .merged_at}"}): prListOut,
-			joinArgs([]string{"--json", "mergeCommit", "--repo", "owner/repo", "pr", "view", "100"}):    mergeCommitOut,
+			joinArgs([]string{"--json", "mergeCommit", "--repo", "owner/repo", "pr", "view", "100"}):                                                               mergeCommitOut,
 		},
 	}
 	ctx := context.Background()
@@ -302,8 +302,8 @@ func TestGraph_BuildGHEdges_MultipleIssues(t *testing.T) {
 		responses: map[string]string{
 			joinArgs([]string{"api", "repos/owner/repo/issues/42", "--jq", ".pull_requests // [] | .[] | {number: .number, title: .title, mergedAt: .merged_at}"}): prList42,
 			joinArgs([]string{"api", "repos/owner/repo/issues/43", "--jq", ".pull_requests // [] | .[] | {number: .number, title: .title, mergedAt: .merged_at}"}): prList43,
-			joinArgs([]string{"--json", "mergeCommit", "--repo", "owner/repo", "pr", "view", "100"}):    mergeCommit100,
-			joinArgs([]string{"--json", "mergeCommit", "--repo", "owner/repo", "pr", "view", "101"}):    mergeCommit101,
+			joinArgs([]string{"--json", "mergeCommit", "--repo", "owner/repo", "pr", "view", "100"}):                                                               mergeCommit100,
+			joinArgs([]string{"--json", "mergeCommit", "--repo", "owner/repo", "pr", "view", "101"}):                                                               mergeCommit101,
 		},
 	}
 	ctx := context.Background()
@@ -379,7 +379,7 @@ func TestGraph_BuildGHEdges_DeterministicOutput(t *testing.T) {
 		runner := &mockGHRunner{
 			responses: map[string]string{
 				joinArgs([]string{"api", "repos/owner/repo/issues/42", "--jq", ".pull_requests // [] | .[] | {number: .number, title: .title, mergedAt: .merged_at}"}): prListOut,
-				joinArgs([]string{"--json", "mergeCommit", "--repo", "owner/repo", "pr", "view", "100"}):    mergeCommitOut,
+				joinArgs([]string{"--json", "mergeCommit", "--repo", "owner/repo", "pr", "view", "100"}):                                                               mergeCommitOut,
 			},
 		}
 		ctx := context.Background()

@@ -12,8 +12,8 @@ func TestExtractRepoFromDir(t *testing.T) {
 		{"/home/user/dev/brick-now/openspec", "brick-now"},
 		{"/home/user/dev/tengil/openspec/changes/foo", "tengil"},
 		{"/home/user/project/openspec", "project"},
-		{"/openspec", ""},          // edge case: no parent
-		{"openspec", "openspec"},   // bare openspec — no parent, returns full dir
+		{"/openspec", ""},                                // edge case: no parent
+		{"openspec", "openspec"},                         // bare openspec — no parent, returns full dir
 		{"openspec/changes/foo", "openspec/changes/foo"}, // openspec at start, no parent, returns full dir
 	}
 	for _, tt := range tests {
@@ -140,12 +140,12 @@ func TestContainsPath(t *testing.T) {
 	}{
 		{[]string{"src/foo.ts", "lib/bar.js"}, "src/foo.ts", true},
 		{[]string{"src/foo.ts"}, "lib/bar.js", false},
-		{[]string{"a/b/c.ts"}, "b/c.ts", true},     // suffix match
-		{[]string{"a.ts"}, "a.ts", true},             // exact match
-		{[]string{"a/b/c.ts"}, "a/b", true},          // directory prefix match
+		{[]string{"a/b/c.ts"}, "b/c.ts", true},                            // suffix match
+		{[]string{"a.ts"}, "a.ts", true},                                  // exact match
+		{[]string{"a/b/c.ts"}, "a/b", true},                               // directory prefix match
 		{[]string{"src/main/index.ts", "lib/utils.go"}, "src/main", true}, // directory prefix
-		{[]string{"src/main.ts"}, "src", true},       // single component prefix
-		{[]string{}, "foo.ts", false},                // empty list
+		{[]string{"src/main.ts"}, "src", true},                            // single component prefix
+		{[]string{}, "foo.ts", false},                                     // empty list
 	}
 	for _, tt := range tests {
 		if got := containsPath(tt.paths, tt.target); got != tt.want {
@@ -245,10 +245,10 @@ func TestCrossRepoCorrelationLinksMD(t *testing.T) {
 		},
 		{
 			Change: Change{
-				Dir:      "/repo-b/openspec",
-				Slug:     "feature-y",
-				Title:    "Feature Y",
-				Body:     "implement feature y",
+				Dir:   "/repo-b/openspec",
+				Slug:  "feature-y",
+				Title: "Feature Y",
+				Body:  "implement feature y",
 			},
 			IssueIDs: []string{"42"}, // issue 42 is bound to feature-y
 		},
@@ -323,7 +323,7 @@ func TestCrossRepoCorrelationLinksMDSameRepoExcluded(t *testing.T) {
 	changeRefs := []ChangeRefs{
 		{
 			Change: Change{
-				Dir:   "/repo-a/openspec", Slug: "a1",
+				Dir: "/repo-a/openspec", Slug: "a1",
 				Links: []Ref{{Provider: "github", ID: "42", URL: "https://github.com/owner/repo-a/issues/42"}},
 			},
 			IssueIDs: []string{},
@@ -350,7 +350,7 @@ func TestCrossRepoCorrelationLinksMDMultiTarget(t *testing.T) {
 	changeRefs := []ChangeRefs{
 		{
 			Change: Change{
-				Dir:   "/repo-a/openspec", Slug: "a1",
+				Dir: "/repo-a/openspec", Slug: "a1",
 				Links: []Ref{{Provider: "github", ID: "42", URL: "https://github.com/owner/repo-b/issues/42"}},
 			},
 			IssueIDs: []string{},
@@ -387,7 +387,7 @@ func TestCrossRepoCorrelationMultipleProvenance(t *testing.T) {
 	changeRefs := []ChangeRefs{
 		{
 			Change: Change{
-				Dir:   "/repo-a/openspec", Slug: "a1", Title: "Compose setup", Body: "edit src/main.ts",
+				Dir: "/repo-a/openspec", Slug: "a1", Title: "Compose setup", Body: "edit src/main.ts",
 				Links: []Ref{{Provider: "github", ID: "42", URL: "https://github.com/owner/repo-b/issues/42"}},
 			},
 			IssueIDs: []string{},
@@ -421,7 +421,7 @@ func TestCrossRepoCorrelationMultipleLinks(t *testing.T) {
 	changeRefs := []ChangeRefs{
 		{
 			Change: Change{
-				Dir:   "/repo-a/openspec", Slug: "a1",
+				Dir: "/repo-a/openspec", Slug: "a1",
 				Links: []Ref{
 					{Provider: "github", ID: "42", URL: "https://github.com/owner/repo-b/issues/42"},
 					{Provider: "github", ID: "99", URL: "https://github.com/owner/repo-b/issues/99"},
@@ -461,7 +461,7 @@ func TestCrossRepoCorrelationLinksMDSingleDirection(t *testing.T) {
 	changeRefs := []ChangeRefs{
 		{
 			Change: Change{
-				Dir:   "/repo-a/openspec", Slug: "a1",
+				Dir: "/repo-a/openspec", Slug: "a1",
 				Links: []Ref{{Provider: "github", ID: "42", URL: "https://github.com/owner/repo-b/issues/42"}},
 			},
 			IssueIDs: []string{},
@@ -498,7 +498,7 @@ func TestCrossRepoCorrelationLinksMDUnboundIssue(t *testing.T) {
 	changeRefs := []ChangeRefs{
 		{
 			Change: Change{
-				Dir:   "/repo-a/openspec", Slug: "a1",
+				Dir: "/repo-a/openspec", Slug: "a1",
 				Links: []Ref{{Provider: "github", ID: "42", URL: "https://github.com/owner/repo-b/issues/42"}},
 			},
 			IssueIDs: []string{},
@@ -522,7 +522,7 @@ func TestCrossRepoCorrelationLinksMDEmptyRefID(t *testing.T) {
 	changeRefs := []ChangeRefs{
 		{
 			Change: Change{
-				Dir:   "/repo-a/openspec", Slug: "a1",
+				Dir: "/repo-a/openspec", Slug: "a1",
 				Links: []Ref{{Provider: "github", ID: "", URL: "https://github.com/owner/repo-b/issues/42"}},
 			},
 			IssueIDs: []string{},
@@ -547,7 +547,7 @@ func TestCrossRepoCorrelationLinksMDBareID(t *testing.T) {
 	changeRefs := []ChangeRefs{
 		{
 			Change: Change{
-				Dir:   "/repo-a/openspec", Slug: "a1",
+				Dir: "/repo-a/openspec", Slug: "a1",
 				Links: []Ref{{Provider: "github", ID: "42", URL: "https://github.com/owner/repo-b/issues/42"}},
 			},
 			IssueIDs: []string{},
@@ -575,7 +575,7 @@ func TestCrossRepoCorrelationLinksMDDuplicateRefs(t *testing.T) {
 	changeRefs := []ChangeRefs{
 		{
 			Change: Change{
-				Dir:   "/repo-a/openspec", Slug: "a1",
+				Dir: "/repo-a/openspec", Slug: "a1",
 				Links: []Ref{
 					{Provider: "github", ID: "42", URL: "https://github.com/owner/repo-b/issues/42"},
 					{Provider: "github", ID: "42", URL: "https://github.com/owner/repo-b/issues/42"},
@@ -603,7 +603,7 @@ func TestCrossRepoCorrelationLinksMDWithTopicConflict(t *testing.T) {
 	changeRefs := []ChangeRefs{
 		{
 			Change: Change{
-				Dir:   "/repo-a/openspec", Slug: "a1", Title: "Compose setup",
+				Dir: "/repo-a/openspec", Slug: "a1", Title: "Compose setup",
 				Links: []Ref{{Provider: "github", ID: "42", URL: "https://github.com/owner/repo-b/issues/42"}},
 			},
 			IssueIDs: []string{},
@@ -636,7 +636,7 @@ func TestCrossRepoCorrelationLinksMDWithPathConflict(t *testing.T) {
 	changeRefs := []ChangeRefs{
 		{
 			Change: Change{
-				Dir:   "/repo-a/openspec", Slug: "a1", Body: "edit src/main.ts",
+				Dir: "/repo-a/openspec", Slug: "a1", Body: "edit src/main.ts",
 				Links: []Ref{{Provider: "github", ID: "42", URL: "https://github.com/owner/repo-b/issues/42"}},
 			},
 			IssueIDs: []string{},
@@ -669,7 +669,7 @@ func TestCrossRepoCorrelationLinksMDSameRepoWithTopic(t *testing.T) {
 	changeRefs := []ChangeRefs{
 		{
 			Change: Change{
-				Dir:   "/repo-a/openspec", Slug: "a1", Title: "Compose setup",
+				Dir: "/repo-a/openspec", Slug: "a1", Title: "Compose setup",
 				Links: []Ref{{Provider: "github", ID: "42", URL: "https://github.com/owner/repo-b/issues/42"}},
 			},
 			IssueIDs: []string{},
@@ -694,7 +694,7 @@ func TestCrossRepoCorrelationLinksMDSameRepoWithPath(t *testing.T) {
 	changeRefs := []ChangeRefs{
 		{
 			Change: Change{
-				Dir:   "/repo-a/openspec", Slug: "a1", Body: "edit src/main.ts",
+				Dir: "/repo-a/openspec", Slug: "a1", Body: "edit src/main.ts",
 				Links: []Ref{{Provider: "github", ID: "42", URL: "https://github.com/owner/repo-b/issues/42"}},
 			},
 			IssueIDs: []string{},
@@ -719,7 +719,7 @@ func TestCrossRepoCorrelationLinksMDSameRepoWithBoth(t *testing.T) {
 	changeRefs := []ChangeRefs{
 		{
 			Change: Change{
-				Dir:   "/repo-a/openspec", Slug: "a1", Title: "Compose setup", Body: "edit src/main.ts",
+				Dir: "/repo-a/openspec", Slug: "a1", Title: "Compose setup", Body: "edit src/main.ts",
 				Links: []Ref{{Provider: "github", ID: "42", URL: "https://github.com/owner/repo-b/issues/42"}},
 			},
 			IssueIDs: []string{},
@@ -744,7 +744,7 @@ func TestCrossRepoCorrelationLinksMDMultipleSameRepo(t *testing.T) {
 	changeRefs := []ChangeRefs{
 		{
 			Change: Change{
-				Dir:   "/repo-a/openspec", Slug: "a1", Title: "Compose setup", Body: "edit src/main.ts",
+				Dir: "/repo-a/openspec", Slug: "a1", Title: "Compose setup", Body: "edit src/main.ts",
 				Links: []Ref{{Provider: "github", ID: "42", URL: "https://github.com/owner/repo-b/issues/42"}},
 			},
 			IssueIDs: []string{},
@@ -781,7 +781,7 @@ func TestCrossRepoCorrelationLinksMDWithProviderPrefix(t *testing.T) {
 	changeRefs := []ChangeRefs{
 		{
 			Change: Change{
-				Dir:   "/repo-a/openspec", Slug: "a1",
+				Dir: "/repo-a/openspec", Slug: "a1",
 				Links: []Ref{{Provider: "github", ID: "github/42", URL: "https://github.com/owner/repo-b/issues/42"}},
 			},
 			IssueIDs: []string{},
@@ -809,7 +809,7 @@ func TestCrossRepoCorrelationLinksMDSameRepoWithPathMatch(t *testing.T) {
 	changeRefs := []ChangeRefs{
 		{
 			Change: Change{
-				Dir:   "/repo-a/openspec", Slug: "a1", Body: "edit src/main.ts",
+				Dir: "/repo-a/openspec", Slug: "a1", Body: "edit src/main.ts",
 				Links: []Ref{{Provider: "github", ID: "42", URL: "https://github.com/owner/repo-b/issues/42"}},
 			},
 			IssueIDs: []string{},

@@ -644,10 +644,12 @@ func TestPull_RequiresIssueForNonGithub(t *testing.T) {
 
 type stubNonGithubProvider struct{}
 
-func (s *stubNonGithubProvider) Name() string                                         { return "beads" }
-func (s *stubNonGithubProvider) Find(context.Context, string) (*Ref, error)           { return nil, nil }
-func (s *stubNonGithubProvider) Push(context.Context, WorkItem, *Ref) (Ref, error)    { return Ref{}, nil }
-func (s *stubNonGithubProvider) Get(context.Context, string) (FetchedItem, error)     { return FetchedItem{}, nil }
+func (s *stubNonGithubProvider) Name() string                                      { return "beads" }
+func (s *stubNonGithubProvider) Find(context.Context, string) (*Ref, error)        { return nil, nil }
+func (s *stubNonGithubProvider) Push(context.Context, WorkItem, *Ref) (Ref, error) { return Ref{}, nil }
+func (s *stubNonGithubProvider) Get(context.Context, string) (FetchedItem, error) {
+	return FetchedItem{}, nil
+}
 
 func TestPull_CannotResolveFromBranch(t *testing.T) {
 	dir := t.TempDir()

@@ -14,9 +14,9 @@ import (
 // Coordination holds the resolved OpenSpec context: root repo and any
 // referenced sibling stores with their local paths.
 type Coordination struct {
-	Root    StoreEntry  `json:"root"`
+	Root    StoreEntry   `json:"root"`
 	Members []StoreEntry `json:"members"`
-	Status  []string    `json:"status"`
+	Status  []string     `json:"status"`
 }
 
 // StoreEntry describes one OpenSpec store (repo) with its local path.

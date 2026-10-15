@@ -127,12 +127,12 @@ type DepSyncPlan struct {
 
 // DepSyncOptions configures dependency synchronization.
 type DepSyncOptions struct {
-	ChangeDir  string
-	Provider   *GitHubProvider
-	Ref        Ref         // the ref for this change's own issue
-	BlockedBy  []Ref       // from links.md ## Blocked by
-	Blocks     []Ref       // from links.md ## Blocks
-	DryRun     bool
+	ChangeDir string
+	Provider  *GitHubProvider
+	Ref       Ref   // the ref for this change's own issue
+	BlockedBy []Ref // from links.md ## Blocked by
+	Blocks    []Ref // from links.md ## Blocks
+	DryRun    bool
 }
 
 // DepSyncResult reports what a dependency sync did.

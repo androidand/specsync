@@ -212,7 +212,7 @@ func TestGraph_BuildWorkFileEdges_MixedPRsAndCommits(t *testing.T) {
 	runner := &mockGHRunner{
 		responses: map[string]string{
 			joinArgs([]string{"--json", "files", "--repo", "owner/repo", "pr", "view", "100"}): prFilesOut,
-			joinArgs([]string{"abc123", "diff-tree", "--no-commit-id", "-r", "--name-only"}):    commitFilesOut,
+			joinArgs([]string{"abc123", "diff-tree", "--no-commit-id", "-r", "--name-only"}):   commitFilesOut,
 		},
 	}
 	ctx := context.Background()

@@ -220,7 +220,7 @@ func TestLink_ReferenceWithFakeProvider(t *testing.T) {
 	os.MkdirAll(openspecDir, 0o755)
 
 	prov := &fakeLinkProvider{
-		ref: Ref{Provider: "github:owner/repo", ID: "42", URL: "https://github.com/owner/repo/issues/42"},
+		ref:  Ref{Provider: "github:owner/repo", ID: "42", URL: "https://github.com/owner/repo/issues/42"},
 		body: "# My Issue\n\nSome content\n\n## Tasks\n\n- [ ] task\n",
 	}
 
