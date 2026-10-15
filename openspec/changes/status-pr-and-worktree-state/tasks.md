@@ -13,7 +13,7 @@
 
 ## 2. Derive and expose
 
-- [ ] 2.0 Sync suggestion from the documented table; exact commands; force-push notice; configured by `sync:`
+- [x] 2.0 Sync suggestion from the documented table; exact commands; force-push notice; configured by `sync:` (takes a `SyncConfig`; reading `sync:` from `specsync.yml` and the `reviewStarted` fact come with `ways-of-working-and-next` and the provider slice)
 - [ ] 2.1 (git-only flags done: all except ci-failing, changes-requested, review-missing, unresolved-comments, ready-to-merge, cleanup) Compute `attention` from the fixed vocabulary; keep the rules in one table and document them
 - [ ] 2.2 (`local` and `attention` done; `pr` needs the provider) Add the optional `pr`, `local` and `attention` fields to `ChangeTopology`; omit when unavailable
 - [ ] 2.3 Add `-state=off`; confirm no `gh` process is started in that mode
