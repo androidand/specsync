@@ -21,6 +21,9 @@ type ChangeRequest struct {
 	Size           ChangeRequestSize   `json:"size"`
 	ReviewStarted  bool                `json:"reviewStarted,omitempty"` // any review or comment exists
 	Closes         []string            `json:"closes,omitempty"`        // issue numbers it closes
+	// UnresolvedThreads is the count of unresolved review threads on an open
+	// request. nil means the provider did not say, which is not the same as 0.
+	UnresolvedThreads *int `json:"unresolvedThreads,omitempty"`
 }
 
 // ChangeRequestChecks summarises the request's checks.
@@ -104,6 +107,9 @@ func RowAttention(ls *LocalState, cr *ChangeRequest) []string {
 	if open && !cr.Draft && !cr.ReviewStarted && cr.ReviewDecision != "approved" {
 		flags = append(flags, "review-missing")
 	}
+	if open && cr.UnresolvedThreads != nil && *cr.UnresolvedThreads > 0 {
+		flags = append(flags, "unresolved-comments")
+	}
 	if volatile {
 		flags = append(flags, "volatile-path")
 	}
@@ -111,7 +117,8 @@ func RowAttention(ls *LocalState, cr *ChangeRequest) []string {
 		flags = append(flags, "cleanup")
 	}
 	if open && !cr.Draft && cr.ReviewDecision == "approved" && cr.Checks.Fail == 0 &&
-		cr.Checks.Pending == 0 && cr.Mergeable == "mergeable" {
+		cr.Checks.Pending == 0 && cr.Mergeable == "mergeable" &&
+		(cr.UnresolvedThreads == nil || *cr.UnresolvedThreads == 0) {
 		flags = append(flags, "ready-to-merge")
 	}
 	return flags

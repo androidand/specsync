@@ -418,7 +418,9 @@ func TestBuildTopology_AttachesLocalStateAndAttention(t *testing.T) {
 
 func TestBuildTopology_LocalStateFailureNarrowsTheRow(t *testing.T) {
 	opts, _ := localStateFixture(t)
-	opts.localState = func(context.Context, string, LocalStateOptions) (*LocalState, error) { return nil, errors.New("not a repo") }
+	opts.localState = func(context.Context, string, LocalStateOptions) (*LocalState, error) {
+		return nil, errors.New("not a repo")
+	}
 	topo, err := BuildTopology(context.Background(), opts)
 	if err != nil {
 		t.Fatal(err)

@@ -99,6 +99,9 @@ func requestLine(pr *specsync.ChangeRequest) string {
 	if pr.Mergeable != "" && pr.Mergeable != "unknown" {
 		line += "; " + pr.Mergeable
 	}
+	if n := pr.UnresolvedThreads; n != nil && *n > 0 {
+		line += fmt.Sprintf("; %d unresolved threads", *n)
+	}
 	return line
 }
 

@@ -13,9 +13,17 @@ func fakeGHJSON(out string, calls *[][]string) func(context.Context, ...string) 
 		if calls != nil {
 			*calls = append(*calls, args)
 		}
+		if len(args) > 0 && args[0] == "api" {
+			return "", errors.New("graphql not stubbed")
+		}
 		return out, nil
 	}
 }
+
+const threadsFixture = `{"data":{"repository":{"pullRequests":{"nodes":[
+ {"number":7,"reviewThreads":{"nodes":[{"isResolved":false},{"isResolved":true},{"isResolved":false}]}},
+ {"number":9,"reviewThreads":{"nodes":[{"isResolved":true}]}}
+]}}}}`
 
 const prListFixture = `[
  {"number": 7, "url": "https://github.com/acme/portal/pull/7", "state": "OPEN", "isDraft": false,
@@ -55,8 +63,14 @@ func TestGitHubChangeRequests_AskesOnceForAllStatesAndMapsEveryField(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(calls) != 1 {
-		t.Fatalf("expected one gh call per repo, got %d: %v", len(calls), calls)
+	prCalls := 0
+	for _, c := range calls {
+		if c[0] == "pr" {
+			prCalls++
+		}
+	}
+	if prCalls != 1 {
+		t.Fatalf("expected one pr listing per repo, got %d: %v", prCalls, calls)
 	}
 	joined := strings.Join(calls[0], " ")
 	if strings.Contains(joined, "commits") {
@@ -191,5 +205,94 @@ func TestRowAttention_RequestFlags(t *testing.T) {
 				t.Fatalf("got %v, want %v", got, c.want)
 			}
 		})
+	}
+}
+
+func TestGitHubChangeRequests_UnresolvedThreadsFromGraphQL(t *testing.T) {
+	var calls [][]string
+	p := NewGitHubProviderFuncWithRepo("acme/portal", func(_ context.Context, args ...string) (string, error) {
+		calls = append(calls, args)
+		if args[0] == "api" {
+			return threadsFixture, nil
+		}
+		return prListFixture, nil
+	})
+	set, err := p.ChangeRequests(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	by := map[int]ChangeRequest{}
+	for _, c := range set.Requests {
+		by[c.Number] = c
+	}
+	if got := by[7].UnresolvedThreads; got == nil || *got != 2 {
+		t.Fatalf("PR 7 unresolved = %v, want 2", got)
+	}
+	if got := by[9].UnresolvedThreads; got == nil || *got != 0 {
+		t.Fatalf("PR 9 unresolved = %v, want 0", got)
+	}
+	if by[3].UnresolvedThreads != nil {
+		t.Fatal("a merged PR has no thread count")
+	}
+	var api []string
+	for _, c := range calls {
+		if c[0] == "api" {
+			api = c
+		}
+	}
+	joined := strings.Join(api, " ")
+	for _, want := range []string{"api graphql", "owner=acme", "name=portal", "reviewThreads"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("graphql call %q missing %q", joined, want)
+		}
+	}
+}
+
+func TestGitHubChangeRequests_ThreadLookupFailureIsNotAnError(t *testing.T) {
+	p := NewGitHubProviderFuncWithRepo("acme/portal", fakeGHJSON(prListFixture, nil))
+	set, err := p.ChangeRequests(context.Background())
+	if err != nil {
+		t.Fatalf("a failed thread lookup must not fail the listing: %v", err)
+	}
+	for _, c := range set.Requests {
+		if c.UnresolvedThreads != nil {
+			t.Fatalf("unknown stays unknown, got %v for #%d", *c.UnresolvedThreads, c.Number)
+		}
+	}
+}
+
+func TestGitHubChangeRequests_NoOpenRequestsSkipsTheThreadLookup(t *testing.T) {
+	var calls [][]string
+	p := NewGitHubProviderFuncWithRepo("acme/portal", fakeGHJSON(`[{"number":3,"state":"MERGED","headRefName":"x"}]`, &calls))
+	if _, err := p.ChangeRequests(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range calls {
+		if c[0] == "api" {
+			t.Fatal("no open request, so no graphql call")
+		}
+	}
+}
+
+func TestRowAttention_UnresolvedComments(t *testing.T) {
+	two := 2
+	zero := 0
+	open := func(n *int) *ChangeRequest {
+		return &ChangeRequest{State: "open", ReviewStarted: true, UnresolvedThreads: n}
+	}
+	if got := RowAttention(nil, open(&two)); !reflect.DeepEqual(got, []string{"unresolved-comments"}) {
+		t.Fatalf("got %v", got)
+	}
+	for _, n := range []*int{&zero, nil} {
+		if got := RowAttention(nil, open(n)); len(got) != 0 {
+			t.Fatalf("no unresolved threads raises nothing, got %v", got)
+		}
+	}
+	// approved + clean + unresolved threads is not ready to merge
+	cr := &ChangeRequest{State: "open", ReviewDecision: "approved", Mergeable: "mergeable", ReviewStarted: true, UnresolvedThreads: &two}
+	for _, f := range RowAttention(nil, cr) {
+		if f == "ready-to-merge" {
+			t.Fatal("unresolved threads block ready-to-merge")
+		}
 	}
 }

@@ -172,3 +172,15 @@ func TestStatusCmd_StateFlag(t *testing.T) {
 		}
 	}
 }
+
+func TestRequestLine_UnresolvedThreads(t *testing.T) {
+	three := 3
+	got := requestLine(&specsync.ChangeRequest{Number: 4, State: "open", UnresolvedThreads: &three})
+	if !strings.Contains(got, "3 unresolved threads") {
+		t.Fatalf("got %q", got)
+	}
+	zero := 0
+	if got := requestLine(&specsync.ChangeRequest{Number: 4, State: "open", UnresolvedThreads: &zero}); strings.Contains(got, "unresolved") {
+		t.Fatalf("zero is not worth a mention: %q", got)
+	}
+}
