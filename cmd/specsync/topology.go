@@ -95,7 +95,7 @@ func (cm *statusCmd) run(args []string) {
 	case *asJSON:
 		emitJSON(topo)
 	case current && len(topo.Changes) == 1:
-		printCurrentStatus(topo.Changes[0], *state != "off")
+		printCurrentStatus(topo.Changes[0], topo.RequestState == "ok")
 		for _, s := range topo.Status {
 			fmt.Println("status:", s)
 		}
@@ -105,6 +105,46 @@ func (cm *statusCmd) run(args []string) {
 
 	if len(topo.Changes) == 0 {
 		os.Exit(1)
+	}
+}
+
+// printRequest prints a request's summary line and, when checks fail, their
+// names. lead starts the first line; indent starts the continuation.
+func printRequest(pr *specsync.ChangeRequest, lead, indent string) {
+	if pr == nil {
+		return
+	}
+	fmt.Printf("%s%s\n", lead, requestLine(pr))
+	if len(pr.Checks.Failing) > 0 {
+		fmt.Printf("%sfailing checks: %s\n", indent, strings.Join(pr.Checks.Failing, ", "))
+	}
+}
+
+// printSync prints the sync suggestion and its commands as text.
+func printSync(s *specsync.SyncAdvice, lead, indent string) {
+	if s == nil {
+		return
+	}
+	fmt.Printf("%ssuggest: %s\n", lead, s.Summary)
+	for _, c := range s.Commands {
+		fmt.Printf("%s$ %s\n", indent, c)
+	}
+}
+
+// printFreshness prints which files the base also changed and where a merge
+// would conflict.
+func printFreshness(l *specsync.LocalState, lead string) {
+	if l == nil {
+		return
+	}
+	if len(l.BaseTouchesYourFiles) > 0 {
+		fmt.Printf("%sbase touches your files: %s\n", lead, strings.Join(l.BaseTouchesYourFiles, ", "))
+	}
+	if len(l.Conflicts) > 0 {
+		fmt.Printf("%swould conflict in: %s\n", lead, strings.Join(l.Conflicts, ", "))
+	}
+	if l.ConflictCheckUnavailable {
+		fmt.Printf("%sconflict check unavailable (needs git 2.38 or newer)\n", lead)
 	}
 }
 
@@ -160,29 +200,9 @@ func printTopologyTable(topo specsync.Topology) {
 			if len(c.Attention) > 0 {
 				fmt.Printf("    ↳ attention: %s\n", strings.Join(c.Attention, ", "))
 			}
-			if pr := c.PR; pr != nil {
-				fmt.Printf("    ↳ %s\n", requestLine(pr))
-				if len(pr.Checks.Failing) > 0 {
-					fmt.Printf("        failing checks: %s\n", strings.Join(pr.Checks.Failing, ", "))
-				}
-			}
-			if c.Sync != nil {
-				fmt.Printf("    ↳ suggest: %s\n", c.Sync.Summary)
-				for _, cmd := range c.Sync.Commands {
-					fmt.Printf("        $ %s\n", cmd)
-				}
-			}
-			if l := c.Local; l != nil {
-				if len(l.BaseTouchesYourFiles) > 0 {
-					fmt.Printf("    ↳ base touches your files: %s\n", strings.Join(l.BaseTouchesYourFiles, ", "))
-				}
-				if len(l.Conflicts) > 0 {
-					fmt.Printf("    ↳ would conflict in: %s\n", strings.Join(l.Conflicts, ", "))
-				}
-				if l.ConflictCheckUnavailable {
-					fmt.Println("    ↳ conflict check unavailable (needs git 2.38 or newer)")
-				}
-			}
+			printRequest(c.PR, "    ↳ ", "        ")
+			printSync(c.Sync, "    ↳ ", "        ")
+			printFreshness(c.Local, "    ↳ ")
 			if c.Epic != "" {
 				fmt.Printf("    ↳ epic: %s\n", c.Epic)
 			}
@@ -256,13 +276,9 @@ func printCurrentStatus(row specsync.ChangeTopology, requestsKnown bool) {
 	if row.Worktree != "" {
 		fmt.Printf("path:    %s\n", row.Worktree)
 	}
-	switch {
-	case row.PR != nil:
-		fmt.Printf("%s\n", requestLine(row.PR))
-		if len(row.PR.Checks.Failing) > 0 {
-			fmt.Printf("         failing checks: %s\n", strings.Join(row.PR.Checks.Failing, ", "))
-		}
-	case requestsKnown:
+	if row.PR != nil {
+		printRequest(row.PR, "", "         ")
+	} else if requestsKnown {
 		fmt.Println("pr: none")
 	}
 	if l := row.Local; l != nil {
@@ -274,22 +290,9 @@ func printCurrentStatus(row specsync.ChangeTopology, requestsKnown bool) {
 		if s := l.Size; s != nil {
 			fmt.Printf("size:    %d files, +%d -%d, %d commits\n", s.Files, s.Additions, s.Deletions, s.Commits)
 		}
-		for _, f := range l.BaseTouchesYourFiles {
-			fmt.Printf("         base also changed: %s\n", f)
-		}
-		for _, f := range l.Conflicts {
-			fmt.Printf("         would conflict in: %s\n", f)
-		}
-		if l.ConflictCheckUnavailable {
-			fmt.Println("         conflict check unavailable (needs git 2.38 or newer)")
-		}
+		printFreshness(l, "         ")
 	}
-	if row.Sync != nil {
-		fmt.Printf("suggest: %s\n", row.Sync.Summary)
-		for _, c := range row.Sync.Commands {
-			fmt.Printf("           $ %s\n", c)
-		}
-	}
+	printSync(row.Sync, "", "           ")
 }
 
 // attentionDetail adds the count a flag stands for, when it has one.

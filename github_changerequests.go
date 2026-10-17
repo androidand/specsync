@@ -31,6 +31,8 @@ type ghChangeRequest struct {
 	State          string            `json:"state"`
 	IsDraft        bool              `json:"isDraft"`
 	HeadRefName    string            `json:"headRefName"`
+	HeadRefOid     string            `json:"headRefOid"`
+	CrossRepo      bool              `json:"isCrossRepository"`
 	BaseRefName    string            `json:"baseRefName"`
 	ReviewDecision string            `json:"reviewDecision"`
 	Mergeable      string            `json:"mergeable"`
@@ -46,43 +48,73 @@ type ghChangeRequest struct {
 }
 
 // ChangeRequests lists the repo's pull requests, all states, with one gh call.
+// When that page is full, older open requests may be missing, so the open ones
+// are listed again and merged in.
 func (p *GitHubProvider) ChangeRequests(ctx context.Context) (ChangeRequestSet, error) {
 	limit := p.changeRequestLimit
 	if limit == 0 {
 		limit = defaultChangeRequestLimit
 	}
-	args := append([]string{"pr", "list"}, p.repoFlag()...)
-	args = append(args, "--state", "all", "--limit", strconv.Itoa(limit), "--json",
-		"number,url,state,isDraft,headRefName,baseRefName,reviewDecision,mergeable,"+
-			"additions,deletions,changedFiles,reviews,comments,closingIssuesReferences,statusCheckRollup")
-	out, err := p.run(ctx, args...)
+	all, err := p.listChangeRequests(ctx, "all", limit)
 	if err != nil {
 		return ChangeRequestSet{}, err
 	}
+	set := ChangeRequestSet{Truncated: len(all) >= limit}
+	have := map[int]bool{}
+	for _, r := range all {
+		have[r.Number] = true
+		set.Requests = append(set.Requests, r.toChangeRequest())
+	}
+	if set.Truncated {
+		if open, err := p.listChangeRequests(ctx, "open", limit); err == nil {
+			for _, r := range open {
+				if !have[r.Number] {
+					set.Requests = append(set.Requests, r.toChangeRequest())
+				}
+			}
+			set.Truncated = len(open) >= limit
+		}
+	}
+	return set.withThreads(ctx, p), nil
+}
+
+// listChangeRequests runs one `gh pr list` for the given state.
+func (p *GitHubProvider) listChangeRequests(ctx context.Context, state string, limit int) ([]ghChangeRequest, error) {
+	args := append([]string{"pr", "list"}, p.repoFlag()...)
+	args = append(args, "--state", state, "--limit", strconv.Itoa(limit), "--json",
+		"number,url,state,isDraft,headRefName,headRefOid,isCrossRepository,baseRefName,reviewDecision,mergeable,"+
+			"additions,deletions,changedFiles,reviews,comments,closingIssuesReferences,statusCheckRollup")
+	out, err := p.run(ctx, args...)
+	if err != nil {
+		return nil, err
+	}
 	var raw []ghChangeRequest
 	if err := json.Unmarshal([]byte(out), &raw); err != nil {
-		return ChangeRequestSet{}, fmt.Errorf("parse gh pr list: %w", err)
+		return nil, fmt.Errorf("parse gh pr list: %w", err)
 	}
-	set := ChangeRequestSet{Truncated: len(raw) >= limit}
+	return raw, nil
+}
+
+// withThreads fills in unresolved review thread counts for open requests.
+// They are a nice-to-have: GraphQL only, and a failure leaves them unknown
+// instead of failing the listing.
+func (set ChangeRequestSet) withThreads(ctx context.Context, p *GitHubProvider) ChangeRequestSet {
 	anyOpen := false
-	for _, r := range raw {
-		cr := r.toChangeRequest()
-		anyOpen = anyOpen || cr.State == "open"
-		set.Requests = append(set.Requests, cr)
+	for _, r := range set.Requests {
+		anyOpen = anyOpen || r.State == "open"
 	}
-	if anyOpen {
-		// Thread counts are a nice-to-have: GraphQL only, and a failure leaves
-		// them unknown instead of failing the listing.
-		if counts, err := p.unresolvedThreads(ctx); err == nil {
-			for i := range set.Requests {
-				if n, ok := counts[set.Requests[i].Number]; ok && set.Requests[i].State == "open" {
-					n := n
-					set.Requests[i].UnresolvedThreads = &n
-				}
+	if !anyOpen {
+		return set
+	}
+	if counts, err := p.unresolvedThreads(ctx); err == nil {
+		for i := range set.Requests {
+			if n, ok := counts[set.Requests[i].Number]; ok && set.Requests[i].State == "open" {
+				n := n
+				set.Requests[i].UnresolvedThreads = &n
 			}
 		}
 	}
-	return set, nil
+	return set
 }
 
 const unresolvedThreadsQuery = `query($owner:String!,$name:String!){repository(owner:$owner,name:$name){` +
@@ -137,12 +169,14 @@ func (r ghChangeRequest) toChangeRequest() ChangeRequest {
 	cr := ChangeRequest{
 		Number:         r.Number,
 		URL:            r.URL,
-		State:          lower(r.State),
+		State:          strings.ToLower(r.State),
 		Draft:          r.IsDraft,
 		Branch:         r.HeadRefName,
+		HeadSHA:        r.HeadRefOid,
+		Fork:           r.CrossRepo,
 		Base:           r.BaseRefName,
-		ReviewDecision: lower(r.ReviewDecision),
-		Mergeable:      lower(r.Mergeable),
+		ReviewDecision: strings.ToLower(r.ReviewDecision),
+		Mergeable:      strings.ToLower(r.Mergeable),
 		Size:           ChangeRequestSize{Files: r.ChangedFiles, Additions: r.Additions, Deletions: r.Deletions},
 		ReviewStarted:  len(r.Reviews)+len(r.Comments) > 0,
 	}

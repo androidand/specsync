@@ -1,6 +1,7 @@
 package specsync
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -16,6 +17,7 @@ import (
 // is. Every field is read from git; nothing is inferred. See
 // openspec/changes/status-pr-and-worktree-state.
 type LocalState struct {
+	Head           string      `json:"head,omitempty"` // full commit id of HEAD
 	Modified       int         `json:"modified"`
 	Untracked      int         `json:"untracked"`
 	Upstream       string      `json:"upstream,omitempty"`
@@ -104,6 +106,9 @@ func CollectLocalState(ctx context.Context, dir string, opts LocalStateOptions) 
 		break
 	}
 
+	if out, err := gitIn(ctx, dir, "rev-parse", "HEAD"); err == nil {
+		ls.Head = strings.TrimSpace(out)
+	}
 	if out, err := gitIn(ctx, dir, "log", "-1", "--format=%cI"); err == nil {
 		ls.LastCommit = strings.TrimSpace(out)
 	}
@@ -227,12 +232,19 @@ func twoInts(s string) (int, int) {
 	return a, b
 }
 
-// gitIn runs git in dir and returns stdout without the trailing newline.
+// gitIn runs git in dir and returns stdout without the trailing newline. The
+// locale is fixed so git's messages are stable; a failure carries git's own
+// message.
 func gitIn(ctx context.Context, dir string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
+	cmd.Env = append(os.Environ(), "LC_ALL=C")
 	out, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
+		reason := err.Error()
+		if ee, ok := err.(*exec.ExitError); ok && len(bytes.TrimSpace(ee.Stderr)) > 0 {
+			reason = strings.TrimSpace(string(ee.Stderr))
+		}
+		return "", fmt.Errorf("git %s: %s", strings.Join(args, " "), reason)
 	}
 	return strings.TrimRight(string(out), "\n"), nil
 }
@@ -272,23 +284,5 @@ func resolved(p string) string {
 	}
 }
 
-// LocalAttention derives the attention flags that git facts alone decide, in
-// the documented vocabulary order. Each flag is a predicate over the state.
-func LocalAttention(ls LocalState) []string {
-	var flags []string
-	add := func(cond bool, flag string) {
-		if cond {
-			flags = append(flags, flag)
-		}
-	}
-	add(ls.Ahead > 0, "unpushed")
-	add(ls.Modified+ls.Untracked > 0, "uncommitted")
-	add(ls.Upstream == "", "no-upstream")
-	add(ls.UpstreamBehind > 0 && ls.Ahead == 0, "behind-upstream")
-	add(ls.UpstreamBehind > 0 && ls.Ahead > 0, "diverged")
-	add(ls.BehindBase > 0, "behind-base")
-	add(len(ls.BaseTouchesYourFiles) > 0, "base-touches-your-files")
-	add(len(ls.Conflicts) > 0, "conflicts-with-base")
-	add(ls.VolatilePath, "volatile-path")
-	return flags
-}
+// LocalAttention returns the attention flags that git facts alone decide.
+func LocalAttention(ls LocalState) []string { return RowAttention(&ls, nil) }

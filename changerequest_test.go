@@ -27,7 +27,7 @@ const threadsFixture = `{"data":{"repository":{"pullRequests":{"nodes":[
 
 const prListFixture = `[
  {"number": 7, "url": "https://github.com/acme/portal/pull/7", "state": "OPEN", "isDraft": false,
-  "headRefName": "feat/4231-add-field-forms", "baseRefName": "main",
+  "headRefName": "feat/4231-add-field-forms", "baseRefName": "main", "headRefOid": "abc111", "isCrossRepository": false,
   "reviewDecision": "APPROVED", "mergeable": "MERGEABLE",
   "additions": 120, "deletions": 8, "changedFiles": 5,
   "commits": [{}, {}, {}],
@@ -39,7 +39,7 @@ const prListFixture = `[
     {"__typename": "StatusContext", "context": "ci/legacy", "state": "SUCCESS"}
   ]},
  {"number": 9, "url": "https://github.com/acme/portal/pull/9", "state": "OPEN", "isDraft": true,
-  "headRefName": "feat/9-failing", "baseRefName": "main",
+  "headRefName": "feat/9-failing", "baseRefName": "main", "isCrossRepository": true,
   "reviewDecision": "", "mergeable": "UNKNOWN",
   "additions": 1, "deletions": 0, "changedFiles": 1, "commits": [{}],
   "reviews": [], "comments": [{"body": "hm"}],
@@ -294,5 +294,118 @@ func TestRowAttention_UnresolvedComments(t *testing.T) {
 		if f == "ready-to-merge" {
 			t.Fatal("unresolved threads block ready-to-merge")
 		}
+	}
+}
+
+func TestGitHubChangeRequests_MapsHeadSHAAndForkFlag(t *testing.T) {
+	p := NewGitHubProviderFuncWithRepo("acme/portal", fakeGHJSON(prListFixture, nil))
+	set, err := p.ChangeRequests(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	by := map[int]ChangeRequest{}
+	for _, c := range set.Requests {
+		by[c.Number] = c
+	}
+	if by[7].HeadSHA != "abc111" || by[7].Fork {
+		t.Fatalf("PR 7 = %+v", by[7])
+	}
+	if !by[9].Fork {
+		t.Fatalf("PR 9 is from a fork: %+v", by[9])
+	}
+}
+
+func TestChangeRequestsByBranch_IgnoresRequestsFromForks(t *testing.T) {
+	set := ChangeRequestSet{Requests: []ChangeRequest{
+		{Number: 8, Branch: "fix", State: "open", Fork: true},
+		{Number: 2, Branch: "fix", State: "merged"},
+		{Number: 9, Branch: "main", State: "open", Fork: true},
+	}}
+	if got := set.ForBranch("fix"); got == nil || got.Number != 2 {
+		t.Fatalf("a fork's PR must not win over the repo's own: %+v", got)
+	}
+	if got := set.ForBranch("main"); got != nil {
+		t.Fatalf("a fork's head branch name says nothing about a local branch: %+v", got)
+	}
+}
+
+func TestRowAttention_CleanupNeedsTheMergedCommit(t *testing.T) {
+	merged := func(sha string) *ChangeRequest { return &ChangeRequest{State: "merged", HeadSHA: sha} }
+	clean := func(head string) *LocalState { return &LocalState{Upstream: "origin/x", Head: head} }
+	cases := []struct {
+		name string
+		ls   *LocalState
+		cr   *ChangeRequest
+		want bool
+	}{
+		{"same commit", clean("aaa"), merged("aaa"), true},
+		{"new commits since the merge", clean("bbb"), merged("aaa"), false},
+		{"request head unknown", clean("bbb"), merged(""), true},
+		{"local head unknown", clean(""), merged("aaa"), true},
+	}
+	for _, c := range cases {
+		got := false
+		for _, f := range RowAttention(c.ls, c.cr) {
+			got = got || f == "cleanup"
+		}
+		if got != c.want {
+			t.Errorf("%s: cleanup = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+func TestGitHubChangeRequests_FullPageAlsoFetchesOpenRequests(t *testing.T) {
+	const open = `[
+ {"number": 7, "state": "OPEN", "headRefName": "feat/4231-add-field-forms"},
+ {"number": 11, "state": "OPEN", "headRefName": "feat/old-but-open"}
+]`
+	var calls [][]string
+	p := NewGitHubProviderFuncWithRepo("acme/portal", func(_ context.Context, args ...string) (string, error) {
+		calls = append(calls, args)
+		switch {
+		case args[0] == "api":
+			return "", errors.New("no graphql")
+		case strings.Contains(strings.Join(args, " "), "--state open"):
+			return open, nil
+		}
+		return prListFixture, nil
+	})
+	p.changeRequestLimit = 3 // the first page is full, so older open requests may be missing
+	set, err := p.ChangeRequests(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := map[int]int{}
+	for _, c := range set.Requests {
+		count[c.Number]++
+	}
+	if count[11] != 1 || count[7] != 1 {
+		t.Fatalf("expected #11 added and #7 not duplicated, got %v", count)
+	}
+	if set.Truncated {
+		t.Fatal("the open listing was not full, so nothing open is missing")
+	}
+
+	// A full open listing is still truncated.
+	p.changeRequestLimit = 2
+	if set, _ = p.ChangeRequests(context.Background()); !set.Truncated {
+		t.Fatal("a full open page may still miss open requests")
+	}
+}
+
+func TestGitHubChangeRequests_ShortPageNeedsNoSecondListing(t *testing.T) {
+	var calls [][]string
+	p := NewGitHubProviderFuncWithRepo("acme/portal", fakeGHJSON(prListFixture, &calls))
+	if _, err := p.ChangeRequests(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	n := 0
+	for _, c := range calls {
+		if c[0] == "pr" {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Fatalf("a short page is complete; got %d listings", n)
 	}
 }

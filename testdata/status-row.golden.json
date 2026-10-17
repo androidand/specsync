@@ -19,6 +19,7 @@
         "other"
       ],
       "local": {
+        "head": "abc123",
         "modified": 1,
         "untracked": 2,
         "upstream": "origin/feat/42-add-thing",
@@ -87,11 +88,14 @@
         "closes": [
           "42"
         ],
+        "headSha": "abc123",
+        "fork": true,
         "unresolvedThreads": 2
       }
     }
   ],
   "status": [
     "a status line"
-  ]
+  ],
+  "requestState": "ok"
 }

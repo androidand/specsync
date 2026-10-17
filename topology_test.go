@@ -833,7 +833,7 @@ func TestChangeTopology_JSONShapeGolden(t *testing.T) {
 		Branch: "feat/42-add-thing", Worktree: "/work/add-thing", Epic: "https://github.com/acme/planning/issues/1", Linked: []string{"other"},
 		Tasks: &TaskCount{Done: 2, Total: 5},
 		Local: &LocalState{
-			Modified: 1, Untracked: 2, Upstream: "origin/feat/42-add-thing", Ahead: 1, UpstreamBehind: 0,
+			Head: "abc123", Modified: 1, Untracked: 2, Upstream: "origin/feat/42-add-thing", Ahead: 1, UpstreamBehind: 0,
 			Base: "origin/main", BehindBase: 3, Size: &BranchSize{Files: 4, Additions: 50, Deletions: 6, Commits: 2},
 			LastCommit: "2026-01-02T03:04:05Z", VolatilePath: true, BaseMovedAt: "2026-01-02T03:00:00Z",
 			BaseTouchesYourFiles: []string{"a.go"}, Conflicts: []string{"a.go"}, ConflictCheckUnavailable: true, SharedBranch: true,
@@ -845,10 +845,10 @@ func TestChangeTopology_JSONShapeGolden(t *testing.T) {
 			ReviewDecision: "approved", Mergeable: "mergeable",
 			Checks:        ChangeRequestChecks{Pass: 3, Fail: 1, Pending: 0, Failing: []string{"unit"}},
 			Size:          ChangeRequestSize{Files: 4, Additions: 50, Deletions: 6, Commits: 2},
-			ReviewStarted: true, Closes: []string{"42"}, UnresolvedThreads: &two,
+			ReviewStarted: true, Closes: []string{"42"}, UnresolvedThreads: &two, HeadSHA: "abc123", Fork: true,
 		},
 	}
-	got, err := json.MarshalIndent(Topology{Changes: []ChangeTopology{row}, Status: []string{"a status line"}}, "", "  ")
+	got, err := json.MarshalIndent(Topology{Changes: []ChangeTopology{row}, Status: []string{"a status line"}, RequestState: "ok"}, "", "  ")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -869,5 +869,32 @@ func TestChangeTopology_JSONShapeGolden(t *testing.T) {
 	}
 	if string(want) != string(got) {
 		t.Fatalf("status -json shape changed; additive changes only. If deliberate: UPDATE_GOLDEN=1 go test . -run JSONShapeGolden\n%s", got)
+	}
+}
+
+func TestBuildTopology_RequestStateSaysWhetherRequestsWereLookedUp(t *testing.T) {
+	for _, c := range []struct {
+		name  string
+		setup func(*TopologyOptions)
+		want  string
+	}{
+		{"looked up", func(o *TopologyOptions) {}, "ok"},
+		{"provider failed", func(o *TopologyOptions) {
+			o.changeRequests = func(context.Context, string) (*ChangeRequestSet, error) { return nil, errors.New("down") }
+		}, "omitted"},
+		{"-state=off", func(o *TopologyOptions) { o.LocalOnly = true }, "off"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			var asked []string
+			opts := requestFixture(t, &asked)
+			c.setup(&opts)
+			topo, err := BuildTopology(context.Background(), opts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if topo.RequestState != c.want {
+				t.Fatalf("requestState = %q, want %q", topo.RequestState, c.want)
+			}
+		})
 	}
 }

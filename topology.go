@@ -19,6 +19,10 @@ import (
 type Topology struct {
 	Changes []ChangeTopology `json:"changes"`
 	Status  []string         `json:"status,omitempty"`
+	// RequestState says whether request lookups happened: "ok", "omitted"
+	// (a provider failed) or "off" (-state=off). Empty when none was needed.
+	// An absent pr block only means "no request" when this is "ok".
+	RequestState string `json:"requestState,omitempty"`
 }
 
 // ChangeTopology is one row of the join.
@@ -206,6 +210,10 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 	epicLabel := map[string]bool{}
 	ghDown := opts.LocalOnly
 	requestSets := map[string]*ChangeRequestSet{}
+	requestState := ""
+	if opts.LocalOnly {
+		requestState = "off"
+	}
 	requestsFailed := map[string]bool{}
 
 	// resolveWorktree finds a change's worktree: by slug, then by the issue
@@ -254,8 +262,12 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 				}
 				if err != nil {
 					requestsFailed[row.Repo] = true
+					requestState = "omitted"
 					addStatus("request state omitted for %s: %s", row.Repo, errReason(err))
 				} else {
+					if requestState == "" {
+						requestState = "ok"
+					}
 					set = got
 					requestSets[row.Repo] = got
 					if got != nil && got.Truncated {
@@ -404,7 +416,7 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 
 	sort.Slice(rows, func(i, j int) bool { return rows[i].Slug < rows[j].Slug })
 
-	return &Topology{Changes: rows, Status: status}, nil
+	return &Topology{Changes: rows, Status: status, RequestState: requestState}, nil
 }
 
 // fetchIssueState returns an issue's open/closed state via gh.

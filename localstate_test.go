@@ -245,3 +245,18 @@ func TestLocalState_BaseOverrideAndFallback(t *testing.T) {
 		t.Fatalf("an unknown base must fall back to origin/HEAD, got %q", ls.Base)
 	}
 }
+
+func TestLocalState_HeadIsTheCheckedOutCommit(t *testing.T) {
+	clone, _ := repoWithOrigin(t)
+	ls := collect(t, clone)
+	if want := gitFixture(t, clone, "rev-parse", "HEAD"); ls.Head != want {
+		t.Fatalf("head = %q, want %q", ls.Head, want)
+	}
+}
+
+func TestCollectLocalState_ErrorCarriesGitsOwnMessage(t *testing.T) {
+	_, err := CollectLocalState(context.Background(), t.TempDir(), LocalStateOptions{})
+	if err == nil || !strings.Contains(err.Error(), "not a git repository") {
+		t.Fatalf("expected git's reason in the error, got %v", err)
+	}
+}

@@ -3,7 +3,6 @@ package specsync
 import (
 	"context"
 	"sort"
-	"strings"
 )
 
 // ChangeRequest is a pull or merge request as the work provider reports it.
@@ -21,6 +20,11 @@ type ChangeRequest struct {
 	Size           ChangeRequestSize   `json:"size"`
 	ReviewStarted  bool                `json:"reviewStarted,omitempty"` // any review or comment exists
 	Closes         []string            `json:"closes,omitempty"`        // issue numbers it closes
+	// HeadSHA is the commit the request's head branch pointed at.
+	HeadSHA string `json:"headSha,omitempty"`
+	// Fork is true when the request comes from another repository, so its head
+	// branch name says nothing about branches in this one.
+	Fork bool `json:"fork,omitempty"`
 	// UnresolvedThreads is the count of unresolved review threads on an open
 	// request. nil means the provider did not say, which is not the same as 0.
 	UnresolvedThreads *int `json:"unresolvedThreads,omitempty"`
@@ -61,7 +65,7 @@ func (s ChangeRequestSet) ForBranch(branch string) *ChangeRequest {
 	var best *ChangeRequest
 	for i := range s.Requests {
 		c := &s.Requests[i]
-		if c.Branch != branch {
+		if c.Branch != branch || c.Fork {
 			continue
 		}
 		switch {
@@ -82,44 +86,59 @@ func (s ChangeRequestSet) ForBranch(branch string) *ChangeRequest {
 	return &cp
 }
 
-// RowAttention derives a row's attention flags from its local state and
-// request, in the documented vocabulary order. Either may be nil. Each flag is
-// a deterministic predicate over the facts.
+// attentionRules is the one table of attention flags, in the documented
+// vocabulary order. Each rule is a deterministic predicate over the row's
+// local state and request; either may be nil. See the status-state spec.
+var attentionRules = []struct {
+	flag string
+	when func(ls *LocalState, cr *ChangeRequest) bool
+}{
+	{"unpushed", func(ls *LocalState, _ *ChangeRequest) bool { return ls != nil && ls.Ahead > 0 }},
+	{"uncommitted", func(ls *LocalState, _ *ChangeRequest) bool { return ls != nil && ls.Modified+ls.Untracked > 0 }},
+	{"no-upstream", func(ls *LocalState, _ *ChangeRequest) bool { return ls != nil && ls.Upstream == "" }},
+	{"behind-upstream", func(ls *LocalState, _ *ChangeRequest) bool {
+		return ls != nil && ls.UpstreamBehind > 0 && ls.Ahead == 0
+	}},
+	{"diverged", func(ls *LocalState, _ *ChangeRequest) bool { return ls != nil && ls.UpstreamBehind > 0 && ls.Ahead > 0 }},
+	{"behind-base", func(ls *LocalState, _ *ChangeRequest) bool { return ls != nil && ls.BehindBase > 0 }},
+	{"base-touches-your-files", func(ls *LocalState, _ *ChangeRequest) bool { return ls != nil && len(ls.BaseTouchesYourFiles) > 0 }},
+	{"conflicts-with-base", func(ls *LocalState, _ *ChangeRequest) bool { return ls != nil && len(ls.Conflicts) > 0 }},
+	{"ci-failing", func(_ *LocalState, cr *ChangeRequest) bool { return isOpen(cr) && cr.Checks.Fail > 0 }},
+	{"changes-requested", func(_ *LocalState, cr *ChangeRequest) bool {
+		return isOpen(cr) && cr.ReviewDecision == "changes_requested"
+	}},
+	{"review-missing", func(_ *LocalState, cr *ChangeRequest) bool {
+		return isOpen(cr) && !cr.Draft && !cr.ReviewStarted && cr.ReviewDecision != "approved"
+	}},
+	{"unresolved-comments", func(_ *LocalState, cr *ChangeRequest) bool {
+		return isOpen(cr) && cr.UnresolvedThreads != nil && *cr.UnresolvedThreads > 0
+	}},
+	{"volatile-path", func(ls *LocalState, _ *ChangeRequest) bool { return ls != nil && ls.VolatilePath }},
+	// cleanup: the request is merged, the tree is clean, and no commit was made
+	// since the merged one (a reused branch name must not read as finished).
+	{"cleanup", func(ls *LocalState, cr *ChangeRequest) bool {
+		if cr == nil || cr.State != "merged" || ls == nil || ls.Modified+ls.Untracked != 0 {
+			return false
+		}
+		return cr.HeadSHA == "" || ls.Head == "" || cr.HeadSHA == ls.Head
+	}},
+	{"ready-to-merge", func(_ *LocalState, cr *ChangeRequest) bool {
+		return isOpen(cr) && !cr.Draft && cr.ReviewDecision == "approved" && cr.Checks.Fail == 0 &&
+			cr.Checks.Pending == 0 && cr.Mergeable == "mergeable" &&
+			(cr.UnresolvedThreads == nil || *cr.UnresolvedThreads == 0)
+	}},
+}
+
+func isOpen(cr *ChangeRequest) bool { return cr != nil && cr.State == "open" }
+
+// RowAttention derives a row's attention flags from the rule table, in
+// vocabulary order. Either argument may be nil.
 func RowAttention(ls *LocalState, cr *ChangeRequest) []string {
 	var flags []string
-	volatile := false
-	if ls != nil {
-		for _, f := range LocalAttention(*ls) {
-			if f == "volatile-path" {
-				volatile = true
-				continue
-			}
-			flags = append(flags, f)
+	for _, r := range attentionRules {
+		if r.when(ls, cr) {
+			flags = append(flags, r.flag)
 		}
-	}
-	open := cr != nil && cr.State == "open"
-	if open && cr.Checks.Fail > 0 {
-		flags = append(flags, "ci-failing")
-	}
-	if open && cr.ReviewDecision == "changes_requested" {
-		flags = append(flags, "changes-requested")
-	}
-	if open && !cr.Draft && !cr.ReviewStarted && cr.ReviewDecision != "approved" {
-		flags = append(flags, "review-missing")
-	}
-	if open && cr.UnresolvedThreads != nil && *cr.UnresolvedThreads > 0 {
-		flags = append(flags, "unresolved-comments")
-	}
-	if volatile {
-		flags = append(flags, "volatile-path")
-	}
-	if cr != nil && cr.State == "merged" && ls != nil && ls.Modified+ls.Untracked == 0 {
-		flags = append(flags, "cleanup")
-	}
-	if open && !cr.Draft && cr.ReviewDecision == "approved" && cr.Checks.Fail == 0 &&
-		cr.Checks.Pending == 0 && cr.Mergeable == "mergeable" &&
-		(cr.UnresolvedThreads == nil || *cr.UnresolvedThreads == 0) {
-		flags = append(flags, "ready-to-merge")
 	}
 	return flags
 }
@@ -136,5 +155,3 @@ func sortedUnique(in []string) []string {
 	sort.Strings(out)
 	return out
 }
-
-func lower(s string) string { return strings.ToLower(s) }

@@ -275,3 +275,12 @@ func TestPrintCurrentStatus_OfflineSaysNothingAboutRequests(t *testing.T) {
 		t.Errorf("with -state=off a missing request is unknown, not none:\n%s", out)
 	}
 }
+
+func TestPrintCurrentStatus_FailedLookupIsNotPrintedAsNone(t *testing.T) {
+	// the caller passes requestsKnown=false for a failed listing, same as -state=off
+	row := specsync.ChangeTopology{Slug: "x", Stage: "active", Branch: "feat/x", Worktree: "/w", Local: &specsync.LocalState{Upstream: "origin/feat/x"}}
+	out := captureStdout(t, func() { printCurrentStatus(row, false) })
+	if strings.Contains(out, "pr: none") {
+		t.Errorf("unknown must not read as none:\n%s", out)
+	}
+}
