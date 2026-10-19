@@ -898,3 +898,38 @@ func TestBuildTopology_RequestStateSaysWhetherRequestsWereLookedUp(t *testing.T)
 		})
 	}
 }
+
+func TestBuildTopology_AnOpenNonDraftRequestIsUnderReview(t *testing.T) {
+	adviceFor := func(cr ChangeRequest) *SyncAdvice {
+		var asked []string
+		opts := requestFixture(t, &asked)
+		opts.localState = func(context.Context, string, LocalStateOptions) (*LocalState, error) {
+			return &LocalState{Upstream: "origin/x", Base: "origin/main", BehindBase: 1}, nil
+		}
+		cr.Number, cr.Branch = 7, "feat/4231-add-field-forms"
+		opts.changeRequests = func(context.Context, string) (*ChangeRequestSet, error) {
+			return &ChangeRequestSet{Requests: []ChangeRequest{cr}}, nil
+		}
+		topo, err := BuildTopology(context.Background(), opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return topo.Changes[0].Sync
+	}
+	// Nobody has commented, but a self-review never shows up on GitHub: open means in review.
+	if got := adviceFor(ChangeRequest{State: "open"}); got == nil || got.Action != "merge-base" || got.ForcePush {
+		t.Fatalf("open, no comments: %+v", got)
+	}
+	// Automated comments change nothing: it was already under review.
+	if got := adviceFor(ChangeRequest{State: "open", ReviewStarted: true}); got == nil || got.Action != "merge-base" {
+		t.Fatalf("open, bot comments: %+v", got)
+	}
+	// A draft is still the author's own: rebase is fine.
+	if got := adviceFor(ChangeRequest{State: "open", Draft: true, ReviewStarted: true}); got == nil || got.Action != "rebase-onto-base" {
+		t.Fatalf("draft: %+v", got)
+	}
+	// No request yet, or a closed one: not under review.
+	if got := adviceFor(ChangeRequest{State: "closed"}); got == nil || got.Action != "rebase-onto-base" {
+		t.Fatalf("closed: %+v", got)
+	}
+}

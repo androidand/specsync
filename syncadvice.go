@@ -11,7 +11,10 @@ type SyncAdvice struct {
 
 // SyncInput is the provider fact the advice needs beyond local git state.
 type SyncInput struct {
-	ReviewStarted bool // the request has any review or comment
+	// UnderReview is true when an open, non-draft request exists. GitHub never
+	// records an author's own review, so an open request is the signal that
+	// review is under way; bot and AI comments do not change it.
+	UnderReview bool
 }
 
 // SyncConfig is the `sync:` section of openspec/specsync.yml. Zero values mean
@@ -29,7 +32,7 @@ type SyncConfig struct {
 //	only behind upstream          fast-forward
 //	diverged from upstream        rebase local commits onto upstream; no force
 //	behind base, shared branch    merge the base; never force
-//	behind base, review started   after_review (default merge)
+//	behind base, under review     after_review (default merge)
 //	behind base, otherwise        strategy (default rebase); force with lease if pushed
 func SuggestSync(ls LocalState, in SyncInput, cfg SyncConfig) *SyncAdvice {
 	switch {
@@ -53,9 +56,9 @@ func baseAdvice(ls LocalState, in SyncInput, cfg SyncConfig) *SyncAdvice {
 	case ls.SharedBranch:
 		merge.Summary = "merge " + ls.Base + " (others share this branch); no force push needed"
 		return merge
-	case in.ReviewStarted:
+	case in.UnderReview:
 		if cfg.AfterReview != "rebase" {
-			merge.Summary = "merge " + ls.Base + " (review has started); no force push needed"
+			merge.Summary = "merge " + ls.Base + " (it is under review); no force push needed"
 			return merge
 		}
 	default:

@@ -31,7 +31,7 @@ func TestSuggestSync_Table(t *testing.T) {
 		{"base moved, shared branch: merge, never force", with(func(l *LocalState) { l.BehindBase = 2; l.SharedBranch = true }),
 			SyncInput{}, "merge-base", []string{"git merge origin/main"}, false},
 		{"base moved, review started: merge keeps comments attached", with(func(l *LocalState) { l.BehindBase = 2 }),
-			SyncInput{ReviewStarted: true}, "merge-base", []string{"git merge origin/main"}, false},
+			SyncInput{UnderReview: true}, "merge-base", []string{"git merge origin/main"}, false},
 		{"base moved, private and pushed: rebase with lease", with(func(l *LocalState) { l.BehindBase = 2 }),
 			SyncInput{}, "rebase-onto-base", []string{"git rebase origin/main", "git push --force-with-lease"}, true},
 		{"base moved, private and never pushed: rebase, no force", LocalState{Base: "origin/main", BehindBase: 2},
@@ -69,7 +69,7 @@ func TestSuggestSync_SharedBranchIsNeverForcePushedWhateverTheConfig(t *testing.
 		{Strategy: "rebase"},
 		{Strategy: "merge"},
 	} {
-		got := SuggestSync(ls, SyncInput{ReviewStarted: true}, cfg)
+		got := SuggestSync(ls, SyncInput{UnderReview: true}, cfg)
 		if got.ForcePush || got.Action != "merge-base" {
 			t.Fatalf("shared branch with %+v: %+v", cfg, got)
 		}
@@ -84,7 +84,7 @@ func TestSuggestSync_ConfigChangesTheStrategy(t *testing.T) {
 		t.Fatalf("strategy merge: %+v", got)
 	}
 
-	got = SuggestSync(ls, SyncInput{ReviewStarted: true}, SyncConfig{AfterReview: "rebase"})
+	got = SuggestSync(ls, SyncInput{UnderReview: true}, SyncConfig{AfterReview: "rebase"})
 	if got.Action != "rebase-onto-base" || !got.ForcePush {
 		t.Fatalf("after_review rebase: %+v", got)
 	}

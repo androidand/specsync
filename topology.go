@@ -296,7 +296,7 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 
 		row.Attention = RowAttention(ls, cr)
 		if ls != nil {
-			row.Sync = SuggestSync(*ls, SyncInput{ReviewStarted: cr != nil && cr.ReviewStarted}, opts.Sync)
+			row.Sync = SuggestSync(*ls, SyncInput{UnderReview: cr != nil && cr.State == "open" && !cr.Draft}, opts.Sync)
 		}
 	}
 
