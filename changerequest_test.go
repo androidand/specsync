@@ -98,8 +98,8 @@ func TestGitHubChangeRequests_AskesOnceForAllStatesAndMapsEveryField(t *testing.
 	if want := (ChangeRequestSize{Files: 5, Additions: 120, Deletions: 8}); open.Size != want {
 		t.Fatalf("size = %+v, want %+v", open.Size, want)
 	}
-	if !open.ReviewStarted || !reflect.DeepEqual(open.Closes, []string{"4231"}) {
-		t.Fatalf("reviewStarted/closes = %v/%v", open.ReviewStarted, open.Closes)
+	if !reflect.DeepEqual(open.Closes, []string{"4231"}) {
+		t.Fatalf("closes = %v", open.Closes)
 	}
 
 	failing := byNum[9]
@@ -111,9 +111,6 @@ func TestGitHubChangeRequests_AskesOnceForAllStatesAndMapsEveryField(t *testing.
 	}
 	if !reflect.DeepEqual(failing.Checks.Failing, []string{"ci/legacy", "unit"}) {
 		t.Fatalf("failing names = %v, want sorted [ci/legacy unit]", failing.Checks.Failing)
-	}
-	if !failing.ReviewStarted {
-		t.Fatal("a comment counts as review started")
 	}
 	if byNum[3].State != "merged" {
 		t.Fatalf("merged PR state = %q", byNum[3].State)
@@ -171,7 +168,7 @@ func TestChangeRequestsByBranch_PrefersOpenThenNewest(t *testing.T) {
 func TestRowAttention_RequestFlags(t *testing.T) {
 	clean := &LocalState{Upstream: "origin/x"}
 	open := func(f func(*ChangeRequest)) *ChangeRequest {
-		cr := &ChangeRequest{State: "open", ReviewDecision: "approved", Mergeable: "mergeable", ReviewStarted: true}
+		cr := &ChangeRequest{State: "open", ReviewDecision: "approved", Mergeable: "mergeable"}
 		if f != nil {
 			f(cr)
 		}
@@ -187,8 +184,6 @@ func TestRowAttention_RequestFlags(t *testing.T) {
 		{"ci failing blocks ready", clean, open(func(c *ChangeRequest) { c.Checks.Fail = 1 }), []string{"ci-failing"}},
 		{"pending checks block ready", clean, open(func(c *ChangeRequest) { c.Checks.Pending = 1 }), nil},
 		{"changes requested", clean, open(func(c *ChangeRequest) { c.ReviewDecision = "changes_requested" }), []string{"changes-requested"}},
-		{"review missing", clean, open(func(c *ChangeRequest) { c.ReviewDecision = ""; c.ReviewStarted = false }), []string{"review-missing"}},
-		{"draft is not missing a review", clean, open(func(c *ChangeRequest) { c.ReviewDecision = ""; c.ReviewStarted = false; c.Draft = true }), nil},
 		{"conflicting is not ready", clean, open(func(c *ChangeRequest) { c.Mergeable = "conflicting" }), nil},
 		{"merged and clean means cleanup", clean, &ChangeRequest{State: "merged"}, []string{"cleanup"}},
 		{"merged but dirty is not cleanup", &LocalState{Upstream: "origin/x", Modified: 1}, &ChangeRequest{State: "merged"}, []string{"uncommitted"}},
@@ -278,7 +273,7 @@ func TestRowAttention_UnresolvedComments(t *testing.T) {
 	two := 2
 	zero := 0
 	open := func(n *int) *ChangeRequest {
-		return &ChangeRequest{State: "open", ReviewStarted: true, UnresolvedThreads: n}
+		return &ChangeRequest{State: "open", UnresolvedThreads: n}
 	}
 	if got := RowAttention(nil, open(&two)); !reflect.DeepEqual(got, []string{"unresolved-comments"}) {
 		t.Fatalf("got %v", got)
@@ -289,7 +284,7 @@ func TestRowAttention_UnresolvedComments(t *testing.T) {
 		}
 	}
 	// approved + clean + unresolved threads is not ready to merge
-	cr := &ChangeRequest{State: "open", ReviewDecision: "approved", Mergeable: "mergeable", ReviewStarted: true, UnresolvedThreads: &two}
+	cr := &ChangeRequest{State: "open", ReviewDecision: "approved", Mergeable: "mergeable", UnresolvedThreads: &two}
 	for _, f := range RowAttention(nil, cr) {
 		if f == "ready-to-merge" {
 			t.Fatal("unresolved threads block ready-to-merge")

@@ -18,8 +18,7 @@ type ChangeRequest struct {
 	Mergeable      string              `json:"mergeable,omitempty"`      // mergeable, conflicting, unknown
 	Checks         ChangeRequestChecks `json:"checks"`
 	Size           ChangeRequestSize   `json:"size"`
-	ReviewStarted  bool                `json:"reviewStarted,omitempty"` // any review or comment exists
-	Closes         []string            `json:"closes,omitempty"`        // issue numbers it closes
+	Closes         []string            `json:"closes,omitempty"` // issue numbers it closes
 	// HeadSHA is the commit the request's head branch pointed at.
 	HeadSHA string `json:"headSha,omitempty"`
 	// Fork is true when the request comes from another repository, so its head
@@ -106,9 +105,6 @@ var attentionRules = []struct {
 	{"ci-failing", func(_ *LocalState, cr *ChangeRequest) bool { return isOpen(cr) && cr.Checks.Fail > 0 }},
 	{"changes-requested", func(_ *LocalState, cr *ChangeRequest) bool {
 		return isOpen(cr) && cr.ReviewDecision == "changes_requested"
-	}},
-	{"review-missing", func(_ *LocalState, cr *ChangeRequest) bool {
-		return isOpen(cr) && !cr.Draft && !cr.ReviewStarted && cr.ReviewDecision != "approved"
 	}},
 	{"unresolved-comments", func(_ *LocalState, cr *ChangeRequest) bool {
 		return isOpen(cr) && cr.UnresolvedThreads != nil && *cr.UnresolvedThreads > 0

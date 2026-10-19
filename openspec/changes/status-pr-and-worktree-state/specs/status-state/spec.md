@@ -114,7 +114,7 @@ behind the base where policy requires it.
 ### Requirement: Derive attention flags from a fixed vocabulary
 specsync SHALL compute `attention` only from the documented rules, using exactly
 these flags: `unpushed`, `uncommitted`, `no-upstream`, `behind-upstream`, `diverged`, `behind-base`,
-`base-touches-your-files`, `conflicts-with-base`, `ci-failing`, `changes-requested`, `review-missing`,
+`base-touches-your-files`, `conflicts-with-base`, `ci-failing`, `changes-requested`,
 `unresolved-comments`, `volatile-path`, `cleanup`, and the positive `ready-to-merge`.
 Each flag SHALL be a deterministic predicate over the row's facts. `cleanup` SHALL
 mean only that the PR is merged and the worktree is clean, and SHALL NOT trigger

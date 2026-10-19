@@ -26,21 +26,19 @@ type ghCheck struct {
 }
 
 type ghChangeRequest struct {
-	Number         int               `json:"number"`
-	URL            string            `json:"url"`
-	State          string            `json:"state"`
-	IsDraft        bool              `json:"isDraft"`
-	HeadRefName    string            `json:"headRefName"`
-	HeadRefOid     string            `json:"headRefOid"`
-	CrossRepo      bool              `json:"isCrossRepository"`
-	BaseRefName    string            `json:"baseRefName"`
-	ReviewDecision string            `json:"reviewDecision"`
-	Mergeable      string            `json:"mergeable"`
-	Additions      int               `json:"additions"`
-	Deletions      int               `json:"deletions"`
-	ChangedFiles   int               `json:"changedFiles"`
-	Reviews        []json.RawMessage `json:"reviews"`
-	Comments       []json.RawMessage `json:"comments"`
+	Number         int    `json:"number"`
+	URL            string `json:"url"`
+	State          string `json:"state"`
+	IsDraft        bool   `json:"isDraft"`
+	HeadRefName    string `json:"headRefName"`
+	HeadRefOid     string `json:"headRefOid"`
+	CrossRepo      bool   `json:"isCrossRepository"`
+	BaseRefName    string `json:"baseRefName"`
+	ReviewDecision string `json:"reviewDecision"`
+	Mergeable      string `json:"mergeable"`
+	Additions      int    `json:"additions"`
+	Deletions      int    `json:"deletions"`
+	ChangedFiles   int    `json:"changedFiles"`
 	Closing        []struct {
 		Number int `json:"number"`
 	} `json:"closingIssuesReferences"`
@@ -83,7 +81,7 @@ func (p *GitHubProvider) listChangeRequests(ctx context.Context, state string, l
 	args := append([]string{"pr", "list"}, p.repoFlag()...)
 	args = append(args, "--state", state, "--limit", strconv.Itoa(limit), "--json",
 		"number,url,state,isDraft,headRefName,headRefOid,isCrossRepository,baseRefName,reviewDecision,mergeable,"+
-			"additions,deletions,changedFiles,reviews,comments,closingIssuesReferences,statusCheckRollup")
+			"additions,deletions,changedFiles,closingIssuesReferences,statusCheckRollup")
 	out, err := p.run(ctx, args...)
 	if err != nil {
 		return nil, err
@@ -178,7 +176,6 @@ func (r ghChangeRequest) toChangeRequest() ChangeRequest {
 		ReviewDecision: strings.ToLower(r.ReviewDecision),
 		Mergeable:      strings.ToLower(r.Mergeable),
 		Size:           ChangeRequestSize{Files: r.ChangedFiles, Additions: r.Additions, Deletions: r.Deletions},
-		ReviewStarted:  len(r.Reviews)+len(r.Comments) > 0,
 	}
 	for _, c := range r.Closing {
 		cr.Closes = append(cr.Closes, strconv.Itoa(c.Number))

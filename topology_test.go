@@ -495,7 +495,7 @@ func requestFixture(t *testing.T, calls *[]string) TopologyOptions {
 		*calls = append(*calls, repo)
 		return &ChangeRequestSet{Requests: []ChangeRequest{{
 			Number: 7, State: "open", Branch: "feat/4231-add-field-forms",
-			ReviewDecision: "approved", Mergeable: "mergeable", ReviewStarted: true,
+			ReviewDecision: "approved", Mergeable: "mergeable",
 			Checks: ChangeRequestChecks{Pass: 4},
 		}}}, nil
 	}
@@ -843,9 +843,9 @@ func TestChangeTopology_JSONShapeGolden(t *testing.T) {
 		PR: &ChangeRequest{
 			Number: 7, URL: "https://github.com/acme/portal/pull/7", State: "open", Draft: true, Branch: "feat/42-add-thing", Base: "main",
 			ReviewDecision: "approved", Mergeable: "mergeable",
-			Checks:        ChangeRequestChecks{Pass: 3, Fail: 1, Pending: 0, Failing: []string{"unit"}},
-			Size:          ChangeRequestSize{Files: 4, Additions: 50, Deletions: 6, Commits: 2},
-			ReviewStarted: true, Closes: []string{"42"}, UnresolvedThreads: &two, HeadSHA: "abc123", Fork: true,
+			Checks: ChangeRequestChecks{Pass: 3, Fail: 1, Pending: 0, Failing: []string{"unit"}},
+			Size:   ChangeRequestSize{Files: 4, Additions: 50, Deletions: 6, Commits: 2},
+			Closes: []string{"42"}, UnresolvedThreads: &two, HeadSHA: "abc123", Fork: true,
 		},
 	}
 	got, err := json.MarshalIndent(Topology{Changes: []ChangeTopology{row}, Status: []string{"a status line"}, RequestState: "ok"}, "", "  ")
@@ -920,12 +920,8 @@ func TestBuildTopology_AnOpenNonDraftRequestIsUnderReview(t *testing.T) {
 	if got := adviceFor(ChangeRequest{State: "open"}); got == nil || got.Action != "merge-base" || got.ForcePush {
 		t.Fatalf("open, no comments: %+v", got)
 	}
-	// Automated comments change nothing: it was already under review.
-	if got := adviceFor(ChangeRequest{State: "open", ReviewStarted: true}); got == nil || got.Action != "merge-base" {
-		t.Fatalf("open, bot comments: %+v", got)
-	}
 	// A draft is still the author's own: rebase is fine.
-	if got := adviceFor(ChangeRequest{State: "open", Draft: true, ReviewStarted: true}); got == nil || got.Action != "rebase-onto-base" {
+	if got := adviceFor(ChangeRequest{State: "open", Draft: true}); got == nil || got.Action != "rebase-onto-base" {
 		t.Fatalf("draft: %+v", got)
 	}
 	// No request yet, or a closed one: not under review.

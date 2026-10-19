@@ -39,7 +39,7 @@ Suggest: merge main (review has started), no force push needed.
 - Add freshness facts. Has the base moved? Has the branch's own upstream moved? Do they diverge? Do the base's new commits touch files you changed? Would merging the base conflict? All read-only: nothing changes the worktree, index, refs or config. The conflict check uses `git merge-tree`, which may add unreferenced objects to the object store. A rebase replays commits one by one and can conflict where the merge does not, so the advice says so.
 - Add a sync suggestion: a strategy (fast-forward, rebase, merge) with the exact commands, and whether a force push would be needed. It is advice. `status` never runs it.
 - Add request detail: failing check names, unresolved review threads, and a `ready-to-merge` signal.
-- Add `attention` flags: `unpushed`, `uncommitted`, `no-upstream`, `behind-upstream`, `diverged`, `behind-base`, `base-touches-your-files`, `conflicts-with-base`, `ci-failing`, `changes-requested`, `review-missing`, `unresolved-comments`, `volatile-path`, `cleanup`. Plus the positive `ready-to-merge`.
+- Add `attention` flags: `unpushed`, `uncommitted`, `no-upstream`, `behind-upstream`, `diverged`, `behind-base`, `base-touches-your-files`, `conflicts-with-base`, `ci-failing`, `changes-requested`, `unresolved-comments`, `volatile-path`, `cleanup`. Plus the positive `ready-to-merge`.
 - `-state=off` skips the provider. Local facts only, instant.
 - Any source that fails narrows a row. It never fails the command.
 
