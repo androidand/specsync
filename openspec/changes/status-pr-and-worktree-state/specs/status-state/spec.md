@@ -110,6 +110,23 @@ behind the base where policy requires it.
 - **WHEN** a request has three unresolved review threads
 - **THEN** `attention` contains `unresolved-comments` and the count is shown
 
+### Requirement: Require a human review, not only automated comments
+specsync SHALL count a request's reviews by human users other than its author, using the provider's
+own user-type fact and never a name guess. Automated and AI reviews and comments SHALL still mark the
+review as started, so advice keeps review comments attached, but SHALL NOT satisfy the human review
+requirement. `review-missing` SHALL be raised for an open, non-draft request with no human review, and
+`ready-to-merge` SHALL require one. When the provider does not report the count, specsync SHALL fall
+back to whether any review has started.
+
+#### Scenario: Only an AI review
+- **WHEN** an open request has a review by an automated reviewer and none by a human
+- **THEN** `review-missing` is raised and `ready-to-merge` is not
+- **AND** the sync suggestion still treats the review as started
+
+#### Scenario: Author reviews their own request
+- **WHEN** the only human review is by the request's author
+- **THEN** it does not count and `review-missing` is raised
+
 ### Requirement: Derive attention flags from a fixed vocabulary
 specsync SHALL compute `attention` only from the documented rules, using exactly
 these flags: `unpushed`, `uncommitted`, `no-upstream`, `behind-upstream`, `diverged`, `behind-base`,

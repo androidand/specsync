@@ -28,6 +28,10 @@ type ChangeRequest struct {
 	// UnresolvedThreads is the count of unresolved review threads on an open
 	// request. nil means the provider did not say, which is not the same as 0.
 	UnresolvedThreads *int `json:"unresolvedThreads,omitempty"`
+	// HumanReviews counts reviews by human users other than the author. Bot and
+	// AI reviews still make ReviewStarted true but do not count here. nil means
+	// the provider did not say.
+	HumanReviews *int `json:"humanReviews,omitempty"`
 }
 
 // ChangeRequestChecks summarises the request's checks.
@@ -107,8 +111,17 @@ var attentionRules = []struct {
 	{"changes-requested", func(_ *LocalState, cr *ChangeRequest) bool {
 		return isOpen(cr) && cr.ReviewDecision == "changes_requested"
 	}},
+	// review-missing: a human other than the author has not reviewed. Bot and AI
+	// comments are partial review (ReviewStarted) but never enough. When the
+	// provider did not count human reviews, fall back to "no review started".
 	{"review-missing", func(_ *LocalState, cr *ChangeRequest) bool {
-		return isOpen(cr) && !cr.Draft && !cr.ReviewStarted && cr.ReviewDecision != "approved"
+		if !isOpen(cr) || cr.Draft {
+			return false
+		}
+		if cr.HumanReviews != nil {
+			return *cr.HumanReviews == 0
+		}
+		return !cr.ReviewStarted && cr.ReviewDecision != "approved"
 	}},
 	{"unresolved-comments", func(_ *LocalState, cr *ChangeRequest) bool {
 		return isOpen(cr) && cr.UnresolvedThreads != nil && *cr.UnresolvedThreads > 0
@@ -125,7 +138,8 @@ var attentionRules = []struct {
 	{"ready-to-merge", func(_ *LocalState, cr *ChangeRequest) bool {
 		return isOpen(cr) && !cr.Draft && cr.ReviewDecision == "approved" && cr.Checks.Fail == 0 &&
 			cr.Checks.Pending == 0 && cr.Mergeable == "mergeable" &&
-			(cr.UnresolvedThreads == nil || *cr.UnresolvedThreads == 0)
+			(cr.UnresolvedThreads == nil || *cr.UnresolvedThreads == 0) &&
+			(cr.HumanReviews == nil || *cr.HumanReviews > 0)
 	}},
 }
 

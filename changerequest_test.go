@@ -21,8 +21,17 @@ func fakeGHJSON(out string, calls *[][]string) func(context.Context, ...string) 
 }
 
 const threadsFixture = `{"data":{"repository":{"pullRequests":{"nodes":[
- {"number":7,"reviewThreads":{"nodes":[{"isResolved":false},{"isResolved":true},{"isResolved":false}]}},
- {"number":9,"reviewThreads":{"nodes":[{"isResolved":true}]}}
+ {"number":7,"author":{"login":"alice"},
+  "reviewThreads":{"nodes":[{"isResolved":false},{"isResolved":true},{"isResolved":false}]},
+  "reviews":{"nodes":[
+    {"author":{"__typename":"Bot","login":"copilot-pull-request-reviewer"}},
+    {"author":{"__typename":"User","login":"Alice"}},
+    {"author":{"__typename":"User","login":"bob"}}]}},
+ {"number":9,"author":{"login":"alice"},
+  "reviewThreads":{"nodes":[{"isResolved":true}]},
+  "reviews":{"nodes":[
+    {"author":{"__typename":"Bot","login":"copilot-pull-request-reviewer"}},
+    {"author":{"__typename":"User","login":"alice"}}]}}
 ]}}}}`
 
 const prListFixture = `[
@@ -407,5 +416,82 @@ func TestGitHubChangeRequests_ShortPageNeedsNoSecondListing(t *testing.T) {
 	}
 	if n != 1 {
 		t.Fatalf("a short page is complete; got %d listings", n)
+	}
+}
+
+func TestGitHubChangeRequests_CountsOnlyHumanReviewsByOthers(t *testing.T) {
+	p := NewGitHubProviderFuncWithRepo("acme/portal", func(_ context.Context, args ...string) (string, error) {
+		if args[0] == "api" {
+			return threadsFixture, nil
+		}
+		return prListFixture, nil
+	})
+	set, err := p.ChangeRequests(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	by := map[int]ChangeRequest{}
+	for _, c := range set.Requests {
+		by[c.Number] = c
+	}
+	// #7: a bot review and the author's own review do not count; bob's does.
+	if got := by[7].HumanReviews; got == nil || *got != 1 {
+		t.Fatalf("PR 7 human reviews = %v, want 1", got)
+	}
+	// #9: only a bot and the author.
+	if got := by[9].HumanReviews; got == nil || *got != 0 {
+		t.Fatalf("PR 9 human reviews = %v, want 0", got)
+	}
+	if by[3].HumanReviews != nil {
+		t.Fatal("a merged PR is not asked")
+	}
+	if !by[9].ReviewStarted {
+		t.Fatal("bot and AI comments still count as a review having started")
+	}
+}
+
+func TestGitHubChangeRequests_UnknownHumanReviewsWithoutGraphQL(t *testing.T) {
+	p := NewGitHubProviderFuncWithRepo("acme/portal", fakeGHJSON(prListFixture, nil))
+	set, _ := p.ChangeRequests(context.Background())
+	for _, c := range set.Requests {
+		if c.HumanReviews != nil {
+			t.Fatalf("unknown must stay unknown, #%d has %d", c.Number, *c.HumanReviews)
+		}
+	}
+}
+
+func TestRowAttention_HumanReviewRule(t *testing.T) {
+	n := func(v int) *int { return &v }
+	approved := func(human *int) *ChangeRequest {
+		return &ChangeRequest{State: "open", ReviewDecision: "approved", Mergeable: "mergeable", ReviewStarted: true, HumanReviews: human}
+	}
+	has := func(flags []string, f string) bool {
+		for _, x := range flags {
+			if x == f {
+				return true
+			}
+		}
+		return false
+	}
+	// Only AI comments so far: review started, but a human review is still missing.
+	got := RowAttention(nil, approved(n(0)))
+	if !has(got, "review-missing") || has(got, "ready-to-merge") {
+		t.Fatalf("no human review: %v", got)
+	}
+	// A human reviewed.
+	got = RowAttention(nil, approved(n(1)))
+	if has(got, "review-missing") || !has(got, "ready-to-merge") {
+		t.Fatalf("one human review: %v", got)
+	}
+	// Unknown falls back to the review decision and whether any review started.
+	got = RowAttention(nil, approved(nil))
+	if has(got, "review-missing") || !has(got, "ready-to-merge") {
+		t.Fatalf("unknown human reviews: %v", got)
+	}
+	// A draft is never asked for a review.
+	d := approved(n(0))
+	d.Draft = true
+	if has(RowAttention(nil, d), "review-missing") {
+		t.Fatal("a draft is not missing a review")
 	}
 }

@@ -284,3 +284,16 @@ func TestPrintCurrentStatus_FailedLookupIsNotPrintedAsNone(t *testing.T) {
 		t.Errorf("unknown must not read as none:\n%s", out)
 	}
 }
+
+func TestRequestLine_NoHumanReviewYet(t *testing.T) {
+	zero, one := 0, 1
+	if got := requestLine(&specsync.ChangeRequest{Number: 4, State: "open", HumanReviews: &zero}); !strings.Contains(got, "no human review") {
+		t.Fatalf("got %q", got)
+	}
+	if got := requestLine(&specsync.ChangeRequest{Number: 4, State: "open", HumanReviews: &one}); strings.Contains(got, "no human review") {
+		t.Fatalf("got %q", got)
+	}
+	if got := requestLine(&specsync.ChangeRequest{Number: 4, State: "open"}); strings.Contains(got, "human") {
+		t.Fatalf("unknown says nothing: %q", got)
+	}
+}

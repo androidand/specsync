@@ -845,7 +845,7 @@ func TestChangeTopology_JSONShapeGolden(t *testing.T) {
 			ReviewDecision: "approved", Mergeable: "mergeable",
 			Checks:        ChangeRequestChecks{Pass: 3, Fail: 1, Pending: 0, Failing: []string{"unit"}},
 			Size:          ChangeRequestSize{Files: 4, Additions: 50, Deletions: 6, Commits: 2},
-			ReviewStarted: true, Closes: []string{"42"}, UnresolvedThreads: &two, HeadSHA: "abc123", Fork: true,
+			ReviewStarted: true, Closes: []string{"42"}, UnresolvedThreads: &two, HumanReviews: &two, HeadSHA: "abc123", Fork: true,
 		},
 	}
 	got, err := json.MarshalIndent(Topology{Changes: []ChangeTopology{row}, Status: []string{"a status line"}, RequestState: "ok"}, "", "  ")
