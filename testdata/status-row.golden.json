@@ -90,8 +90,7 @@
         ],
         "headSha": "abc123",
         "fork": true,
-        "unresolvedThreads": 2,
-        "humanReviews": 2
+        "unresolvedThreads": 2
       }
     }
   ],

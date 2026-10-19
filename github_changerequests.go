@@ -95,7 +95,7 @@ func (p *GitHubProvider) listChangeRequests(ctx context.Context, state string, l
 	return raw, nil
 }
 
-// withThreads fills in review thread and human review counts for open requests.
+// withThreads fills in unresolved review thread counts for open requests.
 // They are a nice-to-have: GraphQL only, and a failure leaves them unknown
 // instead of failing the listing.
 func (set ChangeRequestSet) withThreads(ctx context.Context, p *GitHubProvider) ChangeRequestSet {
@@ -106,36 +106,30 @@ func (set ChangeRequestSet) withThreads(ctx context.Context, p *GitHubProvider) 
 	if !anyOpen {
 		return set
 	}
-	if details, err := p.reviewDetails(ctx); err == nil {
+	if counts, err := p.unresolvedThreads(ctx); err == nil {
 		for i := range set.Requests {
-			if d, ok := details[set.Requests[i].Number]; ok && set.Requests[i].State == "open" {
-				threads, human := d.threads, d.humanReviews
-				set.Requests[i].UnresolvedThreads = &threads
-				set.Requests[i].HumanReviews = &human
+			if n, ok := counts[set.Requests[i].Number]; ok && set.Requests[i].State == "open" {
+				n := n
+				set.Requests[i].UnresolvedThreads = &n
 			}
 		}
 	}
 	return set
 }
 
-// reviewDetail is what the GraphQL call adds to one open request.
-type reviewDetail struct{ threads, humanReviews int }
+const unresolvedThreadsQuery = `query($owner:String!,$name:String!){repository(owner:$owner,name:$name){` +
+	`pullRequests(states:OPEN,first:50,orderBy:{field:UPDATED_AT,direction:DESC}){nodes{number ` +
+	`reviewThreads(first:100){nodes{isResolved}}}}}}`
 
-const reviewDetailQuery = `query($owner:String!,$name:String!){repository(owner:$owner,name:$name){` +
-	`pullRequests(states:OPEN,first:50,orderBy:{field:UPDATED_AT,direction:DESC}){nodes{number author{login} ` +
-	`reviewThreads(first:100){nodes{isResolved}} reviews(first:50){nodes{author{__typename login}}}}}}}`
-
-// reviewDetails returns, per open request number, the unresolved review thread
-// count and the number of reviews by human users other than the request's
-// author, from one GraphQL call (the CLI's listing has neither). The author type
-// ("Bot" or "User") is the provider's own fact, not guessed from a name.
-func (p *GitHubProvider) reviewDetails(ctx context.Context) (map[int]reviewDetail, error) {
+// unresolvedThreads returns the unresolved review thread count per open
+// request number, from one GraphQL call (the CLI's listing has no thread data).
+func (p *GitHubProvider) unresolvedThreads(ctx context.Context) (map[int]int, error) {
 	repo, _ := p.resolveRepo(ctx)
 	owner, name, ok := strings.Cut(repo, "/")
 	if !ok {
 		return nil, fmt.Errorf("repo %q is not owner/name", repo)
 	}
-	out, err := p.run(ctx, "api", "graphql", "-f", "query="+reviewDetailQuery, "-F", "owner="+owner, "-F", "name="+name)
+	out, err := p.run(ctx, "api", "graphql", "-f", "query="+unresolvedThreadsQuery, "-F", "owner="+owner, "-F", "name="+name)
 	if err != nil {
 		return nil, err
 	}
@@ -144,18 +138,7 @@ func (p *GitHubProvider) reviewDetails(ctx context.Context) (map[int]reviewDetai
 			Repository struct {
 				PullRequests struct {
 					Nodes []struct {
-						Number int `json:"number"`
-						Author struct {
-							Login string `json:"login"`
-						} `json:"author"`
-						Reviews struct {
-							Nodes []struct {
-								Author struct {
-									Typename string `json:"__typename"`
-									Login    string `json:"login"`
-								} `json:"author"`
-							} `json:"nodes"`
-						} `json:"reviews"`
+						Number        int `json:"number"`
 						ReviewThreads struct {
 							Nodes []struct {
 								IsResolved bool `json:"isResolved"`
@@ -169,22 +152,17 @@ func (p *GitHubProvider) reviewDetails(ctx context.Context) (map[int]reviewDetai
 	if err := json.Unmarshal([]byte(out), &resp); err != nil {
 		return nil, fmt.Errorf("parse graphql: %w", err)
 	}
-	details := map[int]reviewDetail{}
+	counts := map[int]int{}
 	for _, pr := range resp.Data.Repository.PullRequests.Nodes {
-		var d reviewDetail
+		n := 0
 		for _, th := range pr.ReviewThreads.Nodes {
 			if !th.IsResolved {
-				d.threads++
+				n++
 			}
 		}
-		for _, r := range pr.Reviews.Nodes {
-			if r.Author.Typename == "User" && !strings.EqualFold(r.Author.Login, pr.Author.Login) {
-				d.humanReviews++
-			}
-		}
-		details[pr.Number] = d
+		counts[pr.Number] = n
 	}
-	return details, nil
+	return counts, nil
 }
 
 func (r ghChangeRequest) toChangeRequest() ChangeRequest {
