@@ -26,7 +26,8 @@
     "sync",
     "trace",
     "validate",
-    "verify"
+    "verify",
+    "version"
   ],
   "help": {
     "adopt": {
@@ -1708,6 +1709,21 @@
       ],
       "examples": [
         "specsync verify"
+      ]
+    },
+    "version": {
+      "command": "version",
+      "description": "Print the specsync version.",
+      "mutates": false,
+      "workflow": {
+        "position": "any"
+      },
+      "flags": [],
+      "safety_rules": [
+        "Read-only"
+      ],
+      "examples": [
+        "specsync version"
       ]
     }
   }

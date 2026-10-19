@@ -5,6 +5,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -131,28 +132,28 @@ func namesFromAgentHelpList(t *testing.T) []string {
 	return names
 }
 
-// namesThatDispatch returns the registered names that resolve to themselves
-// and have a case in main's dispatch switch.
+// namesThatDispatch builds the real binary and runs `specsync <name> -h` for
+// each name. A command that is truly reached prints its own flag set's usage
+// ("Usage of <name>:"); anything else does not. This exercises main's dispatch,
+// not the registry the expected names come from.
 func namesThatDispatch(want []string) func(*testing.T) []string {
 	return func(t *testing.T) []string {
-		cases := map[string]bool{}
-		for _, path := range nonTestSources(t) {
-			ast.Inspect(parseFile(t, path), func(n ast.Node) bool {
-				if sw, ok := n.(*ast.SwitchStmt); ok {
-					for _, s := range switchStrings(sw) {
-						cases[s] = true
-					}
-				}
-				return true
-			})
+		if testing.Short() {
+			t.Skip("builds the binary")
+		}
+		bin := filepath.Join(t.TempDir(), "specsync-under-test")
+		if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
+			t.Fatalf("build: %v\n%s", err, out)
 		}
 		var got []string
 		for _, name := range want {
-			cmd, _, err := resolveSubcommand([]string{name})
-			_, registered := lookupCommand(name)
-			if err == nil && cmd == name && (registered || cases[name]) {
+			out, _ := exec.Command(bin, name, "-h").CombinedOutput()
+			if strings.Contains(string(out), "Usage of "+name+":") {
 				got = append(got, name)
 			}
+		}
+		if out, err := exec.Command(bin, "definitely-not-a-command").CombinedOutput(); err == nil || !strings.Contains(string(out), "unknown subcommand") {
+			t.Fatalf("an unregistered word must not dispatch: %v %s", err, out)
 		}
 		return got
 	}

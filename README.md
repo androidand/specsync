@@ -151,6 +151,7 @@ appear on someone else's repository.
 | `agent-help` | Show how to use any specsync command, for people and agents. |
 | `doctor` | Diagnose skill installation, environment, and context health. |
 | `install-skill` | Install the specsync skill for your coding agent. |
+| `version` | Print the specsync version. |
 <!-- specsync:commands:end -->
 
 ### First run, end to end

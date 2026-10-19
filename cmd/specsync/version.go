@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"flag"
 	"fmt"
 	"runtime/debug"
 )
@@ -40,4 +42,32 @@ func versionString() string {
 		return fmt.Sprintf("%s (%s, dirty)", version, revision)
 	}
 	return fmt.Sprintf("%s (%s)", version, revision)
+}
+
+// versionCmd prints the binary version. `-version` and `--version` select it
+// too (see resolveSubcommand).
+type versionCmd struct{}
+
+func init() { Register(&versionCmd{}) }
+
+func (*versionCmd) Spec() Spec {
+	return Spec{
+		Name:     "version",
+		Group:    GroupHousekeeping,
+		Summary:  "Print the specsync version.",
+		Workflow: AgentCommandWorkflow{Position: "any"},
+		Safety:   []string{"Read-only"},
+		Examples: []string{"specsync version"},
+	}
+}
+
+func (*versionCmd) Flags(*flag.FlagSet) {}
+
+func (cm *versionCmd) Run(_ context.Context, args []string) error {
+	fs := flagSetFor(cm)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	fmt.Println("specsync " + versionString())
+	return nil
 }

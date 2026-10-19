@@ -130,6 +130,9 @@ func validateCommand(c Command) error {
 	if strings.TrimSpace(s.Summary) == "" {
 		return fmt.Errorf("%s has no summary", who)
 	}
+	if strings.ContainsAny(s.Summary, "|\n\r") {
+		return fmt.Errorf("%s: the summary must be one line without '|': it is written into markdown tables", who)
+	}
 	known := false
 	for _, g := range groupInfo {
 		known = known || g.Group == s.Group

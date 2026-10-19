@@ -37,15 +37,17 @@ func TestValidateCommandRejectsIncompleteDeclarations(t *testing.T) {
 		t.Fatalf("complete declaration rejected: %v", err)
 	}
 	cases := map[string]func(*fixtureCmd){
-		"no summary":        func(f *fixtureCmd) { f.spec.Summary = " " },
-		"no group":          func(f *fixtureCmd) { f.spec.Group = "" },
-		"undeclared group":  func(f *fixtureCmd) { f.spec.Group = "nonsense" },
-		"no examples":       func(f *fixtureCmd) { f.spec.Examples = nil },
-		"no position":       func(f *fixtureCmd) { f.spec.Workflow.Position = "" },
-		"flag without text": func(f *fixtureCmd) { f.usage = "" },
-		"unknown required":  func(f *fixtureCmd) { f.spec.Required = []string{"missing"} },
-		"bad name":          func(f *fixtureCmd) { f.spec.Name = "Two Words" },
-		"arg without text":  func(f *fixtureCmd) { f.spec.Args = []Arg{{Name: "x"}} },
+		"no summary":         func(f *fixtureCmd) { f.spec.Summary = " " },
+		"no group":           func(f *fixtureCmd) { f.spec.Group = "" },
+		"undeclared group":   func(f *fixtureCmd) { f.spec.Group = "nonsense" },
+		"no examples":        func(f *fixtureCmd) { f.spec.Examples = nil },
+		"no position":        func(f *fixtureCmd) { f.spec.Workflow.Position = "" },
+		"flag without text":  func(f *fixtureCmd) { f.usage = "" },
+		"unknown required":   func(f *fixtureCmd) { f.spec.Required = []string{"missing"} },
+		"bad name":           func(f *fixtureCmd) { f.spec.Name = "Two Words" },
+		"arg without text":   func(f *fixtureCmd) { f.spec.Args = []Arg{{Name: "x"}} },
+		"pipe in summary":    func(f *fixtureCmd) { f.spec.Summary = "Print a | b" },
+		"newline in summary": func(f *fixtureCmd) { f.spec.Summary = "Line one\nline two" },
 	}
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {

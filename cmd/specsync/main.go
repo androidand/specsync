@@ -76,10 +76,6 @@ func main() {
 		return
 	}
 
-	if cmd == "version" {
-		fmt.Println("specsync " + versionString())
-		return
-	}
 	fail(fmt.Errorf("unknown subcommand %q", cmd))
 }
 

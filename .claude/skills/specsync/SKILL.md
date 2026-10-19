@@ -1,6 +1,6 @@
 ---
 name: specsync
-description: Plan and synchronize OpenSpec changes with GitHub Issues using the specsync CLI. Use when asked to create, update, or reconcile an OpenSpec change with a tracker issue, pull an issue into a local change, scan for related work, cross-link changes, or inspect release impact.
+description: Plan and synchronize OpenSpec changes with GitHub Issues using the specsync CLI. Use when asked to create, update, or reconcile an OpenSpec change with a tracker issue, pull an issue into a local change, scan for related work, cross-link changes, inspect release impact, or see where work stands (issues, branches, worktrees, pull requests, unpushed work).
 ---
 
 # SpecSync
@@ -110,6 +110,7 @@ specsync agent-help                # overview
 - `agent-help` — Show how to use any specsync command, for people and agents.
 - `doctor` — Diagnose skill installation, environment, and context health.
 - `install-skill` — Install the specsync skill for your coding agent.
+- `version` — Print the specsync version.
 <!-- specsync:commands:end -->
 
 ## Key Safety Rules
@@ -131,6 +132,6 @@ specsync install-skill --claude-code   # install for Claude Code
 specsync install-skill --all           # every known agent directory: --codex --opencode --copilot --agents
 ```
 
-This file is the entire installed skill — deliberately small so it costs little context by default. Detailed reference material lives in `specsync agent-help` (on-demand, per command) rather than in extra files bundled with the install.
+This file is the entire installed skill — kept compact so it costs little context; its command list is generated from the binary. Detailed reference material lives in `specsync agent-help` (on-demand, per command) rather than in extra files bundled with the install.
 
 For diagnostics: `specsync doctor`
