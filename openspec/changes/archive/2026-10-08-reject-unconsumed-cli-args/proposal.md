@@ -2,18 +2,18 @@
 
 ## Why
 
-Reproduced 2026-09-24 against a real, shared GitHub repo (`ExopenGitHub/portal`):
+Reproduced 2026-09-24 against a real, shared GitHub repo (`example-org/other-repo`):
 
 ```
-$ specsync -repo ExopenGitHub/portal https://github.com/ExopenGitHub/portal/issues/4304 -dry-run
+$ specsync -repo example-org/other-repo https://github.com/example-org/other-repo/issues/12 -dry-run
 ```
 
 Intent: pull/inspect a single issue. Actual result: specsync ran a full **live**
-`sync` of every local OpenSpec change under the current directory (`~/dev/specsync`'s
+`sync` of every local OpenSpec change under the current directory (this repo's
 own ~80-item internal backlog) and created all of them as real issues on
-`ExopenGitHub/portal` — a repo those changes have nothing to do with. `-dry-run` had
+`example-org/other-repo` — a repo those changes have nothing to do with. `-dry-run` had
 no effect whatsoever; every issue was actually created. Cleanup required manually
-deleting issues #4370–#4450.
+deleting the stray issues.
 
 Two independent defects compounded:
 
@@ -63,7 +63,7 @@ successful bulk sync.
 - **Print an unmissable pre-flight summary before any real (non-dry-run) write.**
   Every real `sync` run should state, before doing anything: the resolved target
   repo, the resolved spec-source directory, and the number of changes about to be
-  synced (`target: ExopenGitHub/portal — spec source: ~/dev/specsync/openspec (81
+  synced (`target: example-org/other-repo — spec source: ./openspec (81
   changes) — 0 already linked, 81 new`). A human skimming this line would have
   caught "81 new" against a repo they'd only ever pushed one issue to.
 - **Regression test reproducing this incident's exact shape**: `specsync -repo
@@ -104,7 +104,7 @@ successful bulk sync.
   positives that make the new guard itself untrustworthy.
 - **Does the shadowed-flag scan need to know each flag's arity** (boolean vs
   value-consuming) to correctly identify "the first non-flag token"? Yes — e.g.
-  `-repo ExopenGitHub/portal` is two tokens for one flag; the scan must walk the
+  `-repo example-org/other-repo` is two tokens for one flag; the scan must walk the
   `FlagSet`'s registered flags (via `fs.VisitAll`) to know which names consume a
   following value, mirroring how `flag.Parse` itself walks arguments, or it will
   misidentify a flag's value token as "the first positional."
