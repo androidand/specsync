@@ -4,6 +4,27 @@ All notable changes to this project are documented here. One entry per shipped
 OpenSpec change — see the linked issues for the full spec and discussion.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.14.1] - 2026-10-22
+
+### Changed
+
+- Show where each change's issue, branch, and worktree live (#168)
+- Cap the length of generated slugs (#166)
+- `specsync agent-help` now guides agents toward one branch and worktree per issue, and documents `pull`'s existing `-worktree`/`-worktree-dir` flags. (#162)
+- Support OpenSpec stores as a first-class spec root (#173)
+- Reject unconsumed CLI arguments instead of silently dropping them (#170)
+- Restore the topology command and fix stale "soon" badges on the site (#179)
+- Trim low-value feature cards from the landing page (#181)
+- Fixed: `sync -project` (and `openspec/specsync.yml`'s board target) now actually projects issues onto the configured GitHub Projects board — it previously reported `BoardConfigured: true` and silently did nothing. `pull` was unaffected; this restores parity for `sync`. (#159)
+
+### Fixed
+
+- name every available remedy in the unlinked-commit gate message (#171) (0a976c35)
+- restore the topology feature card dropped by the store-support merge (#177) (2d313def)
+- site soon-badge clearing didn't consider the local CHANGELOG.md fallback (fcfa7f57)
+
+<!-- 4 internal commit(s) omitted (chore/docs/ci/...) -->
+
 ## [0.14.0] - 2026-09-10
 
 ### Changed
