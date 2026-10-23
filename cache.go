@@ -122,7 +122,25 @@ func saveLinksToMD(changeDir, openspecDir string, refs []Ref) error {
 	if out != "" && !strings.HasSuffix(out, "\n") {
 		out += "\n"
 	}
+	// Entries belong to the heading above them, so appending under a
+	// `## Blocked by` (or any heading other than Related) would file these
+	// related links in that section. Open a Related section first (#198).
+	if h := lastSectionHeading(out); h != "" && h != "Related" {
+		out += "\n## Related\n\n"
+	}
 	return os.WriteFile(path, []byte(out+sb.String()), 0o644)
+}
+
+// lastSectionHeading returns the name of the last "## " heading in a links.md
+// body, matched the way parseLinksMD matches it, or "" when there is none.
+func lastSectionHeading(body string) string {
+	last := ""
+	for _, raw := range strings.Split(body, "\n") {
+		if line := strings.TrimSpace(raw); strings.HasPrefix(line, "## ") {
+			last = strings.TrimSpace(line[3:])
+		}
+	}
+	return last
 }
 
 // linkKey identifies the issue a Ref points at, for deduplicating links.md

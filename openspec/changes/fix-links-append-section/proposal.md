@@ -31,3 +31,12 @@ related links to stay out of them.
 - No reordering or moving of existing entries; an entry already misplaced by the
   bug is the author's to move.
 - No change to how `## Blocked by` / `## Blocks` are written by dependency sync.
+
+## Discoveries
+
+- `TestPull_CannotResolveFromBranch` reads the real git branch of the checkout it
+  runs in. On any branch named `feat/<n>-...` (this repo's own convention) it
+  resolves an issue and fails; it passes on `main` and in CI's detached checkout.
+  Reproduced on clean `main` with a throwaway `feat/1-...` branch. Unrelated to
+  this change; worth its own fix so the suite is green on feature branches.
+
