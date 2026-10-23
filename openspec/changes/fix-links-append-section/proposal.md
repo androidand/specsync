@@ -1,4 +1,4 @@
-# Appended links land in the last section of links.md
+# Keep appended links out of dependency sections
 
 ## Why
 
@@ -14,9 +14,8 @@ Reproduced on `main` (v0.14.1) with a test that writes
 parses the file back: `blockedBy` holds #2 and #5, `related` is empty.
 
 The same happens under any heading specsync does not own: entries land under the
-author's last heading. Tools that write their own sections (for example
-architecture references, see `architecture-refs`) need related links to stay out
-of them.
+author's last heading. Authors and tools that keep their own sections need
+related links to stay out of them.
 
 ## What Changes
 

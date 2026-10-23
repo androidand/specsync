@@ -1,4 +1,4 @@
-# Tasks: appended links land in the last section of links.md
+# Tasks: keep appended links out of dependency sections
 
 ## Write path (`cache.go`)
 - [ ] `saveLinksToMD` finds the last `## ` heading in the existing file
