@@ -651,6 +651,10 @@ func (s *stubNonGithubProvider) Get(context.Context, string) (FetchedItem, error
 
 func TestPull_CannotResolveFromBranch(t *testing.T) {
 	dir := t.TempDir()
+	// Pin the branch: the real checkout is often feat/<n>-..., which resolves.
+	orig := currentBranchFn
+	currentBranchFn = func() (string, error) { return "no-issue-here", nil }
+	t.Cleanup(func() { currentBranchFn = orig })
 	// On a branch that doesn't match the pattern, Pull should error.
 	_, err := Pull(context.Background(), PullOptions{
 		OpenSpecDir: dir,

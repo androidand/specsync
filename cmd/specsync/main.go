@@ -1554,12 +1554,17 @@ func runSetStage(args []string) {
 		fail(err)
 	}
 	checkArgs(fs, args, -1)
-	if fs.NArg() < 2 {
-		fail(fmt.Errorf("usage: specsync set-stage <change> <stage|auto>"))
+	if fs.NArg() < 1 || fs.NArg() > 2 {
+		fail(fmt.Errorf("usage: specsync set-stage [<change>] <stage|auto>  (change defaults to the one the current branch names)"))
 	}
-	changeName, stage := fs.Arg(0), fs.Arg(1)
+	root := resolveRoot(fs, openspec, storeFlag).Dir
+	changeName, rest, err := splitChangeArgs("set-stage", root, fs.Args(), 1)
+	if err != nil {
+		fail(err)
+	}
+	stage := rest[0]
 
-	change := mutableChange(resolveRoot(fs, openspec, storeFlag).Dir, changeName, false)
+	change := mutableChange(root, changeName, false)
 	meta := changeMetadata(change)
 
 	if stage == "auto" {
@@ -1624,12 +1629,17 @@ func runNote(args []string) {
 		fail(err)
 	}
 	checkArgs(fs, args, -1)
-	if fs.NArg() < 2 {
-		fail(fmt.Errorf("usage: specsync note <change> <text>"))
+	if fs.NArg() < 1 || fs.NArg() > 2 {
+		fail(fmt.Errorf("usage: specsync note [<change>] <text>  (change defaults to the one the current branch names; quote the text)"))
 	}
-	changeName, text := fs.Arg(0), fs.Arg(1)
+	root := resolveRoot(fs, openspec, storeFlag).Dir
+	changeName, rest, err := splitChangeArgs("note", root, fs.Args(), 1)
+	if err != nil {
+		fail(err)
+	}
+	text := rest[0]
 
-	c, err := specsync.LoadChangeBySlug(resolveRoot(fs, openspec, storeFlag).Dir, changeName)
+	c, err := specsync.LoadChangeBySlug(root, changeName)
 	if err != nil {
 		fail(err)
 	}
@@ -2150,7 +2160,7 @@ func runIdeas(args []string) {
 func runArchive(args []string) {
 	fs := flag.NewFlagSet("archive", flag.ExitOnError)
 	openspec, storeFlag := addRootFlags(fs)
-	change := fs.String("change", "", "change to archive (required)")
+	change := fs.String("change", "", "change to archive (default: the one the current branch names)")
 	repo := fs.String("repo", "", "target repo as owner/name (default: auto-detect)")
 	retain := fs.String("retain", "", "retention policy: move (keep) or prune (delete)")
 	force := fs.Bool("force", false, "archive even when tasks are unchecked")
@@ -2160,11 +2170,15 @@ func runArchive(args []string) {
 	}
 	checkArgs(fs, args, 0)
 
-	if *change == "" {
-		fail(fmt.Errorf("archive: -change <slug> is required"))
-	}
-
 	abs := resolveRoot(fs, openspec, storeFlag).Dir
+
+	if *change == "" {
+		slug, err := inferChange("archive", abs)
+		if err != nil {
+			fail(fmt.Errorf("%w; pass -change <slug>", err))
+		}
+		*change = slug
+	}
 
 	// Build provider.
 	var provider specsync.WorkProvider

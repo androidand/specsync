@@ -561,6 +561,22 @@ specsync archive -change my-feature -retain move        # force keep in git
 specsync archive -change my-feature -retain prune       # force delete the local folder
 specsync archive -change my-feature -force              # override unchecked-task refusal
 specsync archive -change my-feature -dry-run            # print the plan, mutate nothing
+specsync archive -dry-run                               # inside the change's worktree
+```
+
+### The branch names the change
+
+Inside a change's worktree you can leave the change out of `set-stage`,
+`note` and `archive`: specsync takes it from the branch and says so on stderr.
+The branch's last path segment is matched against active changes, so both
+`feat/42-my-feature` and an orchestrator's `someuser/my-feature` (Orca's
+default `<user>/<workspace>`) resolve to `my-feature`. The default branch
+never resolves, so an agent on `main` still has to name the change. Bare
+`specsync` keeps syncing every change.
+
+```bash
+specsync set-stage active                 # on feat/42-my-feature
+specsync note "retry needs a backoff cap"
 ```
 
 Steps: **(1)** final push so the issue reflects current scope and task state;
@@ -743,8 +759,8 @@ WorkItem                          ->  issue       (via a pluggable provider)
   in the issue body shows the breakdown: `+3 added · 2 done · 1 dropped · 1
   moved`.
 - **Discoveries** — a `## Discoveries` section captures findings during
-  implementation without requiring scope decisions. Use `specsync note -change
-  <slug> "<text>"` to append a discovery. The section is rendered into the
+  implementation without requiring scope decisions. Use `specsync note
+  [<slug>] "<text>"` to append a discovery. The section is rendered into the
   issue and stripped on pull, keeping local and tracker state in sync.
 - **Original ask** — when you `specsync pull` an issue, the original body is
   saved as `original-ask.md` (write-once, never overwritten). It renders as

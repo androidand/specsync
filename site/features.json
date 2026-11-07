@@ -55,6 +55,12 @@
   },
   {
     "group": "collaborate",
+    "icon": "state",
+    "title": "The branch names the change",
+    "body": "Inside a change's worktree, <code>set-stage</code>, <code>note</code> and <code>archive</code> find the change from the branch — <code>feat/42-my-change</code> or an Orca workspace's <code>user/my-change</code>. On <code>main</code> nothing resolves, so an agent there can't act on a change by accident."
+  },
+  {
+    "group": "collaborate",
     "icon": "priority",
     "title": "Priority-driven dispatch",
     "body": "Set priorities (1-100) with <code>specsync set-priority my-change 85</code>. Agents respect priority when deciding what to work on next — humans direct focus."

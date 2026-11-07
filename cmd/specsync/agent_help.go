@@ -354,8 +354,10 @@ var commandMetadata = map[string]AgentCommandHelp{
 		},
 		SafetyRules: []string{
 			"Use 'auto' to let specsync derive stage from tasks",
+			"Omit the change inside a change's worktree: it is taken from the branch (feat/<issue>-<slug> or <prefix>/<slug>)",
 		},
 		Examples: []string{
+			"specsync set-stage active",
 			"specsync set-stage my-change active",
 			"specsync set-stage my-change blocked",
 			"specsync set-stage my-change complete",
@@ -782,7 +784,8 @@ var commandMetadata = map[string]AgentCommandHelp{
 			{
 				Name:        "change",
 				Type:        "string",
-				Required:    true,
+				Required:    false,
+				Default:     "the change the current branch names",
 				Description: "Change to archive",
 			},
 			{
@@ -874,7 +877,8 @@ var commandMetadata = map[string]AgentCommandHelp{
 			},
 		},
 		SafetyRules: []string{
-			"Takes positional args: <change> <text>, not a -text flag",
+			"Takes positional args: [<change>] <text>, not a -text flag",
+			"Omit the change inside a change's worktree: it is taken from the branch",
 		},
 		Examples: []string{
 			"specsync note my-change 'Found edge case in X' -dry-run",
