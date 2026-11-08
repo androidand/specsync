@@ -417,6 +417,30 @@ specsync pull -issue 42 -change my-feature   # override the derived slug
 the issue so a later `specsync` push updates that same issue. A dry run reads the
 issue but writes nothing.
 
+### `start` — open a change in its own workspace
+
+Once a change is synced, `start` gives it a worktree of its own, so the work
+never lands on the default branch:
+
+```bash
+specsync start -dry-run my-change    # branch, path and launcher command
+specsync start my-change             # worktree on feat/<issue>-my-change, stage active
+specsync start -agent claude -prompt "Implement the tasks" my-change   # via Orca
+```
+
+The branch is `feat/<issue>-<slug>`, cut from the freshly fetched remote default
+branch. When [Orca](https://www.onorca.dev) is installed, `start` hands the
+worktree to `orca worktree create`, linked to the change's issue, so Orca's agent
+gets the spec as its brief; otherwise it runs `git worktree add` into
+`../worktrees/<repo>-<issue>`. `-launcher git|orca` forces one. Orca is found
+through `$ORCA_CLI_COMMAND`, then `orca-ide` on Linux (where a bare `orca` is the
+screen reader), then `orca`.
+
+`start` refuses a change with no issue yet, reuses the change's worktree if one
+exists, syncs the tracker only with `-sync`, and exits once the worktree is
+there. It warns when the change's plan is not on the remote default branch yet,
+because the new worktree would not contain it.
+
 ### `scan` — what already exists here?
 
 Run before planning new work. Give it an area — one or more paths and/or a

@@ -33,7 +33,7 @@ var knownSubcommands = map[string]bool{
 	"sync": true, "audit": true, "audit-tasks": true, "validate": true,
 	"spinoff": true, "pr-body": true, "verify": true,
 	"agent-help": true, "doctor": true, "idea": true, "ideas": true, "archive": true,
-	"epic": true, "adopt": true, "topology": true,
+	"epic": true, "adopt": true, "topology": true, "start": true,
 }
 
 // knownConfusions maps a word someone might reach for by habit (e.g. git's
@@ -94,7 +94,7 @@ func deprecatedSlugFlag(args []string) error {
 func main() {
 	cmd, rest, err := resolveSubcommand(os.Args[1:])
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "specsync: %v\n\nRun with no subcommand (optionally with flags) to sync, or use one of: pull, adopt, link, scan, trace, release-plan, changelog, install-skill, changes, set-stage, set-priority, note, audit, audit-tasks, validate, spinoff, pr-body, verify, idea, ideas, archive, epic, topology\n", err)
+		fmt.Fprintf(os.Stderr, "specsync: %v\n\nRun with no subcommand (optionally with flags) to sync, or use one of: pull, adopt, link, scan, trace, release-plan, changelog, install-skill, changes, set-stage, set-priority, note, audit, audit-tasks, validate, spinoff, pr-body, verify, idea, ideas, archive, epic, topology, start\n", err)
 		os.Exit(2)
 	}
 
@@ -153,6 +153,8 @@ func main() {
 		runEpic(rest)
 	case "topology":
 		runTopology(rest)
+	case "start":
+		runStart(rest)
 	default:
 		runSync(rest)
 	}
@@ -747,24 +749,16 @@ func runAdopt(args []string) {
 func runPullWithWorktree(issue, change, repo string, dryRun bool, project specsync.BoardTarget, worktreeDir string) {
 	ctx := context.Background()
 
-	if worktreeDir == "" {
-		worktreeDir = os.Getenv("SPECSYNC_WORKTREE_DIR")
-	}
-	if worktreeDir == "" {
-		worktreeDir = "../worktrees"
-	}
-
 	repoName, err := getRepoName(ctx, repo)
 	if err != nil {
 		fail(fmt.Errorf("worktree: %w", err))
 	}
-
-	worktreeName := repoName + "-" + issue
-	branchName := "feat/" + issue + "-" + change
-	if change == "" {
-		branchName = "feat/" + issue
+	mainRoot, err := mainCheckoutRoot(realStartEnv())
+	if err != nil {
+		fail(fmt.Errorf("worktree: %w", err))
 	}
-	worktreePath := filepath.Join(worktreeDir, worktreeName)
+	worktreePath, branchName := worktreeLayout(
+		resolveWorktreeDir(worktreeDir, os.Getenv, mainRoot), repoName, issue, change)
 
 	if dryRun {
 		fmt.Printf("DRY RUN — worktree setup:\n")

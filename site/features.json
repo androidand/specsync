@@ -55,6 +55,12 @@
   },
   {
     "group": "collaborate",
+    "icon": "flow",
+    "title": "One change, one workspace",
+    "body": "<code>specsync start my-change</code> opens a synced change in its own worktree on <code>feat/&lt;issue&gt;-my-change</code>, cut from the remote default branch — through Orca when it is installed, so the agent gets the issue as its brief."
+  },
+  {
+    "group": "collaborate",
     "icon": "priority",
     "title": "Priority-driven dispatch",
     "body": "Set priorities (1-100) with <code>specsync set-priority my-change 85</code>. Agents respect priority when deciding what to work on next — humans direct focus."

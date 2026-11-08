@@ -769,6 +769,35 @@ var commandMetadata = map[string]AgentCommandHelp{
 			"specsync ideas -json",
 		},
 	},
+	"start": {
+		Command:     "start",
+		Description: "Start a synced change in its own worktree on feat/<issue>-<slug>, through Orca when installed, and set it active.",
+		Mutates:     true,
+		Workflow: AgentCommandWorkflow{
+			Position:      "implementation",
+			RelatedBefore: []string{"sync"},
+			RelatedAfter:  []string{"set-stage", "note"},
+		},
+		Flags: []AgentCommandFlag{
+			{Name: "launcher", Type: "string", Required: false, Default: "auto", Description: "auto, orca or git; auto uses Orca when it resolves ($ORCA_CLI_COMMAND, orca-ide on Linux, else orca)"},
+			{Name: "agent", Type: "string", Required: false, Description: "Orca only: agent to launch in the new workspace"},
+			{Name: "prompt", Type: "string", Required: false, Description: "Orca only: initial prompt for the agent"},
+			{Name: "worktree-dir", Type: "string", Required: false, Default: "../worktrees beside the main checkout", Description: "Worktree base directory for the git launcher"},
+			{Name: "sync", Type: "boolean", Required: false, Default: false, Description: "Sync the change to the tracker after starting it"},
+			{Name: "dry-run", Type: "boolean", Required: false, Default: false, Description: "Print branch, worktree path and launcher command; change nothing"},
+		},
+		SafetyRules: []string{
+			"The change must be synced first: start refuses a change with no linked issue",
+			"Reuses the change's existing worktree instead of creating a second one",
+			"The change's plan must be on the remote default branch for the new worktree to contain it; start warns when it is not",
+			"Exits once the worktree exists; it never supervises the agent",
+		},
+		Examples: []string{
+			"specsync start -dry-run my-change",
+			"specsync start my-change",
+			"specsync start -launcher orca -agent claude -prompt \"Implement the tasks\" my-change",
+		},
+	},
 	"archive": {
 		Command:     "archive",
 		Description: "Archive a completed change: final push, close, then retention.",
