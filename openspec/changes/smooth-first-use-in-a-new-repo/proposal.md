@@ -44,8 +44,11 @@ specsync from an npm global install on 2026-10-27.
   the issue link is missing and print the `Closes` line for the issue found
   from the branch name.
 - Warn once when the `openspec/` directory is gitignored.
-- `help` is an alias of `agent-help`; `topology` with no store explains what
-  a store is and how to register one.
+- `specsync help` is handled by `make-commands-discoverable` (a grouped overview),
+  so no alias is added here.
+- With no store, `status` (renamed from `topology` by
+  `status-pr-and-worktree-state`; `topology` stays an alias for one release)
+  explains what a store is and how to register one.
 
 ## Not in scope
 

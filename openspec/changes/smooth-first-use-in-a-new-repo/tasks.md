@@ -17,5 +17,5 @@
 
 ## Discoverability
 
-- [ ] `help` alias for `agent-help`
-- [ ] `topology` with no store explains stores and how to register one
+- [ ] `help`: no work here; done by `make-commands-discoverable` (grouped overview)
+- [ ] `status`/`topology` with no store explains stores and how to register one (do after `status-pr-and-worktree-state`)
