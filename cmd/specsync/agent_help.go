@@ -881,6 +881,113 @@ var commandMetadata = map[string]AgentCommandHelp{
 			"specsync note my-change 'Found edge case in X'",
 		},
 	},
+	"query": {
+		Command:     "query",
+		Description: "List claimable changes across one or more repositories.",
+		Mutates:     false,
+		Workflow: AgentCommandWorkflow{
+			Position:      "discovery",
+			RelatedBefore: []string{"changes"},
+			RelatedAfter:  []string{"sync"},
+		},
+		Flags: []AgentCommandFlag{
+			{
+				Name:        "repo",
+				Type:        "string",
+				Required:    false,
+				Default:     "",
+				Description: "Comma-separated absolute paths to scan (default: current directory)",
+			},
+			{
+				Name:        "stage",
+				Type:        "string",
+				Required:    false,
+				Default:     "backlog",
+				Description: "Comma-separated stages to include (default: backlog, i.e. claimable)",
+			},
+			{
+				Name:        "json",
+				Type:        "boolean",
+				Required:    false,
+				Default:     false,
+				Description: "Output as JSON",
+			},
+		},
+		SafetyRules: []string{
+			"Read-only operation",
+		},
+		Examples: []string{
+			"specsync query -json",
+			"specsync query -json -repo /path/to/repo1,/path/to/repo2",
+			"specsync query -json -stage active,in-review",
+		},
+	},
+	"claim": {
+		Command:     "claim",
+		Description: "Transition a change to active and project it onto the tracker as in-progress.",
+		Mutates:     true,
+		Workflow: AgentCommandWorkflow{
+			Position:      "discovery",
+			RelatedBefore: []string{"query"},
+			RelatedAfter:  []string{"sync"},
+		},
+		Flags: []AgentCommandFlag{
+			{
+				Name:        "change",
+				Type:        "string",
+				Required:    true,
+				Description: "Change slug to claim",
+			},
+			{
+				Name:        "dry-run",
+				Type:        "boolean",
+				Required:    false,
+				Default:     false,
+				Description: "Preview without touching the tracker",
+			},
+		},
+		SafetyRules: []string{
+			"Mutating: sets stage to active and updates the tracker",
+			"Use -dry-run first to preview",
+		},
+		Examples: []string{
+			"specsync claim -change retire-auto-reply",
+			"specsync claim -change retire-auto-reply -dry-run",
+		},
+	},
+	"release": {
+		Command:     "release",
+		Description: "Transition a change back to backlog and remove it from in-progress.",
+		Mutates:     true,
+		Workflow: AgentCommandWorkflow{
+			Position:      "discovery",
+			RelatedBefore: []string{"claim"},
+			RelatedAfter:  []string{"sync"},
+		},
+		Flags: []AgentCommandFlag{
+			{
+				Name:        "change",
+				Type:        "string",
+				Required:    true,
+				Description: "Change slug to release",
+			},
+			{
+				Name:        "dry-run",
+				Type:        "boolean",
+				Required:    false,
+				Default:     false,
+				Description: "Preview without touching the tracker",
+			},
+		},
+		SafetyRules: []string{
+			"Mutating: sets stage to backlog and updates the tracker",
+			"Use -dry-run first to preview",
+		},
+		Examples: []string{
+			"specsync release -change retire-auto-reply",
+			"specsync release -change retire-auto-reply -dry-run",
+		},
+	},
 }
 
 // runAgentHelp handles the agent-help command.
