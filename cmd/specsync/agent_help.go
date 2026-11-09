@@ -771,6 +771,31 @@ var commandMetadata = map[string]AgentCommandHelp{
 			"specsync ideas -json",
 		},
 	},
+	"workspace": {
+		Command:     "workspace",
+		Description: "Workspace hooks: `workspace setup` finds the change from the branch or Orca's linked issue (pulling a new change if needed) and sets it active; `workspace archive` sets it back to auto.",
+		Mutates:     true,
+		Workflow: AgentCommandWorkflow{
+			Position:      "implementation",
+			RelatedBefore: []string{"pull"},
+			RelatedAfter:  []string{"sync"},
+		},
+		Flags: []AgentCommandFlag{
+			{Name: "sync", Type: "boolean", Required: false, Default: false, Description: "Sync the change to the tracker after updating its stage"},
+			{Name: "repo", Type: "string", Required: false, Default: "auto-detect", Description: "Repo as owner/name for reading the linked issue"},
+			{Name: "dry-run", Type: "boolean", Required: false, Default: false, Description: "Report the change and what would be done; write nothing"},
+		},
+		SafetyRules: []string{
+			"Meant for orca.yaml scripts.setup / scripts.archive; exits 0 and writes nothing when the workspace names no change",
+			"Never syncs the tracker unless -sync is passed",
+			"Stage is kept per checkout; use -sync on archive, since Orca removes the worktree",
+		},
+		Examples: []string{
+			"specsync workspace setup -dry-run",
+			"specsync workspace setup",
+			"specsync workspace archive -sync",
+		},
+	},
 	"archive": {
 		Command:     "archive",
 		Description: "Archive a completed change: final push, close, then retention.",

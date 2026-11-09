@@ -61,6 +61,12 @@
   },
   {
     "group": "collaborate",
+    "icon": "flow",
+    "title": "Orca workspaces stay in step",
+    "body": "Run <code>specsync workspace setup</code> and <code>workspace archive</code> from <code>orca.yaml</code> hooks: a workspace started from an issue becomes a change, its stage goes active, and it goes back to derived when the workspace is archived."
+  },
+  {
+    "group": "collaborate",
     "icon": "priority",
     "title": "Priority-driven dispatch",
     "body": "Set priorities (1-100) with <code>specsync set-priority my-change 85</code>. Agents respect priority when deciding what to work on next — humans direct focus."
