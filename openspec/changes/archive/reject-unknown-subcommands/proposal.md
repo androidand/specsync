@@ -14,7 +14,7 @@ is silently never parsed and keeps its zero value.
 
 This was discovered live: `specsync push -change some-change -dry-run` executed a real,
 unscoped sync of *every* change in the repo and wrote to GitHub, despite `-dry-run`
-being passed. FusionHub's docs (AGENTS.md, `.claude/tools/openspec.md`, etc.) already
+being passed. api's docs (AGENTS.md, `.claude/tools/openspec.md`, etc.) already
 tell agents to run `specsync push` in several places, so this isn't a hypothetical typo
 — it's an established (if inaccurate) usage pattern that currently silently discards
 every flag typed after it.

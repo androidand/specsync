@@ -12,7 +12,7 @@ specsync SHALL resolve its spec root to a store's registered location when the
 working directory's `openspec/config.yaml` declares `store: <id>`.
 
 #### Scenario: Bare invocation in a store-configured repo
-- **WHEN** `specsync changes` runs in a code repo whose `openspec/config.yaml` declares `store: exopen-plans`
+- **WHEN** `specsync changes` runs in a code repo whose `openspec/config.yaml` declares `store: acme-plans`
 - **THEN** the changes listed are those in the store
 - **AND** no `openspec/changes/` directory is required in the code repo
 
@@ -42,12 +42,12 @@ survives a clone.
 - **AND** the declaration is not part of the gitignored projection cache
 
 #### Scenario: Target overrides the ambient remote
-- **WHEN** a change declares `targets: ["github:ExopenGitHub/FusionHub"]` and is synced from the store's own directory
-- **THEN** the issue is created in `ExopenGitHub/FusionHub`
+- **WHEN** a change declares `targets: ["github:acme/api"]` and is synced from the store's own directory
+- **THEN** the issue is created in `acme/api`
 - **AND** not in the store's own repository
 
 #### Scenario: Explicit flag still wins
-- **WHEN** `-repo ExopenGitHub/portal` is passed for a change targeting FusionHub
+- **WHEN** `-repo acme/app` is passed for a change targeting api
 - **THEN** the flag's repo is used
 
 #### Scenario: No targets preserves current behaviour
@@ -59,7 +59,7 @@ specsync SHALL maintain one issue per target repository when a change declares
 several targets, cross-link those issues, and key each ref by its target.
 
 #### Scenario: Backend and frontend halves stay linked
-- **WHEN** a change targets both `github:ExopenGitHub/FusionHub` and `github:ExopenGitHub/portal`
+- **WHEN** a change targets both `github:acme/api` and `github:acme/app`
 - **THEN** an issue exists in each repository, each carrying the change's identity marker
 - **AND** each issue links to the other
 - **AND** `refs.json` holds both under their own provider keys

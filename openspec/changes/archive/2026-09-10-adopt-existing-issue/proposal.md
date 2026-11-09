@@ -21,7 +21,7 @@ precisely the outcome the marker was added to prevent. Recovering means closing
 the duplicate, stripping its marker so the search stops matching it, and
 repointing `.specsync/refs.json` by hand.
 
-Observed on ExopenGitHub/FusionHub: issue #3691 was created by hand, a marker
+Observed on acme/api: issue #3691 was created by hand, a marker
 was added to it, a sync seconds later created duplicate #3692, and a second
 sync then wrote to the closed duplicate because the local ref cache still
 pointed there. Two agents were meanwhile fixing the same problem from different

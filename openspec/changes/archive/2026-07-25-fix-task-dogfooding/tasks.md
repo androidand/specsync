@@ -22,7 +22,7 @@
 
 ## 4. Reconcile existing drift — check off done tasks
 
-- [x] 4.1 `reject-unknown-subcommands`: 0 remaining (task 4 is external FusionHub docs, marked owner task).
+- [x] 4.1 `reject-unknown-subcommands`: 0 remaining (task 4 is external api docs, marked owner task).
 - [x] 4.2 `stable-projection-ref-key`: 0 remaining (verified by unit tests).
 - [x] 4.3 `github-projects-compatibility`: 0 remaining (verified by unit tests).
 - [x] 4.4 `rich-change-state`: 0 remaining (96 tasks all checked off — enums, metadata, stage derivation, tests, docs).

@@ -11,7 +11,7 @@ treatment anywhere in `change.go` or `sync.go`. The asymmetry is undocumented
 too: README's behaviors list documents Original ask and Discoveries
 rendering but never mentions design.md.
 
-This isn't theoretical. Reproduced 2026-08-27 in `ExopenGitHub/portal`: a
+This isn't theoretical. Reproduced 2026-08-27 in `acme/app`: a
 `bolag-legal-entity-picker` change had a substantial `design.md` (picker
 pattern decision, a component-extraction plan for an ExoKit-shared molecule,
 several other recorded decisions) written entirely locally. The worktree it

@@ -55,7 +55,7 @@
       boundary; title whose first word exceeds the cap; title of only
       punctuation (already returns empty — lock that in); leading/trailing
       punctuation; consecutive punctuation runs.
-- [x] Regression case from the report: the 103-character portal#4331 title
+- [x] Regression case from the report: the 103-character app#4331 title
       should produce something short and readable.
 - [x] Collision-risk case: two distinct long titles that truncate to the same
       stem (`TestSlugifyDistinctLongTitlesCanCollideOnTruncation`) — documents

@@ -30,7 +30,7 @@ func TestShadowedFlags(t *testing.T) {
 	}{
 		{
 			name: "incident shape: url before -dry-run",
-			args: []string{"-repo", "ExopenGitHub/portal", "https://github.com/ExopenGitHub/portal/issues/4304", "-dry-run"},
+			args: []string{"-repo", "acme/app", "https://github.com/acme/app/issues/4304", "-dry-run"},
 			want: []string{"-dry-run"},
 		},
 		{
@@ -85,7 +85,7 @@ func TestCheckArgs(t *testing.T) {
 	fs.String("repo", "", "")
 	fs.Bool("dry-run", false, "")
 
-	rawArgs := []string{"-repo", "ExopenGitHub/portal", "https://github.com/ExopenGitHub/portal/issues/4304", "-dry-run"}
+	rawArgs := []string{"-repo", "acme/app", "https://github.com/acme/app/issues/4304", "-dry-run"}
 	_ = fs.Parse(rawArgs)
 	if fs.NArg() != 2 {
 		t.Fatalf("expected 2 leftover args, got %d: %v", fs.NArg(), fs.Args())
@@ -98,7 +98,7 @@ func TestCheckArgs(t *testing.T) {
 	if !strings.Contains(err.Error(), "-dry-run") {
 		t.Errorf("error %q does not name the shadowed flag -dry-run", err.Error())
 	}
-	if !strings.Contains(err.Error(), "https://github.com/ExopenGitHub/portal/issues/4304") {
+	if !strings.Contains(err.Error(), "https://github.com/acme/app/issues/4304") {
 		t.Errorf("error %q does not name the unconsumed URL argument", err.Error())
 	}
 	if strings.Count(err.Error(), "-dry-run") != 1 {
@@ -159,8 +159,8 @@ func TestIncidentRegression(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cmd := exec.Command(bin, "-repo", "ExopenGitHub/portal",
-		"https://github.com/ExopenGitHub/portal/issues/4304", "-dry-run")
+	cmd := exec.Command(bin, "-repo", "acme/app",
+		"https://github.com/acme/app/issues/4304", "-dry-run")
 	cmd.Dir = fixture
 	cmd.Env = append(os.Environ(), "PATH="+binDir+":"+os.Getenv("PATH"))
 	out, err := cmd.CombinedOutput()
