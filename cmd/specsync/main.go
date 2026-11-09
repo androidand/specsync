@@ -2230,6 +2230,7 @@ func runQuery(args []string) {
 	if err := fs.Parse(args); err != nil {
 		fail(err)
 	}
+	checkArgs(fs, args, 0)
 
 	// Parse stage filter.
 	stageSet := make(map[string]bool)
@@ -2415,6 +2416,7 @@ func runClaim(args []string) {
 	if err := fs.Parse(args); err != nil {
 		fail(err)
 	}
+	checkArgs(fs, args, 0)
 	if *change == "" {
 		fail(fmt.Errorf("claim: -change <slug> is required"))
 	}
@@ -2459,6 +2461,7 @@ func runRelease(args []string) {
 	if err := fs.Parse(args); err != nil {
 		fail(err)
 	}
+	checkArgs(fs, args, 0)
 	if *change == "" {
 		fail(fmt.Errorf("release: -change <slug> is required"))
 	}
