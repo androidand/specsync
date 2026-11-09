@@ -24,6 +24,13 @@ specsync -dry-run -change <slug>   # preview
 specsync -change <slug>             # push to GitHub
 ```
 
+**Repo has no `openspec/`? That is normal, not a blocker.** Make a scratch one that git never sees, then pull:
+```bash
+specsync init                       # ./openspec/changes/ + local git exclude; idempotent
+specsync pull -issue N -init        # same, then pull (nothing is created without init/-init)
+```
+Work, `specsync -change <slug>`, and never commit `openspec/`. A shared store works too: `-store <id>`, or `SPECSYNC_DEFAULT_STORE` / `default-store:` in `~/.config/specsync/config.yaml`.
+
 **Pull issues into specs:**
 ```bash
 specsync pull -issue N [-change <slug>]

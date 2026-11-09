@@ -8,6 +8,12 @@
   {
     "group": "plan",
     "icon": "flow",
+    "title": "Works in repos with no openspec/",
+    "body": "<code>specsync init</code> (or <code>pull -init</code>) makes a scratch <code>openspec/</code> that git never sees, so an agent can pull an issue and sync in any repo. Nothing is created unless you ask; a user-level default store is also supported."
+  },
+  {
+    "group": "plan",
+    "icon": "flow",
     "title": "Design notes survive the worktree",
     "body": "A <code>design.md</code> renders as <code>## Design notes</code> in the synced issue, so decisions made while planning aren't lost if the local worktree is force-removed. Oversized notes overflow to a linked issue comment instead of getting truncated."
   },
