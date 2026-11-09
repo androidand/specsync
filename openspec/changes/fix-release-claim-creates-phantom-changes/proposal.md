@@ -65,3 +65,7 @@ the same, and any future invocation with a bad slug repeats the artifact.
   that already exist. The fix belongs at the callers that claim to operate on an
   existing change.
 - No tracker, CLI summary, or other command changes.
+
+## Release note
+
+`specsync release` and `specsync claim` now refuse a mistyped change name or a wrong `-openspec` path instead of silently creating a phantom change directory.
