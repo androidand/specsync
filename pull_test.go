@@ -102,7 +102,7 @@ func TestPullCreatesChangeWithTasks(t *testing.T) {
 	}
 }
 
-func TestPullWithoutTasksWritesProposalOnly(t *testing.T) {
+func TestPullWithoutTasksWritesStarterTasks(t *testing.T) {
 	dir := t.TempDir()
 	issue := fakeIssue{
 		Number: 4083,
@@ -121,8 +121,14 @@ func TestPullWithoutTasksWritesProposalOnly(t *testing.T) {
 	if res.Slug != "streamlined-modals-for-integration-onboarding" {
 		t.Fatalf("slug = %q", res.Slug)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "changes", res.Slug, "tasks.md")); !os.IsNotExist(err) {
-		t.Fatalf("tasks.md should not exist for a body without a Tasks section")
+	if !res.StarterTasks {
+		t.Fatalf("StarterTasks should be set for a body without a Tasks section")
+	}
+	if got := readFile(t, filepath.Join(dir, "changes", res.Slug, "tasks.md")); got != starterTasks {
+		t.Fatalf("starter tasks.md = %q", got)
+	}
+	if vr := ValidateChanges(dir); vr.Total != 0 {
+		t.Fatalf("a freshly pulled change must validate, got %+v", vr.Issues)
 	}
 	proposal := readFile(t, filepath.Join(dir, "changes", res.Slug, "proposal.md"))
 	if !strings.HasPrefix(proposal, "# Streamlined modals for integration onboarding") {
@@ -662,5 +668,47 @@ func TestPull_CannotResolveFromBranch(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "could not resolve issue from branch name") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestPullStarterTasksNeverOverwritesExistingTasks(t *testing.T) {
+	dir := t.TempDir()
+	issue := fakeIssue{Number: 9, URL: "https://github.com/o/r/issues/9", Title: "No tasks upstream", State: "open", Body: "just prose\n"}
+	var calls [][]string
+	prov := NewGitHubProviderFunc(ghRunner(issue, &calls))
+	changeDir := filepath.Join(dir, "changes", "no-tasks-upstream")
+	if err := os.MkdirAll(changeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mine := "# Tasks\n\n- [ ] 1.1 local work\n"
+	if err := os.WriteFile(filepath.Join(changeDir, "tasks.md"), []byte(mine), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res, err := Pull(context.Background(), PullOptions{OpenSpecDir: dir, Provider: prov, IssueID: "9", Slug: "no-tasks-upstream"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.StarterTasks {
+		t.Fatal("must not report a starter when tasks.md exists")
+	}
+	if got := readFile(t, filepath.Join(changeDir, "tasks.md")); got != mine {
+		t.Fatalf("local tasks.md was overwritten: %q", got)
+	}
+}
+
+func TestPullDryRunReportsStarterTasksWithoutWriting(t *testing.T) {
+	dir := t.TempDir()
+	issue := fakeIssue{Number: 9, URL: "u", Title: "Dry starter", State: "open", Body: "prose\n"}
+	var calls [][]string
+	prov := NewGitHubProviderFunc(ghRunner(issue, &calls))
+	res, err := Pull(context.Background(), PullOptions{OpenSpecDir: dir, Provider: prov, IssueID: "9", DryRun: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.StarterTasks {
+		t.Fatal("dry run should report the starter")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "changes")); !os.IsNotExist(err) {
+		t.Fatal("dry run must not write")
 	}
 }

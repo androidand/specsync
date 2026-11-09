@@ -95,6 +95,35 @@ var commandMetadata = map[string]AgentCommandHelp{
 			"specsync sync -json -change my-change",
 		},
 	},
+	"init": {
+		Command:     "init",
+		Description: "Create a scratch openspec/ in this worktree and keep it out of git.",
+		Mutates:     true,
+		Workflow: AgentCommandWorkflow{
+			Position:      "issue-first-start",
+			RelatedBefore: []string{},
+			RelatedAfter:  []string{"pull"},
+		},
+		Flags: []AgentCommandFlag{
+			{
+				Name:        "dry-run",
+				Type:        "boolean",
+				Required:    false,
+				Default:     false,
+				Description: "Show what would be created without touching disk",
+			},
+		},
+		SafetyRules: []string{
+			"Creates ./openspec/changes/ and adds /openspec/ to the local git exclude file (git rev-parse --git-path info/exclude); never edits a tracked .gitignore",
+			"Idempotent; refuses where openspec/ is already tracked",
+			"For repos that keep no specs (product repos): init, then `specsync pull -issue N`, work, `specsync -change <slug>`. Never commit the folder",
+			"Nothing creates openspec/ unless you run init or pass pull -init",
+		},
+		Examples: []string{
+			"specsync init -dry-run",
+			"specsync init",
+		},
+	},
 	"pull": {
 		Command:     "pull",
 		Description: "Pull an issue into a local OpenSpec change.",
@@ -132,6 +161,13 @@ var commandMetadata = map[string]AgentCommandHelp{
 				Description: "Target repo as owner/name",
 			},
 			{
+				Name:        "init",
+				Type:        "boolean",
+				Required:    false,
+				Default:     false,
+				Description: "When the repo has no openspec/, create a scratch one first (same as `specsync init`). Without it, pull fails and creates nothing",
+			},
+			{
 				Name:        "worktree",
 				Type:        "boolean",
 				Required:    false,
@@ -148,12 +184,14 @@ var commandMetadata = map[string]AgentCommandHelp{
 		},
 		SafetyRules: []string{
 			"Use -dry-run to preview before pulling",
+			"No openspec/ in the repo is normal, not a blocker: run `specsync init` (or pass -init) for a scratch spec kept out of git, then pull. Never commit the scratch openspec/",
 			"Verify the issue number is correct",
 			"Work each issue in its own branch (feat/<n>-<slug>) and, ideally, its own worktree — pass -worktree to have pull set both up automatically, rather than accumulating unrelated changes on whatever branch happens to be checked out",
 		},
 		Examples: []string{
 			"specsync pull -issue 42 -dry-run",
 			"specsync pull -issue 42",
+			"specsync pull -issue 42 -init",
 			"specsync pull -issue 42 -json",
 		},
 	},

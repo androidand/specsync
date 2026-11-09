@@ -115,7 +115,13 @@ var buildErr error
 func buildSpecsyncBinary(t *testing.T) string {
 	t.Helper()
 	buildOnce.Do(func() {
-		dir := t.TempDir()
+		// Not t.TempDir(): the binary is shared across tests, and a TempDir is
+		// removed when the first test that built it finishes.
+		dir, err := os.MkdirTemp("", "specsync-test-bin")
+		if err != nil {
+			buildErr = err
+			return
+		}
 		builtBinary = filepath.Join(dir, "specsync-test-bin")
 		cmd := exec.Command("go", "build", "-o", builtBinary, ".")
 		cmd.Dir = "."
