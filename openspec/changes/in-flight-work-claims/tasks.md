@@ -19,16 +19,11 @@
       names the holder. `-force` to override, because a human reassigning work
       is legitimate.
 
-## Phase B — Worktree hygiene
+## Phase B — Worktree hygiene (dropped)
 
-- [ ] B.1 Warn when a claimed worktree is under a system temp dir (`/tmp`,
-      `$TMPDIR`, `/private/tmp`). Real loss: a helper module, 17 converted call
-      sites and a test file, deleted by a `/tmp` cleanup between sessions.
-- [ ] B.2 In `specsync claims`, flag claims whose worktree has uncommitted
-      changes, and show how long they have been uncommitted. Uncommitted work in
-      a volatile path is the actual hazard; either alone is survivable.
-- [ ] B.3 Flag two live claims sharing one worktree path — incident (1),
-      where two agents wrote to the same directory undetected.
+Same-worktree and volatile-path detection are dropped: per-change workspaces
+(Orca, `specsync start`) prevent incidents (1) and (2). See the proposal's
+"Scope narrowed by workspace orchestration".
 
 ## Phase C — Landed detection that survives squashes
 
@@ -57,7 +52,7 @@
 ## Phase E — Validation
 
 - [ ] E.1 Unit tests for claim/release/TTL/overlap.
-- [ ] E.2 Replay each of the six incidents in the proposal as a test fixture and
+- [ ] E.2 Replay incidents (3)–(6) from the proposal as a test fixture and
       assert the tooling reports it. An incident that cannot be replayed is not
       evidence the feature works.
 - [ ] E.3 Dogfood on a real two-agent session before recommending it.

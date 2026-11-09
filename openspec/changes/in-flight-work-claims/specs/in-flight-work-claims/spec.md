@@ -30,24 +30,6 @@ overrides, because reassigning work is legitimate.
 - **THEN** the second claim fails and names the holder's change, agent and worktree
 - **AND** `-force` allows it to proceed deliberately
 
-#### Scenario: Two agents in one worktree
-- **WHEN** two live claims name the same worktree path
-- **THEN** `specsync claims` reports the shared worktree as a collision
-
-### Requirement: Warn about work held in volatile or uncommitted state
-specsync SHALL warn when a claimed worktree lives under a system temp directory,
-and SHALL flag claims whose worktree holds uncommitted changes, including how
-long they have been uncommitted. The hazard is uncommitted work in a path the OS
-may reclaim; either condition alone is survivable.
-
-#### Scenario: Claiming a worktree under /tmp
-- **WHEN** a claim's worktree resolves under `/tmp`, `$TMPDIR` or `/private/tmp`
-- **THEN** specsync warns that the worktree is volatile
-
-#### Scenario: Uncommitted work in a volatile worktree
-- **WHEN** a claimed volatile worktree has uncommitted changes
-- **THEN** `specsync claims` flags it and reports the age of those changes
-
 ### Requirement: Determine landed state without relying on ancestry
 specsync SHALL record the merge or squash commit for a change once its tracker
 item closes, and SHALL answer "has this landed?" from that record rather than

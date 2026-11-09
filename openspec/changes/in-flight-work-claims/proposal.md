@@ -67,11 +67,6 @@ which collisions happen.
   claim's globs fails loudly, naming the other change, agent and worktree. That
   is (3) caught before duplicate work, not after.
 
-- **Volatile-worktree warning.** Claiming a worktree under a
-  system-temp path warns, and `specsync claims` flags any claim whose worktree
-  holds uncommitted changes. That is (2): the danger is uncommitted work in a
-  path the OS may reclaim.
-
 - **Landed-detection that survives squashes.** Record the merge/squash commit for
   a change so "is this landed?" is answered from recorded fact, not ancestry.
   Surface a warning when a change's issue is open but its content is present on
@@ -80,6 +75,16 @@ which collisions happen.
 - **Verification provenance.** Let a sync attach the commit SHA a verification
   claim was measured at. A "tests green" note pinned to a SHA that is no longer
   the branch tip is shown as stale rather than as current — the (6) failure.
+
+## Scope narrowed by workspace orchestration
+
+Incidents (1) and (2) are now prevented upstream rather than detected here: an
+orchestrator such as Orca, or `specsync start`, gives each change its own
+worktree in a managed, non-temporary location, and `workspace setup` ties that
+worktree to its change. So this change drops same-worktree collision
+detection and the volatile-worktree warning. What no orchestrator covers stays:
+overlapping files across separate worktrees (3), landed detection that
+survives squashes (4, 5), and verification provenance (6).
 
 ## What This Does Not Do
 
