@@ -129,7 +129,7 @@ func TestResolveOrca(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			env, _ := startTestEnv(&fakeGit{}, tt.goos, tt.path, tt.env)
-			if got := resolveOrca(env); got != tt.expect {
+			if got := resolveOrca(env.getenv, env.lookPath, env.goos); got != tt.expect {
 				t.Fatalf("resolveOrca = %q, want %q", got, tt.expect)
 			}
 		})

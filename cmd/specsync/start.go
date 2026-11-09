@@ -228,9 +228,9 @@ func chooseLauncher(env startEnv, launcher string) (string, error) {
 	case "git":
 		return "", nil
 	case "auto", "":
-		return resolveOrca(env), nil
+		return resolveOrca(env.getenv, env.lookPath, env.goos), nil
 	case "orca":
-		if orca := resolveOrca(env); orca != "" {
+		if orca := resolveOrca(env.getenv, env.lookPath, env.goos); orca != "" {
 			return orca, nil
 		}
 		if env.goos == "linux" {
@@ -240,23 +240,6 @@ func chooseLauncher(env startEnv, launcher string) (string, error) {
 	default:
 		return "", fmt.Errorf("-launcher must be auto, orca or git; got %q", launcher)
 	}
-}
-
-// resolveOrca finds Orca's CLI the way Orca's own guide prescribes:
-// $ORCA_CLI_COMMAND, then orca-ide on Linux, then orca. On Linux a bare
-// `orca` is the GNOME screen reader, so it is never used there.
-func resolveOrca(env startEnv) string {
-	if v := strings.TrimSpace(env.getenv("ORCA_CLI_COMMAND")); v != "" {
-		return v
-	}
-	name := "orca"
-	if env.goos == "linux" {
-		name = "orca-ide"
-	}
-	if p, err := env.lookPath(name); err == nil {
-		return p
-	}
-	return ""
 }
 
 // issueForChange returns the issue number recorded in the change's ref cache,
