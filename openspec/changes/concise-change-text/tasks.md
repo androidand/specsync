@@ -35,4 +35,4 @@
 - [ ] 4.1 Run `lint` on specsync's open proposals; condense those over budget, and list in specsync's own `text.headers` the extra names it uses on purpose (for example `Non-goals`, `Impact`) so the check passes without loosening the default
 
 Depends on `ways-of-working-and-next` for the `text:` config.
-- [ ] 4.2 Add a CI step that lints changed proposals and PR titles, advisory first, then `-fail`
+- [x] 4.2 Add a CI step that lints changed proposals and PR titles, advisory first, then `-fail`

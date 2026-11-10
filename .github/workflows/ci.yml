@@ -26,3 +26,13 @@ jobs:
         run: go run ./cmd/specsync audit-tasks -fail-on-mismatch
       - name: Validate OpenSpec change structure
         run: go run ./cmd/specsync validate
+      - name: Lint issue and PR text (advisory)
+        if: github.event_name == 'pull_request'
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          go run ./cmd/specsync lint -title "$PR_TITLE" -kind pr
+          git fetch -q --depth=1 origin "$BASE_REF"
+          git diff --name-only --diff-filter=AM "origin/$BASE_REF" HEAD -- 'openspec/changes/*/proposal.md' ':!openspec/changes/archive/**' |
+            while read -r f; do go run ./cmd/specsync lint -change "$(basename "$(dirname "$f")")"; done
