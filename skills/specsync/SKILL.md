@@ -119,6 +119,7 @@ specsync agent-help                # overview
 - `spinoff` — Spin off emergent work from a discovery.
 - `start` — Start or resume work on a change in its own worktree, the same way every time.
 - `update` — Bring your branch up to date with its base or upstream: a plan first, then -apply.
+- `workspace` — Workspace hooks: setup finds the change from the branch or Orca's linked issue and sets it active; archive sets it back to auto.
 
 **Sync with the tracker** (start: `specsync -dry-run -change <slug>`)
 - `sync` — Synchronize an OpenSpec change with GitHub Issues.
