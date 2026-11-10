@@ -1397,7 +1397,7 @@
     },
     "status": {
       "command": "status",
-      "description": "Show each change with its issue, branch and worktree.",
+      "description": "Show where your current work stands, or every change with -everything.",
       "mutates": false,
       "workflow": {
         "position": "planning",
@@ -1422,6 +1422,13 @@
           "description": "scope to one change (default: every change)"
         },
         {
+          "name": "everything",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "list every change instead of the current work"
+        },
+        {
           "name": "json",
           "type": "boolean",
           "required": false,
@@ -1434,14 +1441,24 @@
           "required": false,
           "default": "openspec",
           "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "state",
+          "type": "string",
+          "required": false,
+          "default": "on",
+          "description": "on (default) reuses pull request data for up to a minute; fresh refetches it; off skips the tracker and pull request lookups: local git facts only, offline"
         }
       ],
       "safety_rules": [
-        "Read-only: never writes to disk or the tracker"
+        "Never modifies your worktree, index, refs or the tracker; it may write a short-lived request cache outside the repo, and git merge-tree may add unreferenced objects"
       ],
       "examples": [
         "specsync status",
-        "specsync status -change my-change -json"
+        "specsync status -everything",
+        "specsync status -change my-change -json",
+        "specsync status -state=off",
+        "specsync status -state=fresh"
       ]
     },
     "sync": {

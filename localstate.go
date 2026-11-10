@@ -1,0 +1,305 @@
+package specsync
+
+import (
+	"bytes"
+	"context"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
+)
+
+// LocalState is what git alone says about one worktree: uncommitted work,
+// how far the branch is from its upstream and from its base, and how big it
+// is. Every field is read from git; nothing is inferred. See
+// openspec/changes/status-pr-and-worktree-state.
+type LocalState struct {
+	Head           string      `json:"head,omitempty"` // full commit id of HEAD
+	Modified       int         `json:"modified"`
+	Untracked      int         `json:"untracked"`
+	Upstream       string      `json:"upstream,omitempty"`
+	UpstreamGone   bool        `json:"upstreamGone,omitempty"`
+	Ahead          int         `json:"ahead"`
+	UpstreamBehind int         `json:"upstreamBehind"`
+	Base           string      `json:"base,omitempty"`
+	BehindBase     int         `json:"behindBase"`
+	Size           *BranchSize `json:"size,omitempty"`
+	LastCommit     string      `json:"lastCommit,omitempty"` // RFC 3339
+	VolatilePath   bool        `json:"volatilePath,omitempty"`
+
+	// Freshness: has the base moved, over files this branch also changed, and
+	// would merging or rebasing onto it conflict? Set only when a base exists.
+	BaseMovedAt              string   `json:"baseMovedAt,omitempty"` // RFC 3339, base tip commit time
+	BaseTouchesYourFiles     []string `json:"baseTouchesYourFiles,omitempty"`
+	Conflicts                []string `json:"conflicts,omitempty"`
+	ConflictCheckUnavailable bool     `json:"conflictCheckUnavailable,omitempty"`
+	// SharedBranch is true when commits on the branch have more than one author.
+	SharedBranch bool `json:"sharedBranch,omitempty"`
+}
+
+// BranchSize is the branch's size against its merge base with the base.
+type BranchSize struct {
+	Files     int `json:"files"`
+	Additions int `json:"additions"`
+	Deletions int `json:"deletions"`
+	Commits   int `json:"commits"`
+}
+
+// LocalStateOptions configures CollectLocalState.
+type LocalStateOptions struct {
+	// Base overrides base-branch resolution (for example a pull request's
+	// base). Empty means origin/HEAD, else the base is omitted.
+	Base string
+	// VolatileDirs are the directories treated as temporary. nil means the
+	// system defaults; an empty non-nil slice means none.
+	VolatileDirs []string
+}
+
+// CollectLocalState reads the state of the worktree at dir. It only reads:
+// no fetch, no index refresh, no checkout. An error means dir is not a git
+// worktree; any narrower failure omits just that field.
+func CollectLocalState(ctx context.Context, dir string, opts LocalStateOptions) (*LocalState, error) {
+	if _, err := gitIn(ctx, dir, "rev-parse", "--git-dir"); err != nil {
+		return nil, err
+	}
+	ls := &LocalState{}
+
+	if out, err := gitIn(ctx, dir, "--no-optional-locks", "status", "--porcelain=v1"); err == nil {
+		for _, line := range strings.Split(out, "\n") {
+			switch {
+			case line == "":
+			case strings.HasPrefix(line, "??"):
+				ls.Untracked++
+			default:
+				ls.Modified++
+			}
+		}
+	}
+
+	if up, err := gitIn(ctx, dir, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"); err == nil {
+		ls.Upstream = strings.TrimSpace(up)
+		if out, err := gitIn(ctx, dir, "rev-list", "--left-right", "--count", "HEAD...@{u}"); err == nil {
+			ls.Ahead, ls.UpstreamBehind = twoInts(out)
+		}
+	} else if remote, merge := gitConfigOf(ctx, dir, "remote"), gitConfigOf(ctx, dir, "merge"); remote != "" && merge != "" {
+		ls.Upstream = remote + "/" + strings.TrimPrefix(merge, "refs/heads/")
+		ls.UpstreamGone = true
+	}
+
+	// The base is the override when it resolves (for example a pull request's
+	// base), else origin/HEAD, else omitted.
+	candidates := []string{opts.Base}
+	if out, err := gitIn(ctx, dir, "symbolic-ref", "--short", "refs/remotes/origin/HEAD"); err == nil {
+		candidates = append(candidates, strings.TrimSpace(out))
+	}
+	for _, base := range candidates {
+		if base == "" {
+			continue
+		}
+		out, err := gitIn(ctx, dir, "rev-list", "--count", "HEAD.."+base)
+		if err != nil {
+			continue
+		}
+		ls.Base = base
+		ls.BehindBase, _ = strconv.Atoi(strings.TrimSpace(out))
+		ls.Size = branchSize(ctx, dir, base)
+		collectFreshness(ctx, dir, base, ls)
+		break
+	}
+
+	if out, err := gitIn(ctx, dir, "rev-parse", "HEAD"); err == nil {
+		ls.Head = strings.TrimSpace(out)
+	}
+	if out, err := gitIn(ctx, dir, "log", "-1", "--format=%cI"); err == nil {
+		ls.LastCommit = strings.TrimSpace(out)
+	}
+
+	dirs := opts.VolatileDirs
+	if dirs == nil {
+		dirs = defaultVolatileDirs()
+	}
+	ls.VolatilePath = isVolatilePath(dir, dirs)
+	return ls, nil
+}
+
+// collectFreshness fills the base-movement facts. The conflict check uses
+// `git merge-tree --write-tree`, which computes the merge in memory: it writes
+// objects but never touches the index, the worktree or any ref.
+func collectFreshness(ctx context.Context, dir, base string, ls *LocalState) {
+	if out, err := gitIn(ctx, dir, "log", "-1", "--format=%cI", base); err == nil {
+		ls.BaseMovedAt = strings.TrimSpace(out)
+	}
+	if out, err := gitIn(ctx, dir, "log", "--format=%ae", base+"..HEAD"); err == nil {
+		authors := map[string]bool{}
+		for _, a := range strings.Fields(out) {
+			authors[a] = true
+		}
+		ls.SharedBranch = len(authors) > 1
+	}
+	if ls.BehindBase == 0 {
+		return
+	}
+	mine, err1 := gitIn(ctx, dir, "diff", "--name-only", base+"...HEAD")
+	theirs, err2 := gitIn(ctx, dir, "diff", "--name-only", "HEAD..."+base)
+	if err1 == nil && err2 == nil {
+		ls.BaseTouchesYourFiles = intersectLines(mine, theirs)
+	}
+	cmd := exec.CommandContext(ctx, "git", "-C", dir, "merge-tree", "--write-tree", "--name-only", "HEAD", base)
+	cmd.Env = append(os.Environ(), "LC_ALL=C")
+	out, err := cmd.Output()
+	exit := 0
+	if err != nil {
+		exit = -1
+		if ee, ok := err.(*exec.ExitError); ok {
+			exit = ee.ExitCode()
+		}
+	}
+	paths, ok := classifyMergeTree(exit, string(out))
+	ls.Conflicts, ls.ConflictCheckUnavailable = paths, !ok
+}
+
+// classifyMergeTree interprets `git merge-tree --write-tree --name-only`:
+// exit 0 is a clean merge, exit 1 lists the conflicted paths after the result
+// tree line, anything else (an old git without --write-tree, a failure) means
+// the check is unavailable and nothing is guessed.
+func classifyMergeTree(exit int, stdout string) (paths []string, ok bool) {
+	switch exit {
+	case 0:
+		return nil, true
+	case 1:
+		lines := strings.Split(stdout, "\n")
+		for _, l := range lines[1:] {
+			if l == "" {
+				break
+			}
+			paths = append(paths, l)
+		}
+		sort.Strings(paths)
+		return paths, true
+	}
+	return nil, false
+}
+
+// intersectLines returns the sorted lines present in both newline lists.
+func intersectLines(a, b string) []string {
+	in := map[string]bool{}
+	for _, l := range strings.Split(a, "\n") {
+		if l != "" {
+			in[l] = true
+		}
+	}
+	var both []string
+	for _, l := range strings.Split(b, "\n") {
+		if l != "" && in[l] {
+			both = append(both, l)
+		}
+	}
+	sort.Strings(both)
+	return both
+}
+
+func branchSize(ctx context.Context, dir, base string) *BranchSize {
+	size := &BranchSize{}
+	out, err := gitIn(ctx, dir, "rev-list", "--count", base+"..HEAD")
+	if err != nil {
+		return nil
+	}
+	size.Commits, _ = strconv.Atoi(strings.TrimSpace(out))
+	diff, err := gitIn(ctx, dir, "diff", "--numstat", base+"...HEAD")
+	if err != nil {
+		return nil
+	}
+	for _, line := range strings.Split(diff, "\n") {
+		f := strings.Split(line, "\t")
+		if len(f) < 3 {
+			continue
+		}
+		size.Files++
+		a, _ := strconv.Atoi(f[0]) // "-" for binary files counts as 0
+		d, _ := strconv.Atoi(f[1])
+		size.Additions += a
+		size.Deletions += d
+	}
+	return size
+}
+
+func twoInts(s string) (int, int) {
+	f := strings.Fields(s)
+	if len(f) != 2 {
+		return 0, 0
+	}
+	a, _ := strconv.Atoi(f[0])
+	b, _ := strconv.Atoi(f[1])
+	return a, b
+}
+
+// gitIn runs git in dir and returns stdout without the trailing newline. The
+// locale is fixed so git's messages are stable; a failure carries git's own
+// message.
+func gitIn(ctx context.Context, dir string, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
+	cmd.Env = append(os.Environ(), "LC_ALL=C")
+	out, err := cmd.Output()
+	if err != nil {
+		reason := err.Error()
+		if ee, ok := err.(*exec.ExitError); ok && len(bytes.TrimSpace(ee.Stderr)) > 0 {
+			reason = strings.TrimSpace(string(ee.Stderr))
+		}
+		return "", fmt.Errorf("git %s: %s", strings.Join(args, " "), reason)
+	}
+	return strings.TrimRight(string(out), "\n"), nil
+}
+
+func defaultVolatileDirs() []string {
+	return []string{os.TempDir(), "/tmp", "/private/tmp", "/var/tmp"}
+}
+
+// isVolatilePath reports whether path is inside one of dirs, after resolving
+// symlinks on both sides.
+func isVolatilePath(path string, dirs []string) bool {
+	path = resolved(path)
+	for _, d := range dirs {
+		d = resolved(d)
+		if d != "" && (path == d || strings.HasPrefix(path, d+string(filepath.Separator))) {
+			return true
+		}
+	}
+	return false
+}
+
+// resolved evaluates symlinks through the deepest existing ancestor of p, so
+// a path that does not exist yet still compares equal to its real location.
+func resolved(p string) string {
+	p = filepath.Clean(p)
+	rest := ""
+	for cur := p; ; {
+		if r, err := filepath.EvalSymlinks(cur); err == nil {
+			return filepath.Join(r, rest)
+		}
+		parent := filepath.Dir(cur)
+		if parent == cur {
+			return p
+		}
+		rest = filepath.Join(filepath.Base(cur), rest)
+		cur = parent
+	}
+}
+
+// LocalAttention returns the attention flags that git facts alone decide.
+func LocalAttention(ls LocalState) []string { return RowAttention(&ls, nil) }
+
+// gitConfigOf reads branch.<current>.<key>, or "" when unset.
+func gitConfigOf(ctx context.Context, dir, key string) string {
+	branch, err := gitIn(ctx, dir, "rev-parse", "--abbrev-ref", "HEAD")
+	if err != nil || strings.TrimSpace(branch) == "" || strings.TrimSpace(branch) == "HEAD" {
+		return ""
+	}
+	out, err := gitIn(ctx, dir, "config", "--get", "branch."+strings.TrimSpace(branch)+"."+key)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(out)
+}

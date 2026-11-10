@@ -48,6 +48,14 @@ writes by seconds to minutes; a sync inside that window finds nothing and
 creates a duplicate issue. `adopt` writes the ref cache first, so the link
 holds immediately regardless of indexing.
 
+**See where your work stands** (use this instead of hand-running `git status`, `git rev-list` and `gh pr view`):
+```bash
+specsync status                # current worktree: PR, checks, review, unpushed/uncommitted, base moved
+specsync status -json          # same facts for agents; read `attention` and `sync`
+specsync status -everything    # every change; -state=off for local git facts only
+```
+`attention` lists what needs a person; `sync` is advice (commands as text) that status never runs.
+
 **Find related work:**
 ```bash
 specsync scan <path...> [topic]
@@ -81,7 +89,7 @@ specsync agent-help                # overview
 - `ideas` — List open stage:intake issues for the repo.
 - `relate` — Show the work connected to a change or a file path.
 - `scan` — Scan for existing work in a code area or topic.
-- `status` — Show each change with its issue, branch and worktree.
+- `status` — Show where your current work stands, or every change with -everything.
 - `trace` — Trace dependencies and relationships of a change.
 
 **Plan work** (start: `specsync pull -issue <n>`)

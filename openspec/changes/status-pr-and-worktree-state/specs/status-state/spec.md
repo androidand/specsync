@@ -89,9 +89,10 @@ specsync SHALL suggest fast-forward, rebase or merge from a documented table ove
 and the configured strategy, SHALL list the exact commands, SHALL say when a force push would be
 required, and SHALL NOT run any of them.
 
-#### Scenario: Review has started
-- **WHEN** the base moved and the request already has reviews
+#### Scenario: Request is under review
+- **WHEN** the base moved and an open, non-draft request exists for the branch
 - **THEN** the suggestion is to merge the base and no force push is needed
+- **AND** it does not matter whether anyone has commented: GitHub never records an author's own review, and automated comments do not change the answer
 
 #### Scenario: Shared branch
 - **WHEN** the branch has commits by more than one author
@@ -113,7 +114,7 @@ behind the base where policy requires it.
 ### Requirement: Derive attention flags from a fixed vocabulary
 specsync SHALL compute `attention` only from the documented rules, using exactly
 these flags: `unpushed`, `uncommitted`, `no-upstream`, `behind-upstream`, `diverged`, `behind-base`,
-`base-touches-your-files`, `conflicts-with-base`, `ci-failing`, `changes-requested`, `review-missing`,
+`base-touches-your-files`, `conflicts-with-base`, `ci-failing`, `changes-requested`,
 `unresolved-comments`, `volatile-path`, `cleanup`, and the positive `ready-to-merge`.
 Each flag SHALL be a deterministic predicate over the row's facts. `cleanup` SHALL
 mean only that the PR is merged and the worktree is clean, and SHALL NOT trigger

@@ -19,6 +19,10 @@ import (
 type Topology struct {
 	Changes []ChangeTopology `json:"changes"`
 	Status  []string         `json:"status,omitempty"`
+	// RequestState says whether request lookups happened: "ok", "omitted"
+	// (a provider failed) or "off" (-state=off). Empty when none was needed.
+	// An absent pr block only means "no request" when this is "ok".
+	RequestState string `json:"requestState,omitempty"`
 }
 
 // ChangeTopology is one row of the join.
@@ -33,6 +37,23 @@ type ChangeTopology struct {
 	Worktree string         `json:"worktree,omitempty"`
 	Epic     string         `json:"epic,omitempty"`
 	Linked   []string       `json:"linked,omitempty"`
+	// Local and Attention come from git alone, for the row's worktree.
+	Local     *LocalState `json:"local,omitempty"`
+	Attention []string    `json:"attention,omitempty"`
+	// Sync is advice for bringing the branch up to date. It is never executed.
+	Sync *SyncAdvice `json:"sync,omitempty"`
+	// NoChange marks the row for a branch that belongs to no change (Slug is empty).
+	NoChange bool `json:"noChange,omitempty"`
+	// Tasks counts the change's checklist items.
+	Tasks *TaskCount `json:"tasks,omitempty"`
+	// PR is the change request on the row's branch, from the work provider.
+	PR *ChangeRequest `json:"pr,omitempty"`
+}
+
+// TaskCount is how many checklist items are done of the total.
+type TaskCount struct {
+	Done  int `json:"done"`
+	Total int `json:"total"`
 }
 
 // TopologyIssue is the tracker reference for one change. State is set only
@@ -58,6 +79,29 @@ type TopologyOptions struct {
 	gitWorktreeList  func(ctx context.Context, repoDir string) (string, error)
 	gitRemoteOrigin  func(ctx context.Context, repoDir string) (string, error)
 	run              func(ctx context.Context, args ...string) (string, error) // gh
+	localState       func(ctx context.Context, worktree string, lo LocalStateOptions) (*LocalState, error)
+
+	// Dir, when set and Slug is empty, scopes the result to the worktree that
+	// contains it: the current work. A branch that belongs to no change gets a
+	// row with NoChange set. Outside a git worktree everything is returned.
+	Dir        string
+	gitCurrent func(ctx context.Context, dir string) (toplevel, branch string, err error)
+
+	// LocalOnly (-state=off) skips every gh call and the provider: local git
+	// facts only, instant and offline.
+	LocalOnly bool
+
+	// Cache, when set, serves a repo's request listing for a short time.
+	// RefreshRequests skips reading it (the fresh listing is still stored).
+	Cache           RequestCache
+	RefreshRequests bool
+
+	// changeRequests lists one repo's requests. nil set means the provider
+	// cannot list them, which is silent. The default asks the GitHub provider.
+	changeRequests func(ctx context.Context, repo string) (*ChangeRequestSet, error)
+
+	// Sync is the `sync:` config for suggestions; zero means the defaults.
+	Sync SyncConfig
 }
 
 // storeEntry is one coordinated store to scan: its repo root (for git
@@ -90,6 +134,23 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 	}
 	if opts.run == nil {
 		opts.run = runGH
+	}
+	if opts.changeRequests == nil {
+		run := opts.run
+		opts.changeRequests = func(ctx context.Context, repo string) (*ChangeRequestSet, error) {
+			var src ChangeRequestSource = NewGitHubProviderFuncWithRepo(repo, run)
+			set, err := src.ChangeRequests(ctx)
+			if err != nil {
+				return nil, err
+			}
+			return &set, nil
+		}
+	}
+	if opts.localState == nil {
+		opts.localState = CollectLocalState
+	}
+	if opts.gitCurrent == nil {
+		opts.gitCurrent = gitCurrentReal
 	}
 
 	var status []string
@@ -147,7 +208,109 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 	repos := map[string]string{}
 	repoFailed := map[string]bool{}
 	epicLabel := map[string]bool{}
-	ghDown := false
+	ghDown := opts.LocalOnly
+	requestSets := map[string]*ChangeRequestSet{}
+	requestState := ""
+	if opts.LocalOnly {
+		requestState = "off"
+	}
+	requestsFailed := map[string]bool{}
+
+	// resolveWorktree finds a change's worktree: by slug, then by the issue
+	// number in the branch name (feat/<issue>-<name>).
+	resolveWorktree := func(storePath, slug, issueID string) (branch, path string, ok bool) {
+		entries, have := worktrees[storePath]
+		if !have && !worktreeFailed[storePath] {
+			es, err := listWorktrees(ctx, opts.gitWorktreeList, storePath)
+			if err != nil {
+				worktreeFailed[storePath] = true
+				addStatus("git worktree list failed in %s: %v", storePath, err)
+			} else {
+				worktrees[storePath] = es
+				entries = es
+				have = true
+			}
+		}
+		if !have {
+			return "", "", false
+		}
+		if b, p, m := matchWorktree(entries, slug); m {
+			return b, p, true
+		}
+		return matchWorktreeByIssue(entries, issueID)
+	}
+
+	// enrich adds everything that needs the row's branch and worktree: the
+	// request, local git state, attention flags and the sync suggestion.
+	enrich := func(row *ChangeTopology) {
+		var cr *ChangeRequest
+		if !opts.LocalOnly && row.Repo != "" && row.Branch != "" && !requestsFailed[row.Repo] {
+			set, seen := requestSets[row.Repo]
+			if !seen {
+				var got *ChangeRequestSet
+				var err error
+				if opts.Cache != nil && !opts.RefreshRequests {
+					if cached, ok := opts.Cache.Get(row.Repo); ok {
+						got = &cached
+					}
+				}
+				if got == nil {
+					got, err = opts.changeRequests(ctx, row.Repo)
+					if err == nil && got != nil && opts.Cache != nil {
+						opts.Cache.Put(row.Repo, *got)
+					}
+				}
+				if err != nil {
+					requestsFailed[row.Repo] = true
+					requestState = "omitted"
+					addStatus("request state omitted for %s: %s", row.Repo, errReason(err))
+				} else {
+					if requestState == "" {
+						requestState = "ok"
+					}
+					set = got
+					requestSets[row.Repo] = got
+					if got != nil && got.Truncated {
+						addStatus("request listing for %s may be truncated; older requests can be missing", row.Repo)
+					}
+				}
+			}
+			if set != nil {
+				cr = set.ForBranch(row.Branch)
+				row.PR = cr
+			}
+		}
+
+		// An open request's base is the branch this work is measured against.
+		base := ""
+		if cr != nil && cr.State == "open" && cr.Base != "" {
+			base = "origin/" + cr.Base
+		}
+		var ls *LocalState
+		if got, err := opts.localState(ctx, row.Worktree, LocalStateOptions{Base: base}); err != nil {
+			addStatus("local state unavailable for %s: %v", rowLabel(*row), err)
+		} else {
+			ls = got
+			row.Local = ls
+		}
+
+		row.Attention = RowAttention(ls, cr)
+		if ls != nil {
+			row.Sync = SuggestSync(*ls, SyncInput{UnderReview: cr != nil && cr.State == "open" && !cr.Draft}, opts.Sync)
+		}
+	}
+
+	// Scope to the current worktree: decided up front so other changes are
+	// skipped before any per-change lookup.
+	scoped, curTop, curBranch := false, "", ""
+	if opts.Dir != "" && opts.Slug == "" {
+		top, branch, err := opts.gitCurrent(ctx, opts.Dir)
+		if err != nil {
+			addStatus("not inside a git worktree (%s): showing every change", errReason(err))
+		} else {
+			scoped, curTop, curBranch = true, top, branch
+		}
+	}
 
 	var rows []ChangeTopology
 	for _, l := range all {
@@ -155,12 +318,20 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 		if opts.Slug != "" && c.Slug != opts.Slug {
 			continue
 		}
+		if scoped {
+			if _, path, ok := resolveWorktree(l.store.path, c.Slug, refIssueID(l.refs)); !ok || resolved(path) != resolved(curTop) {
+				continue
+			}
+		}
 
 		row := ChangeTopology{
 			Slug:  c.Slug,
 			Title: c.Title,
 			Stage: string(c.Stage),
 			Store: l.store.path,
+		}
+		if total, done := CountCheckboxes(c.TasksMarkdown); total > 0 {
+			row.Tasks = &TaskCount{Done: done, Total: total}
 		}
 
 		if repo, ok := repos[l.store.path]; ok {
@@ -191,23 +362,10 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 			}
 		}
 
-		entries, ok := worktrees[l.store.path]
-		if !ok && !worktreeFailed[l.store.path] {
-			es, err := listWorktrees(ctx, opts.gitWorktreeList, l.store.path)
-			if err != nil {
-				worktreeFailed[l.store.path] = true
-				addStatus("git worktree list failed in %s: %v", l.store.path, err)
-			} else {
-				worktrees[l.store.path] = es
-				entries = es
-				ok = true
-			}
-		}
-		if ok {
-			if branch, path, matched := matchWorktree(entries, c.Slug); matched {
-				row.Branch = branch
-				row.Worktree = path
-			}
+		if branch, path, matched := resolveWorktree(l.store.path, c.Slug, refIssueID(l.refs)); matched {
+			row.Branch = branch
+			row.Worktree = path
+			enrich(&row)
 		}
 
 		for _, link := range c.Links {
@@ -247,9 +405,18 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 		rows = append(rows, row)
 	}
 
+	if scoped && len(rows) == 0 {
+		row := ChangeTopology{NoChange: true, Branch: curBranch, Worktree: curTop}
+		if repo, err := opts.gitRemoteOrigin(ctx, curTop); err == nil {
+			row.Repo = repo
+		}
+		enrich(&row)
+		rows = append(rows, row)
+	}
+
 	sort.Slice(rows, func(i, j int) bool { return rows[i].Slug < rows[j].Slug })
 
-	return &Topology{Changes: rows, Status: status}, nil
+	return &Topology{Changes: rows, Status: status, RequestState: requestState}, nil
 }
 
 // fetchIssueState returns an issue's open/closed state via gh.
@@ -343,6 +510,64 @@ func matchWorktree(entries []worktreeEntry, slug string) (branch, path string, o
 	}
 	for _, e := range entries {
 		if filepath.Base(e.path) == slug {
+			return e.branch, e.path, true
+		}
+	}
+	return "", "", false
+}
+
+// errReason returns the last non-empty line of an error: for a failed gh call
+// that is gh's own message, without the echoed command line.
+func errReason(err error) string {
+	lines := strings.Split(strings.TrimSpace(err.Error()), "\n")
+	return strings.TrimSpace(lines[len(lines)-1])
+}
+
+// rowLabel names a row in messages: its slug, or its branch for a branch with no change.
+func rowLabel(r ChangeTopology) string {
+	if r.Slug != "" {
+		return r.Slug
+	}
+	return r.Branch
+}
+
+// gitCurrentReal returns the top level of the worktree containing dir and its
+// current branch ("" when HEAD is detached).
+func gitCurrentReal(ctx context.Context, dir string) (string, string, error) {
+	top, err := gitIn(ctx, dir, "rev-parse", "--show-toplevel")
+	if err != nil {
+		return "", "", err
+	}
+	branch, err := gitIn(ctx, dir, "rev-parse", "--abbrev-ref", "HEAD")
+	if err != nil {
+		return top, "", nil // a repo with no commits yet has no branch name
+	}
+	if branch == "HEAD" {
+		branch = ""
+	}
+	return top, branch, nil
+}
+
+// refIssueID returns the issue number from a change's first ref, or "".
+func refIssueID(refs map[string]Ref) string {
+	if len(refs) == 0 {
+		return ""
+	}
+	_, ref := firstRef(refs)
+	return ref.ID
+}
+
+// issueInBranch matches a leading issue number: feat/186-name or 186-name.
+var issueInBranch = regexp.MustCompile(`^(?:[^/]+/)?(\d+)-`)
+
+// matchWorktreeByIssue finds the worktree whose branch starts with the issue
+// number, comparing whole numbers (18 does not match 186).
+func matchWorktreeByIssue(entries []worktreeEntry, issueID string) (branch, path string, ok bool) {
+	if issueID == "" {
+		return "", "", false
+	}
+	for _, e := range entries {
+		if m := issueInBranch.FindStringSubmatch(e.branch); m != nil && m[1] == issueID {
 			return e.branch, e.path, true
 		}
 	}

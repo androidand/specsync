@@ -78,7 +78,7 @@ Facts (all read-only, from git and the provider):
   says "merge is clean; a rebase may still stop". Omitted when git is too old; the row then says the
   check was unavailable.
 - `shared`: the branch has commits by more than one author.
-- `reviewStarted`: the request has any review or comment (provider fact).
+- `underReview`: an open, non-draft request exists for the branch. A self-review is never recorded, so an open request is the signal; bot and AI comments do not change it.
 
 Advice is a mechanical table over those facts. First match wins:
 
@@ -88,7 +88,7 @@ Advice is a mechanical table over those facts. First match wins:
 | only `behindUpstream` | fast-forward the branch |
 | `diverged` | rebase local commits onto the upstream; no force push needed |
 | `behindBase`, `shared` | merge the base; never force |
-| `behindBase`, `reviewStarted` | merge the base (keeps review comments attached); configurable |
+| `behindBase`, `underReview` | merge the base (keeps review comments attached); configurable |
 | `behindBase`, otherwise | rebase onto the base; force push with lease if already pushed |
 | up to date | nothing |
 
