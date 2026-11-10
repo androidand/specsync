@@ -191,6 +191,10 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 	}
 
 	repoRoot := filepath.Dir(opts.OpenSpecDir)
+	if opts.Sync == (SyncConfig{}) {
+		ways, _ := LoadWays(repoRoot)
+		opts.Sync = ways.Sync
+	}
 	stores := []storeEntry{{path: repoRoot, openspecDir: opts.OpenSpecDir}}
 
 	var coord *Coordination

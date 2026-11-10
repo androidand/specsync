@@ -9,11 +9,13 @@
     "changes",
     "doctor",
     "epic",
+    "flow",
     "idea",
     "ideas",
     "init",
     "install-skill",
     "link",
+    "next",
     "note",
     "overview",
     "pr-body",
@@ -27,6 +29,7 @@
     "status",
     "sync",
     "trace",
+    "trust",
     "validate",
     "verify",
     "version"
@@ -561,7 +564,8 @@
       "examples": [
         "specsync doctor",
         "specsync doctor install -json",
-        "specsync doctor context -json"
+        "specsync doctor context -json",
+        "specsync doctor config"
       ]
     },
     "epic": {
@@ -621,6 +625,54 @@
       "examples": [
         "specsync epic 'Q3 auth rework' --child my-change --child other-org/other-repo#42 --dry-run",
         "specsync epic 'Q3 auth rework' --child my-change"
+      ]
+    },
+    "flow": {
+      "command": "flow",
+      "description": "Show this repo's flow and mark where your current work is in it.",
+      "mutates": false,
+      "workflow": {
+        "position": "any",
+        "related_before": [
+          "next"
+        ]
+      },
+      "flags": [
+        {
+          "name": "change",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "the change to report on (default: the work in the current folder)"
+        },
+        {
+          "name": "json",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "output as JSON"
+        },
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "state",
+          "type": "string",
+          "required": false,
+          "default": "on",
+          "description": "on (default) reuses pull request data for up to a minute; fresh refetches it; off skips the tracker and pull request lookups: local facts only, offline"
+        }
+      ],
+      "safety_rules": [
+        "Read-only: reports the configured steps and the current one; it may write status's short-lived request cache outside the repo"
+      ],
+      "examples": [
+        "specsync flow",
+        "specsync flow -json"
       ]
     },
     "idea": {
@@ -855,6 +907,58 @@
         "specsync link my-change other-change -dry-run",
         "specsync link my-change other-change",
         "specsync link change-a change-b change-c"
+      ]
+    },
+    "next": {
+      "command": "next",
+      "description": "Say the next step for your current work, and the command for it.",
+      "mutates": false,
+      "workflow": {
+        "position": "any",
+        "related_before": [
+          "status"
+        ],
+        "related_after": [
+          "flow"
+        ]
+      },
+      "flags": [
+        {
+          "name": "change",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "the change to report on (default: the work in the current folder)"
+        },
+        {
+          "name": "json",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "output as JSON"
+        },
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "state",
+          "type": "string",
+          "required": false,
+          "default": "on",
+          "description": "on (default) reuses pull request data for up to a minute; fresh refetches it; off skips the tracker and pull request lookups: local facts only, offline"
+        }
+      ],
+      "safety_rules": [
+        "Suggests only: never runs the step, creates a file, branch or tracker item, or starts a process; it may write status's short-lived request cache outside the repo"
+      ],
+      "examples": [
+        "specsync next",
+        "specsync next -json",
+        "specsync next -state=off"
       ]
     },
     "note": {
@@ -1852,6 +1956,57 @@
         "specsync trace",
         "specsync trace -change my-change",
         "specsync trace -json"
+      ]
+    },
+    "trust": {
+      "command": "trust",
+      "description": "Allow specsync to run the commands in this repo's specsync.yml.",
+      "mutates": true,
+      "workflow": {
+        "position": "setup",
+        "related_after": [
+          "doctor"
+        ]
+      },
+      "flags": [
+        {
+          "name": "dry-run",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "with -yes, show what would be recorded without recording it"
+        },
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "revoke",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "remove the trust record for this repository"
+        },
+        {
+          "name": "yes",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "record trust for the commands printed (without it nothing is recorded)"
+        }
+      ],
+      "safety_rules": [
+        "Without -yes it only prints the commands and records nothing; read them, then run the printed specsync trust -yes",
+        "Writes only a per-user record (a hash of the config) outside the repo",
+        "A changed config needs trust again; specsync never runs repository-defined commands without it"
+      ],
+      "examples": [
+        "specsync trust",
+        "specsync trust -yes",
+        "specsync trust -revoke"
       ]
     },
     "validate": {

@@ -840,26 +840,30 @@ func ReadSpecSyncConfig(root string) SpecSyncConfig {
 	return parseSpecSyncConfig(data)
 }
 
-// parseSpecSyncConfig parses a minimal YAML-like config. Supports lines of the
-// form "key: value" (top-level only, no nesting). Unknown keys are ignored.
+// parseSpecSyncConfig reads the top-level keys specsync needs from the config.
+// An unsupported construct elsewhere in the file (doctor reports it with its
+// line) must not lose them, so a file that does not parse falls back to
+// reading the unindented key: value lines.
 func parseSpecSyncConfig(data []byte) SpecSyncConfig {
 	cfg := SpecSyncConfig{}
+	if root, err := ParseConfigYAML(data); err == nil {
+		cfg.Board = root.Str("board")
+		cfg.IdeasRepo = root.Str("ideas_repo")
+		return cfg
+	}
 	for _, line := range strings.Split(string(data), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
+		if line == "" || line[0] == ' ' || line[0] == '\t' || line[0] == '#' {
 			continue
 		}
 		k, v, ok := strings.Cut(line, ":")
 		if !ok {
 			continue
 		}
-		k = strings.TrimSpace(k)
-		v = strings.TrimSpace(v)
-		switch k {
+		switch strings.TrimSpace(k) {
 		case "board":
-			cfg.Board = v
+			cfg.Board = strings.Trim(strings.TrimSpace(v), `"'`)
 		case "ideas_repo":
-			cfg.IdeasRepo = v
+			cfg.IdeasRepo = strings.Trim(strings.TrimSpace(v), `"'`)
 		}
 	}
 	return cfg

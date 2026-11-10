@@ -142,5 +142,11 @@
     "icon": "state",
     "title": "Warns before a pull request is too big",
     "body": "<code>specsync status</code> and <code>verify -size</code> flag a branch that is over a files, lines or commits budget, or that mixes commit scopes, before review starts. Advisory by default; <code>-fail-on-oversized</code> makes it a gate."
+  },
+  {
+    "group": "plan",
+    "icon": "flow",
+    "title": "Define your flow once, get the next step",
+    "body": "Declare gates and steps in <code>openspec/specsync.yml</code>; <code>specsync next</code> reads the work's state and prints the next step and its command, <code>specsync flow</code> marks where you are. Commands from the repo run only after <code>specsync trust</code>."
   }
 ]

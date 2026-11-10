@@ -86,7 +86,9 @@ specsync agent-help                # overview
 - `audit` — Audit OpenSpec changes for structural issues.
 - `audit-tasks` — Audit that task status matches code changes (dogfooding).
 - `changes` — List all OpenSpec changes with status.
+- `flow` — Show this repo's flow and mark where your current work is in it.
 - `ideas` — List open stage:intake issues for the repo.
+- `next` — Say the next step for your current work, and the command for it.
 - `overview` — List all work in all repositories, grouped by epic.
 - `relate` — Show the work connected to a change or a file path.
 - `scan` — Scan for existing work in a code area or topic.
@@ -120,6 +122,7 @@ specsync agent-help                # overview
 - `agent-help` — Show how to use any specsync command, for people and agents.
 - `doctor` — Diagnose skill installation, environment, and context health.
 - `install-skill` — Install the specsync skill for your coding agent.
+- `trust` — Allow specsync to run the commands in this repo's specsync.yml.
 - `version` — Print the specsync version.
 <!-- specsync:commands:end -->
 

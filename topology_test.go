@@ -1007,3 +1007,31 @@ func TestBuildTopology_BadBudgetFlagOrEnvAbortsBadSliceLineFallsBack(t *testing.
 		t.Fatalf("want one warning, got %d in %v", warned, topo.Status)
 	}
 }
+
+func TestBuildTopology_SyncAdviceFollowsTheRepoConfig(t *testing.T) {
+	repo := t.TempDir()
+	root := filepath.Join(repo, "openspec")
+	mustWrite(t, filepath.Join(root, "changes", "add-field-forms", "proposal.md"), "# Add field forms\n")
+	mustWrite(t, filepath.Join(root, "specsync.yml"), "sync: {strategy: merge}\n")
+	worktreePath := filepath.Join(repo, "..", "worktrees", "add-field-forms")
+	porcelain := "worktree " + repo + "\nHEAD abc\nbranch refs/heads/main\n\n" +
+		"worktree " + worktreePath + "\nHEAD def\nbranch refs/heads/feat/4231-add-field-forms\n"
+	opts := TopologyOptions{
+		OpenSpecDir:      root,
+		readCoordination: func(context.Context) (*Coordination, error) { return nil, nil },
+		gitWorktreeList:  fakeGitWorktreeList(map[string]string{repo: porcelain}, nil),
+		gitRemoteOrigin:  fakeGitRemoteOrigin(map[string]string{repo: "acme/portal"}),
+		run:              func(context.Context, ...string) (string, error) { return "", errors.New("gh offline") },
+		localState: func(context.Context, string, LocalStateOptions) (*LocalState, error) {
+			return &LocalState{Upstream: "origin/x", Base: "origin/main", BehindBase: 2}, nil
+		},
+	}
+	topo, err := BuildTopology(context.Background(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	row := topo.Changes[0]
+	if row.Sync == nil || row.Sync.Action != "merge-base" {
+		t.Fatalf("strategy: merge must make the advice a merge, got %+v", row.Sync)
+	}
+}
