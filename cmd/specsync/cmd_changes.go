@@ -54,12 +54,15 @@ func (i issueInfo) stateText() string {
 
 // resolveIssueInfo reads each change's cached issue ref and asks the provider
 // for all their states in one call. Changes without a cached ref are counted
-// in unchecked and never drift.
+// in unchecked and never drift. Archived changes are skipped.
 func resolveIssueInfo(ctx context.Context, changes []specsync.Change, reader specsync.IssueStateReader) (map[string]issueInfo, int, error) {
 	info := make(map[string]issueInfo, len(changes))
 	var refs []specsync.Ref
 	unchecked := 0
 	for _, c := range changes {
+		if c.Archived {
+			continue
+		}
 		ref, ok := specsync.ChangeIssueRef(c.Dir)
 		if !ok {
 			unchecked++
@@ -120,12 +123,12 @@ func (cm *changesCmd) Flags(fs *flag.FlagSet) {
 	cm.drift = fs.Bool("drift", false, "list only changes whose issue state disagrees with the change (implies -issues) and exit 1 when there are any")
 }
 
-func (cm *changesCmd) Run(_ context.Context, args []string) error {
-	cm.run(args)
+func (cm *changesCmd) Run(ctx context.Context, args []string) error {
+	cm.run(ctx, args)
 	return nil
 }
 
-func (cm *changesCmd) run(args []string) {
+func (cm *changesCmd) run(ctx context.Context, args []string) {
 	fs := flagSetFor(cm)
 	openspec, storeFlag, stages, sortBy, asJSON, wantIssues, driftOnly := cm.openspec, cm.storeFlag, cm.stages, cm.sortBy, cm.asJSON, cm.issues, cm.drift
 	if err := fs.Parse(args); err != nil {
@@ -165,8 +168,12 @@ func (cm *changesCmd) run(args []string) {
 	unchecked := 0
 	if *wantIssues || *driftOnly {
 		var err error
-		issues, unchecked, err = resolveIssueInfo(context.Background(), filtered, newIssueStateReader())
+		issues, unchecked, err = resolveIssueInfo(ctx, filtered, newIssueStateReader())
 		if err != nil {
+			if *driftOnly {
+				fmt.Fprintf(os.Stderr, "specsync: read issue states: %v\n", err)
+				os.Exit(2)
+			}
 			fail(fmt.Errorf("read issue states: %w", err))
 		}
 	}
@@ -208,6 +215,9 @@ func (cm *changesCmd) run(args []string) {
 		}
 
 		var results []changeJSON
+		if *driftOnly {
+			results = []changeJSON{}
+		}
 		for _, c := range filtered {
 			total, completed := specsync.CountCheckboxes(c.TasksMarkdown)
 			diagnostics := collectDiagnostics(c)
@@ -233,13 +243,11 @@ func (cm *changesCmd) run(args []string) {
 			results = append(results, row)
 		}
 
-		if !(*driftOnly && drifting == 0) {
-			data, err := json.MarshalIndent(results, "", "  ")
-			if err != nil {
-				fail(fmt.Errorf("marshal JSON: %w", err))
-			}
-			fmt.Println(string(data))
+		data, err := json.MarshalIndent(results, "", "  ")
+		if err != nil {
+			fail(fmt.Errorf("marshal JSON: %w", err))
 		}
+		fmt.Println(string(data))
 	} else if !(*driftOnly && drifting == 0) {
 		printChangeTable(filtered, issues)
 	}

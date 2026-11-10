@@ -154,3 +154,57 @@ func TestChangesDriftOnFreshCheckoutChecksNothingAndExitsZero(t *testing.T) {
 		t.Error("no ref means no provider call")
 	}
 }
+
+func TestChangesDriftJSONPrintsEmptyArrayWhenClean(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	root := t.TempDir()
+	writeChange(t, root, "a", "# Tasks\n- [ ] a\n", ghRef("1"))
+	env, _ := issuesEnv(t, `{"data":{"i0":{"issue":{"state":"OPEN","stateReason":null}}}}`)
+	out, err := runIn(t, bin, root, env, "changes", "-drift", "-json")
+	if err != nil || strings.TrimSpace(out) != "[]" {
+		t.Fatalf("want [] and exit 0, got err=%v out=%q", err, out)
+	}
+}
+
+func TestChangesDriftRuntimeFailureExitsTwo(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	root := t.TempDir()
+	writeChange(t, root, "a", "# Tasks\n- [x] a\n", ghRef("1"))
+	stubDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(stubDir, "gh"), []byte("#!/bin/sh\necho 'not logged in' >&2\nexit 4\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	env := append(os.Environ(), "PATH="+stubDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	out, err := runIn(t, bin, root, env, "changes", "-drift")
+	var ee *exec.ExitError
+	if !errors.As(err, &ee) || ee.ExitCode() != 2 {
+		t.Fatalf("a failed provider call must exit 2, got %v\n%s", err, out)
+	}
+}
+
+func TestChangesIssuesIgnoresArchivedChanges(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	root := t.TempDir()
+	writeChange(t, root, "live", "# Tasks\n- [ ] a\n", ghRef("1"))
+	archived := filepath.Join(root, "openspec", "changes", "archive", "2026-01-01-old")
+	if err := os.MkdirAll(filepath.Join(archived, ".specsync"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, body := range map[string]string{"proposal.md": "# old\n", "tasks.md": "# Tasks\n- [x] a\n", ".specsync/refs.json": ghRef("2")} {
+		if err := os.WriteFile(filepath.Join(archived, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	env, calls := issuesEnv(t, `{"data":{"i0":{"issue":{"state":"OPEN","stateReason":null}}}}`)
+	out, err := runIn(t, bin, root, env, "changes", "-issues")
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	b, _ := os.ReadFile(calls)
+	if strings.Contains(string(b), "number:2") {
+		t.Errorf("archived change's issue was queried:\n%s", b)
+	}
+	if strings.Contains(out, "were not checked") || strings.Contains(out, "complete-open") {
+		t.Errorf("archived change must not be counted or flagged:\n%s", out)
+	}
+}

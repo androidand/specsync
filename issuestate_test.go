@@ -3,6 +3,7 @@ package specsync
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -44,8 +45,9 @@ func TestGitHubIssueStates_OneCallForManyRefs(t *testing.T) {
 
 func TestGitHubIssueStates_MissingIssueIsUnknownForThatRefOnly(t *testing.T) {
 	p := NewGitHubProviderFunc(func(context.Context, ...string) (string, error) {
-		return "", errors.New(`gh api graphql: exit status 1
-{"data":{"i0":{"issue":{"state":"OPEN","stateReason":null}},"i1":{"issue":null}},"errors":[{"type":"NOT_FOUND"}]}`)
+		return "", errors.New(`gh api graphql -f query={i0:repository(owner:"acme",name:"app"){issue(number:1){state stateReason}} i1:repository(owner:"acme",name:"app"){issue(number:999){state stateReason}} }: exit status 1
+{"data":{"i0":{"issue":{"state":"OPEN","stateReason":null}},"i1":{"issue":null}},"errors":[{"type":"NOT_FOUND"}]}
+gh: Could not resolve to an Issue with the number of 999.`)
 	})
 	got, err := p.IssueStates(context.Background(), []Ref{
 		{Provider: "github:acme/app", ID: "1"},
@@ -101,11 +103,49 @@ func TestChangeDrift(t *testing.T) {
 		{"no tasks, issue open", Change{}, IssueState{State: "open"}, ""},
 		{"unchecked tasks, issue open", Change{TasksMarkdown: partial}, IssueState{State: "open"}, ""},
 		{"unknown never drifts", Change{TasksMarkdown: done}, IssueState{State: "unknown"}, ""},
-		{"archived and all checked, issue open", Change{Archived: true, TasksMarkdown: done}, IssueState{State: "open"}, "complete-open"},
+		{"archived is never drift", Change{Archived: true, TasksMarkdown: done}, IssueState{State: "open"}, ""},
 	}
 	for _, c := range cases {
 		if got := ChangeDrift(c.c, c.st); got != c.want {
 			t.Errorf("%s: got %q, want %q", c.name, got, c.want)
 		}
+	}
+}
+
+func stubCountingAliases(calls *[]string) func(context.Context, ...string) (string, error) {
+	return func(_ context.Context, args ...string) (string, error) {
+		q := strings.Join(args, " ")
+		*calls = append(*calls, q)
+		n := strings.Count(q, "issue(number:")
+		var parts []string
+		for i := 0; i < n; i++ {
+			parts = append(parts, fmt.Sprintf(`"i%d":{"issue":{"state":"OPEN","stateReason":null}}`, i))
+		}
+		return `{"data":{` + strings.Join(parts, ",") + `}}`, nil
+	}
+}
+
+func TestGitHubIssueStates_BatchesOfFiftyAndNoDuplicates(t *testing.T) {
+	var calls []string
+	p := NewGitHubProviderFunc(stubCountingAliases(&calls))
+	var refs []Ref
+	for i := 1; i <= 120; i++ {
+		refs = append(refs, Ref{Provider: "github:acme/app", ID: fmt.Sprint(i)})
+	}
+	refs = append(refs, refs[0], refs[1])
+	got, err := p.IssueStates(context.Background(), refs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(calls) != 3 {
+		t.Fatalf("120 distinct refs need 3 calls of at most 50, got %d", len(calls))
+	}
+	for _, q := range calls {
+		if n := strings.Count(q, "issue(number:"); n > 50 {
+			t.Errorf("a batch holds %d aliases", n)
+		}
+	}
+	if len(got) != 120 || got["github:acme/app#120"].State != "open" {
+		t.Errorf("got %d states, last = %+v", len(got), got["github:acme/app#120"])
 	}
 }

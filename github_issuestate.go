@@ -11,30 +11,46 @@ import (
 
 var repoPart = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 
-// IssueStates reads the state of every GitHub issue in refs with one GraphQL
-// call. Refs for another provider, or that are not owner/name and a number,
-// are "unknown" and never sent; so is an issue GitHub cannot find.
+const issueStateBatch = 50
+
+// IssueStates reads the state of every GitHub issue in refs, at most 50 per
+// GraphQL call. Refs for another provider, or that are not owner/name and a
+// number, are "unknown" and never sent; so is an issue GitHub cannot find.
 func (p *GitHubProvider) IssueStates(ctx context.Context, refs []Ref) (map[string]IssueState, error) {
 	out := make(map[string]IssueState, len(refs))
-	var query strings.Builder
-	var aliased []Ref
+	var queryable []Ref
 	for _, r := range refs {
-		out[IssueStateKey(r)] = IssueState{State: "unknown"}
-		owner, name, ok := strings.Cut(RepoFromProviderKey(r.Provider), "/")
-		number, err := strconv.Atoi(r.ID)
-		if !ok || err != nil || number <= 0 || !repoPart.MatchString(owner) || !repoPart.MatchString(name) {
+		key := IssueStateKey(r)
+		if _, seen := out[key]; seen {
 			continue
 		}
-		fmt.Fprintf(&query, "i%d:repository(owner:%q,name:%q){issue(number:%d){state stateReason}} ", len(aliased), owner, name, number)
-		aliased = append(aliased, r)
+		out[key] = IssueState{State: "unknown"}
+		owner, name, ok := strings.Cut(RepoFromProviderKey(r.Provider), "/")
+		number, err := strconv.Atoi(r.ID)
+		if ok && err == nil && number > 0 && repoPart.MatchString(owner) && repoPart.MatchString(name) {
+			queryable = append(queryable, r)
+		}
 	}
-	if len(aliased) == 0 {
-		return out, nil
+	for start := 0; start < len(queryable); start += issueStateBatch {
+		end := min(start+issueStateBatch, len(queryable))
+		if err := p.issueStateBatch(ctx, queryable[start:end], out); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
+func (p *GitHubProvider) issueStateBatch(ctx context.Context, batch []Ref, out map[string]IssueState) error {
+	var query strings.Builder
+	for i, r := range batch {
+		owner, name, _ := strings.Cut(RepoFromProviderKey(r.Provider), "/")
+		number, _ := strconv.Atoi(r.ID)
+		fmt.Fprintf(&query, "i%d:repository(owner:%q,name:%q){issue(number:%d){state stateReason}} ", i, owner, name, number)
 	}
 
 	raw, runErr := p.run(ctx, "api", "graphql", "-f", "query={"+query.String()+"}")
 	if raw == "" && runErr != nil {
-		raw = jsonObjectIn(runErr.Error())
+		raw = ghErrorBody(runErr.Error())
 	}
 	var resp struct {
 		Data map[string]struct {
@@ -44,13 +60,14 @@ func (p *GitHubProvider) IssueStates(ctx context.Context, refs []Ref) (map[strin
 			} `json:"issue"`
 		} `json:"data"`
 	}
-	if err := json.Unmarshal([]byte(raw), &resp); err != nil || resp.Data == nil {
+	err := json.NewDecoder(strings.NewReader(raw)).Decode(&resp)
+	if err != nil || resp.Data == nil {
 		if runErr != nil {
-			return nil, runErr
+			return runErr
 		}
-		return nil, fmt.Errorf("parse graphql: %w", err)
+		return fmt.Errorf("parse graphql: %w", err)
 	}
-	for i, r := range aliased {
+	for i, r := range batch {
 		repo, ok := resp.Data[fmt.Sprintf("i%d", i)]
 		if !ok || repo.Issue == nil {
 			continue
@@ -61,15 +78,19 @@ func (p *GitHubProvider) IssueStates(ctx context.Context, refs []Ref) (map[strin
 		}
 		out[IssueStateKey(r)] = st
 	}
-	return out, nil
+	return nil
 }
 
-// jsonObjectIn returns the outermost {...} in s, or "". gh reports a partly
-// failed GraphQL call as an error that still carries the response body.
-func jsonObjectIn(s string) string {
-	i, j := strings.Index(s, "{"), strings.LastIndex(s, "}")
-	if i < 0 || j < i {
+// ghErrorBody returns the output gh printed, which runGH appends after the
+// first line of its error (the echoed command, whose query holds braces),
+// possibly followed by an error line, so it is decoded as a prefix.
+func ghErrorBody(msg string) string {
+	_, body, ok := strings.Cut(msg, "\n")
+	if !ok {
 		return ""
 	}
-	return s[i : j+1]
+	if i := strings.Index(body, "{"); i >= 0 {
+		return body[i:]
+	}
+	return ""
 }

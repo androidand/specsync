@@ -36,15 +36,17 @@ func ChangeIssueRef(changeDir string) (Ref, bool) {
 }
 
 // ChangeDrift names the mismatch between a change and its issue, or "". It
-// reports two mismatches and nothing else: "closed-unarchived" (the issue is
-// closed, the change is not archived) and "complete-open" (the change has at
-// least one task, every task is checked, the issue is open).
+// reports two mismatches and nothing else, and only for a change that is not
+// archived (there is nothing left to clean up for an archived one):
+// "closed-unarchived" (the issue is closed) and "complete-open" (the change has
+// at least one task, every task is checked, the issue is open).
 func ChangeDrift(c Change, st IssueState) string {
+	if c.Archived {
+		return ""
+	}
 	switch st.State {
 	case "closed":
-		if !c.Archived {
-			return "closed-unarchived"
-		}
+		return "closed-unarchived"
 	case "open":
 		if total, done := CountCheckboxes(c.TasksMarkdown); total > 0 && done == total {
 			return "complete-open"
