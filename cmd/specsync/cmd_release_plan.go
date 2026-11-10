@@ -31,7 +31,7 @@ func (*releasePlanCmd) Spec() Spec {
 		Summary:  "Inspect release impact and generate release notes.",
 		Workflow: AgentCommandWorkflow{Position: "release", RelatedBefore: []string{"changelog"}},
 		Safety: []string{
-			"Read-only operation",
+			"Read-only unless -archive-completed or -apply is given, which move change directories",
 		},
 		Examples: []string{
 			"specsync release-plan",

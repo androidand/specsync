@@ -41,9 +41,10 @@ func (*changelogCmd) Spec() Spec {
 		Name:     "changelog",
 		Group:    GroupReview,
 		Summary:  "Generate release notes from OpenSpec changes and commits.",
+		Mutates:  true,
 		Workflow: AgentCommandWorkflow{Position: "release", RelatedBefore: []string{"release-plan"}},
 		Safety: []string{
-			"Read-only operation",
+			"Read-only unless -apply is given, which writes CHANGELOG.md",
 			"Requires git history",
 		},
 		Examples: []string{

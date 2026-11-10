@@ -211,6 +211,13 @@ func renderAgentHelpMarkdown(help AgentCommandHelp) {
 		fmt.Printf("Related (after): %s\n", strings.Join(help.Workflow.RelatedAfter, ", "))
 	}
 
+	if len(help.Args) > 0 {
+		fmt.Print("\n## Arguments\n\n")
+		for _, a := range help.Args {
+			fmt.Printf("**<%s>** %s\n\n", a.Name, a.Description)
+		}
+	}
+
 	if len(help.Flags) > 0 {
 		fmt.Print("\n## Flags\n\n")
 		for _, flag := range help.Flags {

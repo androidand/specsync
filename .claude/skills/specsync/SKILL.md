@@ -1,6 +1,6 @@
 ---
 name: specsync
-description: Plan and synchronize OpenSpec changes with GitHub Issues using the specsync CLI. Use when asked to create, update, or reconcile an OpenSpec change with a tracker issue, pull an issue into a local change, scan for related work, cross-link changes, inspect release impact, or see where work stands (issues, branches, worktrees, pull requests, unpushed work).
+description: Plan and synchronize OpenSpec changes with GitHub Issues using the specsync CLI. Use when asked to create, update, or reconcile an OpenSpec change with a tracker issue, pull an issue into a local change, scan for related work, cross-link changes, inspect release impact, or see where changes stand (issues, branches, worktrees).
 ---
 
 # SpecSync

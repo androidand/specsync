@@ -32,6 +32,9 @@ func resolveSubcommand(args []string) (cmd string, rest []string, err error) {
 		return "sync", args, nil
 	}
 	first := args[0]
+	if first == "-version" || first == "--version" {
+		return "version", nil, nil
+	}
 	if isVersionArg(first) {
 		return "version", args[1:], nil
 	}

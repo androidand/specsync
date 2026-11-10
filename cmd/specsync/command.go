@@ -174,9 +174,10 @@ func validateCommand(c Command) error {
 
 // flagType names a flag's type the way agent-help reports it.
 func flagType(f *flag.Flag) string {
-	switch fmt.Sprintf("%T", f.Value) {
-	case "*flag.boolValue":
+	if b, ok := f.Value.(interface{ IsBoolFlag() bool }); ok && b.IsBoolFlag() {
 		return "boolean"
+	}
+	switch fmt.Sprintf("%T", f.Value) {
 	case "*flag.intValue", "*flag.int64Value", "*flag.uintValue", "*flag.uint64Value", "*flag.float64Value":
 		return "number"
 	}

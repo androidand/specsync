@@ -30,7 +30,7 @@ func (*auditCmd) Spec() Spec {
 		Summary:  "Audit OpenSpec changes for structural issues.",
 		Workflow: AgentCommandWorkflow{Position: "validation"},
 		Safety: []string{
-			"Read-only operation",
+			"Read-only unless -mark-shipped is given, which writes .specsync/metadata.json",
 		},
 		Examples: []string{
 			"specsync audit",

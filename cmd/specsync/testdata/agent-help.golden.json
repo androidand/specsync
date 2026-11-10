@@ -258,7 +258,7 @@
         }
       ],
       "safety_rules": [
-        "Read-only operation"
+        "Read-only unless -mark-shipped is given, which writes .specsync/metadata.json"
       ],
       "examples": [
         "specsync audit",
@@ -314,7 +314,7 @@
     "changelog": {
       "command": "changelog",
       "description": "Generate release notes from OpenSpec changes and commits.",
-      "mutates": false,
+      "mutates": true,
       "workflow": {
         "position": "release",
         "related_before": [
@@ -422,7 +422,7 @@
         }
       ],
       "safety_rules": [
-        "Read-only operation",
+        "Read-only unless -apply is given, which writes CHANGELOG.md",
         "Requires git history"
       ],
       "examples": [
@@ -1150,7 +1150,7 @@
         }
       ],
       "safety_rules": [
-        "Read-only operation"
+        "Read-only unless -archive-completed or -apply is given, which move change directories"
       ],
       "examples": [
         "specsync release-plan",

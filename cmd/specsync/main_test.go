@@ -586,3 +586,10 @@ func TestTopologyIsADeprecatedAliasOfStatus(t *testing.T) {
 		t.Fatal("the alias must not be a registered command, so it stays out of help and docs")
 	}
 }
+
+func TestVersionFlagIgnoresExtraArguments(t *testing.T) {
+	cmd, rest, err := resolveSubcommand([]string{"--version", "-x"})
+	if err != nil || cmd != "version" || len(rest) != 0 {
+		t.Fatalf("got cmd=%q rest=%v err=%v", cmd, rest, err)
+	}
+}
