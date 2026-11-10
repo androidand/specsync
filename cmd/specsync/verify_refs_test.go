@@ -178,3 +178,42 @@ func TestVerifyRefsExitStatusIsAdvisoryUnlessFailOnStale(t *testing.T) {
 		t.Fatalf("-fail-on-stale alone must be rejected, got err=%v:\n%s", err, out)
 	}
 }
+
+func TestVerifyRefsAMissingPathIsAnError(t *testing.T) {
+	repo, _, _ := refsRepo(t)
+	if _, _, err := runRefs(t, repo, noLookupProvider{}, filepath.Join(repo, "nope.md")); err == nil {
+		t.Fatal("a path that does not exist must be an error, not an empty scan")
+	}
+}
+
+func TestVerifyRefsScansAFileOnceEvenWhenGivenInsideAChangeFolder(t *testing.T) {
+	repo, _, _ := refsRepo(t)
+	doc := filepath.Join(repo, "openspec/changes/my-change/proposal.md")
+	out, _, err := runRefs(t, repo, noLookupProvider{}, doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(out, "proposal.md:3  stale  1234567abcd"); n != 1 {
+		t.Fatalf("stale hash reported %d times:\n%s", n, out)
+	}
+}
+
+func TestVerifyRefsDoesNotClaimAllClearWhenRequestChecksWereSkipped(t *testing.T) {
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, "openspec/changes/c"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "openspec/changes/c/proposal.md"), []byte("# C\n\nSee #5.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := exec.Command("git", "-C", repo, "init", "-q").CombinedOutput(); err != nil {
+		t.Fatalf("%v %s", err, out)
+	}
+	out, _, err := runRefs(t, repo, noLookupProvider{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out, "every commit and request reference resolves") {
+		t.Fatalf("must not claim all clear when checks were skipped:\n%s", out)
+	}
+}

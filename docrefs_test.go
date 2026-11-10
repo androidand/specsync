@@ -150,3 +150,91 @@ func TestCheckRequestsSkipsWhenTheProviderCannotAnswer(t *testing.T) {
 }
 
 type noStateProvider struct{ WorkProvider }
+
+func TestScanDocRefsIgnoresAnchorsFilesAndNonCommitWords(t *testing.T) {
+	text := strings.Join([]string{
+		"Jump to [output](#2-output) or (#3b) or docs/guide.md#4 or path/file.md#5 or acme/app#6.",
+		"Digits only `1234567` and `12345678901` are numbers; sha deadbeef has no digit.",
+		"Landed in sha abc1234 and fixed in 0a1b2c3d, and in 99ab123 too.",
+		"~~~",
+		"```",
+		"commit 5a5a5a5a5a",
+		"~~~",
+		"commit aaaa1111bbbb",
+	}, "\n")
+	var got []string
+	for _, r := range ScanDocRefs("d.md", text) {
+		got = append(got, r.Text)
+	}
+	want := []string{"acme/app#6", "abc1234", "0a1b2c3d", "aaaa1111bbbb"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got  %v\nwant %v", got, want)
+	}
+}
+
+func TestCheckCommitsIgnoresNonCommitObjectsAndKeepsStaleCodeSpans(t *testing.T) {
+	dir, _, _ := docRefRepo(t)
+	blob, err := exec.Command("git", "-C", dir, "rev-parse", "HEAD:a").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := strings.TrimSpace(string(blob))[:9]
+	got := CheckCommits(context.Background(), dir, []DocRef{
+		{Kind: "commit", Text: b, File: "a.md", Line: 1},
+		{Kind: "commit", Text: "7654321fed", File: "a.md", Line: 2},
+	}, []string{"HEAD"})
+	if len(got) != 1 || got[0].Status != "stale" || got[0].Ref.Text != "7654321fed" {
+		t.Fatalf("a blob is not a stale commit and a missing hash still is: %+v", got)
+	}
+}
+
+func TestCheckCommitsTreatsACommitOnAnyBranchAsReachable(t *testing.T) {
+	dir, _, _ := docRefRepo(t)
+	run := func(args ...string) string {
+		out, err := exec.Command("git", append([]string{"-C", dir, "-c", "user.name=t", "-c", "user.email=t@example.com"}, args...)...).CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	run("checkout", "-q", "-b", "other")
+	if err := os.WriteFile(filepath.Join(dir, "c"), []byte("3"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run("add", "c")
+	run("commit", "-q", "-m", "other branch work")
+	sha := run("rev-parse", "HEAD")
+	run("checkout", "-q", "main")
+	got := CheckCommits(context.Background(), dir, []DocRef{{Kind: "commit", Text: sha[:9]}}, []string{"HEAD"})
+	if got[0].Status != "ok" {
+		t.Fatalf("a commit on another branch is not orphaned: %+v", got)
+	}
+}
+
+func TestCheckRequestsDoesNotReportUnqueryableRefsAsMissing(t *testing.T) {
+	p := &stateProvider{states: map[string]IssueState{"github:acme/app#3": {State: "unknown"}}}
+	refs := []DocRef{
+		{Kind: "request", Number: 0, Text: "#0"},
+		{Kind: "request", Repo: "bad repo", Number: 2, Text: "bad repo#2"},
+		{Kind: "request", Number: 3, Text: "#3"},
+	}
+	got, status := CheckRequests(context.Background(), p, "github:acme/app", refs)
+	if len(got) != 1 || got[0].Ref.Number != 3 || got[0].State != "missing" {
+		t.Fatalf("only the queried, not-found ref is missing: %+v", got)
+	}
+	if !strings.Contains(status, "2 reference") || len(p.asked) != 1 {
+		t.Fatalf("unqueryable refs must be skipped, not sent: status=%q asked=%v", status, p.asked)
+	}
+}
+
+func TestCheckRequestsWithAnUnresolvedRepoNeverSendsBareRefs(t *testing.T) {
+	p := &stateProvider{states: map[string]IssueState{"github:acme/lib#4": {State: "open"}}}
+	refs := []DocRef{{Kind: "request", Number: 12, Text: "#12"}, {Kind: "request", Repo: "acme/lib", Number: 4, Text: "acme/lib#4"}}
+	got, status := CheckRequests(context.Background(), p, "github", refs)
+	if len(p.asked) != 1 || p.asked[0].Provider != "github:acme/lib" {
+		t.Fatalf("a bare #n must not be sent when the repo is unknown: %v", p.asked)
+	}
+	if len(got) != 1 || !strings.Contains(status, "skipped") {
+		t.Fatalf("got %+v, %q", got, status)
+	}
+}

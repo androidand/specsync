@@ -49,15 +49,34 @@ func verifyRefs(ctx context.Context, w io.Writer, opts verifyRefsOptions) (int, 
 	}
 	var given []string
 	for _, p := range opts.Paths {
+		if _, err := os.Stat(p); err != nil {
+			return 0, fmt.Errorf("verify -refs: %w", err)
+		}
 		given = append(given, markdownFiles(p)...)
 	}
 	if len(given) > 0 {
 		sources = append(sources, source{files: given})
 	}
+	scanned := map[string]bool{}
+	for i := range sources {
+		var files []string
+		for _, f := range sources[i].files {
+			abs, err := filepath.Abs(f)
+			if err != nil {
+				abs = f
+			}
+			if !scanned[abs] {
+				scanned[abs] = true
+				files = append(files, f)
+			}
+		}
+		sources[i].files = files
+	}
 
 	var rows []refRow
 	var all []specsync.DocRef
 	stale := 0
+	checker := specsync.NewDocRefChecker(ctx, opts.RepoDir)
 	for _, src := range sources {
 		var refs []specsync.DocRef
 		for _, f := range src.files {
@@ -68,9 +87,10 @@ func verifyRefs(ctx context.Context, w io.Writer, opts verifyRefsOptions) (int, 
 			refs = append(refs, specsync.ScanDocRefs(displayPath(opts.RepoDir, f), string(data))...)
 		}
 		all = append(all, refs...)
-		reachable := specsync.DocRefReachableRefs(ctx, opts.RepoDir, src.slug)
-		for _, c := range specsync.CheckCommits(ctx, opts.RepoDir, refs, reachable) {
+		for _, c := range checker.Commits(refs, checker.Reachable(src.slug)) {
 			switch c.Status {
+			case "unknown":
+				rows = append(rows, refRow{c.Ref.File, c.Ref.Line, "unknown  " + c.Ref.Text + "  (not fetched in this shallow clone)"})
 			case "stale":
 				stale++
 				rows = append(rows, refRow{c.Ref.File, c.Ref.Line, "stale  " + c.Ref.Text})
@@ -107,8 +127,10 @@ func verifyRefs(ctx context.Context, w io.Writer, opts verifyRefsOptions) (int, 
 	if status != "" {
 		fmt.Fprintf(w, "note: %s\n", status)
 	}
-	if len(rows) == 0 {
+	if len(rows) == 0 && status == "" {
 		fmt.Fprintln(w, "verify -refs: every commit and request reference resolves")
+	} else if len(rows) == 0 {
+		fmt.Fprintln(w, "verify -refs: no findings among the references that could be checked")
 	} else {
 		fmt.Fprintf(w, "verify -refs: %d finding(s), %d stale or orphaned commit(s)\n", len(rows), stale)
 	}
