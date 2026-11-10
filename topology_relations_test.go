@@ -26,8 +26,10 @@ func relationsFixture(t *testing.T) (TopologyOptions, string) {
 		loadRefs: func(string) (map[string]Ref, error) {
 			return map[string]Ref{"github:acme/api": {ID: "12", URL: "https://github.com/acme/api/issues/12"}}, nil
 		},
-		run:        func(context.Context, ...string) (string, error) { return "open", nil },
-		localState: func(context.Context, string, LocalStateOptions) (*LocalState, error) { return &LocalState{Upstream: "origin/x"}, nil },
+		run: func(context.Context, ...string) (string, error) { return "open", nil },
+		localState: func(context.Context, string, LocalStateOptions) (*LocalState, error) {
+			return &LocalState{Upstream: "origin/x"}, nil
+		},
 		changeRequests: func(context.Context, string) (*ChangeRequestSet, error) {
 			return &ChangeRequestSet{Requests: []ChangeRequest{
 				{Number: 40, State: "open", Branch: "spike-picker", Closes: []string{"12"}},

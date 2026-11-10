@@ -6,9 +6,9 @@ Depends on `status-pr-and-worktree-state` for facts per row.
 - contract: The workspace is found and the asserted relations graph is built, with no writes.
 - budget: files<=15, lines<=500
 
-- [ ] 1.1 Roots: `-root`, `SPECSYNC_ROOTS`, default parent folder of the clone
-- [ ] 1.2 Find main clones to depth 2; list worktrees with `git worktree list --porcelain`; dedupe by real path
-- [ ] 1.3 Map clones to tracker repos from the origin URL; status line when unmappable
+- [x] 1.1 Roots: `-root`, `SPECSYNC_ROOTS`, default parent folder of the clone
+- [x] 1.2 Find main clones to depth 2; list worktrees with `git worktree list --porcelain`; dedupe by real path
+- [x] 1.3 Map clones to tracker repos from the origin URL; status line when unmappable
 - [ ] 1.4 Graph with asserted edges only: epic, blocked-by, links, slices, request closes issue, branch to worktree
 - [ ] 1.5 Reuse the provider's parent and child client; fall back to specsync's epic references
 - [x] 1.6 Extract the PR-reference parser from `verify` into a shared function
