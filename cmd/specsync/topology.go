@@ -33,7 +33,6 @@ func (*statusCmd) Spec() Spec {
 			"specsync status",
 			"specsync status -change my-change -json",
 		},
-		Confusions: map[string]string{"topology": "it was renamed to status"},
 	}
 }
 

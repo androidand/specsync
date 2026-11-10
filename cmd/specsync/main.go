@@ -38,6 +38,10 @@ func resolveSubcommand(args []string) (cmd string, rest []string, err error) {
 	if _, ok := lookupCommand(first); ok {
 		return first, args[1:], nil
 	}
+	if first == "topology" {
+		fmt.Fprintln(os.Stderr, "specsync: topology is now called status; the old name works for one more release")
+		return "status", args[1:], nil
+	}
 	if strings.HasPrefix(first, "-") {
 		return "sync", args, nil
 	}
