@@ -4,10 +4,10 @@
 - contract: `lint` reports title, header, sentence and length findings. It never edits.
 - budget: files<=10, lines<=400
 
-- [ ] 1.1 Rules: title format and length, header set (including the names specsync writes or reads; slice headings exempt) and length, sentence and paragraph limits, filler list
-- [ ] 1.2 Word budget for the visible part, excluding links and generated sections
+- [x] 1.1 Rules: title format and length, header set (including the names specsync writes or reads; slice headings exempt) and length, sentence and paragraph limits, filler list
+- [x] 1.2 Word budget for the visible part, excluding links and generated sections
 - [ ] 1.3 `specsync lint [-change] [-pr|-body-file] [-fail]`
-- [ ] 1.4 Reuse `advisory-title-suggestions` for titles
+- [x] 1.4 Reuse `advisory-title-suggestions` for titles
 - [ ] 1.5 Tests per rule, advisory exit 0, `-fail` exit non-zero
 
 ## Slice 2: PR body template

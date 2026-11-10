@@ -18,7 +18,6 @@ type Gate struct {
 }
 
 type WorktreeConfig struct{ Dir, Branch string }
-type TextConfig struct{ Profile string }
 type CleanupConfig struct {
 	RemoteBranch string
 	Archive      bool
@@ -63,7 +62,7 @@ var topLevelKeys = []string{"board", "ideas_repo", "flow", "gates", "worktrees",
 
 var sectionKeys = map[string][]string{
 	"worktrees": {"dir", "branch"},
-	"text":      {"profile"},
+	"text":      append([]string{"profile", "headers", "filler", "template"}, textIntKeys...),
 	"cleanup":   {"remote_branch", "archive"},
 	"sync":      {"strategy", "after_review", "force"},
 }
@@ -84,6 +83,7 @@ func ParseWays(data []byte) (Ways, []ConfigIssue) {
 		Flow:  DefaultFlow,
 		Steps: presets[DefaultFlow],
 		Sync:  SyncConfig{Strategy: "rebase", AfterReview: "merge", Force: "with-lease"},
+		Text:  DefaultText(),
 	}
 	root, err := ParseConfigYAML(data)
 	if err != nil {
@@ -197,7 +197,6 @@ func (w *Ways) readGates(n *YNode, line int, add addIssue) {
 var reservedKeys = map[string]string{
 	"worktrees.dir":         "flow-verbs",
 	"worktrees.branch":      "flow-verbs",
-	"text.profile":          "concise-change-text",
 	"cleanup.remote_branch": "worktree-cleanup",
 }
 
@@ -228,7 +227,7 @@ func (w *Ways) readSection(sec string, n *YNode, add addIssue) {
 	case "worktrees":
 		w.Worktrees = WorktreeConfig{Dir: n.Str("dir"), Branch: n.Str("branch")}
 	case "text":
-		w.Text.Profile = n.Str("profile")
+		w.Text.read(n, add)
 	case "cleanup":
 		w.Cleanup = CleanupConfig{RemoteBranch: enum("remote_branch", "keep", "delete"), Archive: boolean("archive")}
 	case "sync":

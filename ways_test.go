@@ -193,7 +193,7 @@ func TestRequireTrustNeedsNothingWhenNoCommands(t *testing.T) {
 }
 
 func TestParseWaysReservedKeysAreAcceptedAndNoted(t *testing.T) {
-	w, issues := ParseWays([]byte("worktrees: {dir: ../w, branch: x}\ntext: {profile: p}\ncleanup: {remote_branch: keep, archive: true}\n"))
+	w, issues := ParseWays([]byte("worktrees: {dir: ../w, branch: x}\ntext: {profile: plain}\ncleanup: {remote_branch: keep, archive: true}\n"))
 	if len(issues) != 0 {
 		t.Fatalf("reserved keys are valid: %+v", issues)
 	}
@@ -201,7 +201,7 @@ func TestParseWaysReservedKeysAreAcceptedAndNoted(t *testing.T) {
 	for _, r := range w.Reserved {
 		got[r.Key] = true
 	}
-	for _, k := range []string{"worktrees.dir", "worktrees.branch", "text.profile", "cleanup.remote_branch"} {
+	for _, k := range []string{"worktrees.dir", "worktrees.branch", "cleanup.remote_branch"} {
 		if !got[k] {
 			t.Errorf("%s must be reported as reserved: %+v", k, w.Reserved)
 		}
