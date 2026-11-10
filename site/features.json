@@ -154,5 +154,9 @@
     "icon": "state",
     "title": "A map for reviewing a big pull request",
     "body": "<code>specsync review-map</code> turns a branch into a checklist: the paths the author declared as needing judgement first, then each commit with its files and sizes, then totals by category. <code>-equivalent</code> proves a rewritten branch holds the same content."
+  },
+  {
+    "title": "Short, consistent issues and PRs",
+    "body": "<code>specsync lint</code> checks titles, headers, sentences and length against a short standard, advisory unless <code>-fail</code>. <code>pr-body -template</code> writes a brief PR body from the change and your repo's template. Never rewrites your text."
   }
 ]

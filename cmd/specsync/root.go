@@ -4,7 +4,9 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 
 	specsync "github.com/androidand/specsync"
 )
@@ -102,4 +104,28 @@ func scopedTargetRepos(openspecDir, slug, explicitRepo string) []string {
 		}
 	}
 	return nil
+}
+
+// repoTop is the top of the git work tree containing dir, or dir itself when
+// it is not in one.
+func repoTop(dir string) string {
+	out, err := exec.Command("git", "-C", dir, "rev-parse", "--show-toplevel").Output()
+	if err != nil {
+		return dir
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// textRepoRoot is the repository whose openspec/specsync.yml holds the text
+// standard: the one containing a change's own spec root, and for a store (which
+// spans repositories) the one the command runs in.
+func textRepoRoot(resolved *specsync.ResolvedRoot) string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		cwd = "."
+	}
+	if resolved != nil && !resolved.IsStore() {
+		return repoTop(filepath.Dir(resolved.Dir))
+	}
+	return repoTop(cwd)
 }

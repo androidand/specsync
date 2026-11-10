@@ -143,6 +143,7 @@ appear on someone else's repository.
 |---|---|
 | `archive` | Archive a completed change: final push, close, then retention. |
 | `changelog` | Generate release notes from OpenSpec changes and commits. |
+| `lint` | Check titles and issue or PR text against the short-text standard. |
 | `pr-body` | Generate the correct PR body fragment for a change. |
 | `release-plan` | Inspect release impact and generate release notes. |
 | `review-map` | Turn a branch into a review checklist, or prove a rewritten branch has the same content. |
@@ -646,8 +647,33 @@ written to `<git-dir>/specsync/gates-passed`. `specsync doctor config` validates
 line numbers. Commands defined in the file run only after `specsync trust` records its hash for
 you and this repository: `specsync trust` prints them and records nothing, `specsync trust -yes`
 records trust, and a changed file needs trust again. Until then `next` and `flow` point at
-`specsync trust` instead of the commands. `worktrees.dir`, `worktrees.branch`, `text.profile` and
+`specsync trust` instead of the commands. `worktrees.dir`, `worktrees.branch` and
 `cleanup.remote_branch` are reserved for later changes: accepted, noted by `doctor config`, not used.
+
+### Keep issue and PR text short
+
+```bash
+specsync lint -change my-change          # title and proposal, as an issue
+specsync lint -title 'fix(sync): keep links out of sections' -fail
+specsync lint -pr 42                     # a pull request's title and body
+specsync pr-body -change my-change -template   # a short body from the change
+```
+
+`lint` checks titles (Conventional Commits for PRs, sentence case for issues), headers, sentence and
+paragraph length and a word budget, then reports the line, rule and a suggestion. It exits 0 unless
+`-fail` is given and never edits text. `pr-body -template` fills Summary, Changes, Review focus, Size,
+Verification and Closes from the change, each within a word budget, or fills the sections of your
+`.github/pull_request_template.md`. Change the standard in `openspec/specsync.yml`:
+
+```yaml
+text:
+  profile: conventional   # or plain: titles need not be Conventional Commits
+  pr_title: 72            # limits; 0 turns one off
+  issue_words: 150
+  headers: [Non-goals]    # added to the allowed headers
+  filler: [leverage]      # added to the phrases to avoid
+  template: docs/pr.md    # default: the usual .github locations
+```
 
 ### `ideas` — list open intake issues
 
