@@ -12,7 +12,7 @@ Depends on `status-pr-and-worktree-state` for facts per row.
 - [ ] 1.4 Graph with asserted edges only: epic, blocked-by, links, slices, request closes issue, branch to worktree
 - [ ] 1.5 Reuse the provider's parent and child client; fall back to specsync's epic references
 - [x] 1.6 Extract the PR-reference parser from `verify` into a shared function
-- [ ] 1.7 Resolve a change's branch through the request that closes its issue
+- [x] 1.7 Resolve a change's branch through the request that closes its issue
 
 ## Slice 2: Status shows related work
 - after: 1
