@@ -13,14 +13,19 @@ import (
 // verifyCmd checks open PRs for traceability gaps: a PR whose head branch
 // matches a change slug but whose body has no reference to that change's issue.
 type verifyCmd struct {
-	openspec  *string
-	store     *string
-	repo      *string
-	change    *string
-	asJSON    *bool
-	checklist *bool
-	refs      *bool
-	failStale *bool
+	openspec        *string
+	store           *string
+	repo            *string
+	change          *string
+	asJSON          *bool
+	checklist       *bool
+	refs            *bool
+	failStale       *bool
+	size            *bool
+	failOnOversized *bool
+	branch, base    *string
+	budget          *string
+	exclude         stringSlice
 }
 
 func init() { Register(&verifyCmd{}) }
@@ -41,6 +46,8 @@ func (*verifyCmd) Spec() Spec {
 			"specsync verify",
 			"specsync verify -refs",
 			"specsync verify -refs -fail-on-stale docs/runbook.md",
+			"specsync verify -size -branch feat/42-thing",
+			"specsync verify -size -fail-on-oversized -budget files=15,lines=400",
 		},
 	}
 }
@@ -50,6 +57,12 @@ func (cm *verifyCmd) Flags(fs *flag.FlagSet) {
 	cm.repo = fs.String("repo", "", "target repo as owner/name (default: auto-detect from git remote)")
 	cm.change = fs.String("change", "", "verify this change against its own spec deltas (OpenSpec's Verify phase)")
 	cm.asJSON = fs.Bool("json", false, "output as JSON")
+	cm.size = fs.Bool("size", false, "report whether a branch is too large or mixes commit scopes (advisory; exits 0 unless -fail-on-oversized)")
+	cm.failOnOversized = fs.Bool("fail-on-oversized", false, "with -size, exit non-zero when a budget limit is exceeded")
+	cm.branch = fs.String("branch", "", "with -size, the branch to measure (default: the checked-out one)")
+	cm.base = fs.String("base", "", "with -size, the base to measure against (default: origin/HEAD)")
+	cm.budget = fs.String("budget", "", "with -size, the budget, e.g. files=15,lines=400,commits=30 (default: $SPECSYNC_BUDGET, then built-in limits)")
+	fs.Var(&cm.exclude, "exclude", "with -size, a glob of paths left out of the counts (repeatable)")
 	cm.checklist = fs.Bool("checklist", false, "print only the acceptance checklist, for pasting into a PR")
 	cm.refs = fs.Bool("refs", false, "report commit hashes and request references in change documents (and any paths given) that no longer resolve")
 	cm.failStale = fs.Bool("fail-on-stale", false, "with -refs: exit non-zero when a commit reference is stale or orphaned")
@@ -71,6 +84,20 @@ func (cm *verifyCmd) run(args []string) {
 		if *cm.failStale {
 			fail(fmt.Errorf("-fail-on-stale needs -refs"))
 		}
+	}
+
+	if *cm.size {
+		if *cm.refs {
+			fail(fmt.Errorf("-size and -refs are separate checks; run them one at a time"))
+		}
+		if *change != "" || *checklist {
+			fail(fmt.Errorf("-size measures a branch and cannot be combined with -change or -checklist"))
+		}
+		runVerifySize(*cm.branch, *cm.base, *cm.budget, cm.exclude, *cm.failOnOversized)
+		return
+	}
+	if *cm.failOnOversized || *cm.branch != "" || *cm.base != "" || *cm.budget != "" || len(cm.exclude) > 0 {
+		fail(fmt.Errorf("-branch, -base, -budget, -exclude and -fail-on-oversized need -size"))
 	}
 
 	root := resolveRoot(fs, openspec, store)

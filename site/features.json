@@ -136,5 +136,11 @@
     "icon": "state",
     "title": "Catch stale references in your docs",
     "body": "<code>specsync verify -refs</code> finds commit hashes and issue or PR references in change documents that no longer resolve after a rebase. Read-only and advisory; it never guesses a replacement."
+  },
+  {
+    "group": "review",
+    "icon": "state",
+    "title": "Warns before a pull request is too big",
+    "body": "<code>specsync status</code> and <code>verify -size</code> flag a branch that is over a files, lines or commits budget, or that mixes commit scopes, before review starts. Advisory by default; <code>-fail-on-oversized</code> makes it a gate."
   }
 ]
