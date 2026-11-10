@@ -45,7 +45,7 @@ func (p *GitHubProvider) issueStateBatch(ctx context.Context, batch []Ref, out m
 	for i, r := range batch {
 		owner, name, _ := strings.Cut(RepoFromProviderKey(r.Provider), "/")
 		number, _ := strconv.Atoi(r.ID)
-		fmt.Fprintf(&query, "i%d:repository(owner:%q,name:%q){issue(number:%d){state stateReason}} ", i, owner, name, number)
+		fmt.Fprintf(&query, "i%d:repository(owner:%q,name:%q){issue:issueOrPullRequest(number:%d){... on Issue{state stateReason} ... on PullRequest{state}}} ", i, owner, name, number)
 	}
 
 	raw, runErr := p.run(ctx, "api", "graphql", "-f", "query={"+query.String()+"}")

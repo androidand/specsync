@@ -2,10 +2,10 @@
 
 ## 1. Scan and resolve
 
-- [ ] 1.1 Scan change folders and given paths for hashes (7 to 40 hex, standalone, code or "commit" context) and request references
-- [ ] 1.2 Resolve hashes with git; classify as stale or orphaned by reachability from the default and change branches
-- [ ] 1.3 Check `#n` and `owner/repo#n` through the provider; skip with a status line when unavailable
-- [ ] 1.4 Reuse the reference parser shared with `verify` and the relations graph
+- [x] 1.1 Scan change folders and given paths for hashes (7 to 40 hex, standalone, code or "commit" context) and request references
+- [x] 1.2 Resolve hashes with git; classify as stale or orphaned by reachability from the default and change branches
+- [x] 1.3 Check `#n` and `owner/repo#n` through the provider; skip with a status line when unavailable
+- [x] 1.4 Reuse the provider issue-state lookup (now also covering pull requests) and the git helpers; no other reference parser exists to share
 
 ## 2. Output
 
