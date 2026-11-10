@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/androidand/specsync"
@@ -18,6 +19,8 @@ type verifyCmd struct {
 	change    *string
 	asJSON    *bool
 	checklist *bool
+	refs      *bool
+	failStale *bool
 }
 
 func init() { Register(&verifyCmd{}) }
@@ -26,14 +29,18 @@ func (*verifyCmd) Spec() Spec {
 	return Spec{
 		Name:     "verify",
 		Group:    GroupReview,
-		Summary:  "Verify PR references to their change issues.",
+		Summary:  "Verify PR references to their change issues, or with -refs the commit and request references in change documents.",
 		Workflow: AgentCommandWorkflow{Position: "pre-merge", RelatedBefore: []string{"pr-body"}},
+		Args:     []Arg{{Name: "path", Description: "with -refs: extra markdown files or folders to scan, besides the change folders"}},
 		Safety: []string{
 			"Run before merging a PR",
 			"All open PRs should have issue references",
+			"-refs is read-only and advisory: it never rewrites a document or suggests a replacement for a stale reference",
 		},
 		Examples: []string{
 			"specsync verify",
+			"specsync verify -refs",
+			"specsync verify -refs -fail-on-stale docs/runbook.md",
 		},
 	}
 }
@@ -44,6 +51,8 @@ func (cm *verifyCmd) Flags(fs *flag.FlagSet) {
 	cm.change = fs.String("change", "", "verify this change against its own spec deltas (OpenSpec's Verify phase)")
 	cm.asJSON = fs.Bool("json", false, "output as JSON")
 	cm.checklist = fs.Bool("checklist", false, "print only the acceptance checklist, for pasting into a PR")
+	cm.refs = fs.Bool("refs", false, "report commit hashes and request references in change documents (and any paths given) that no longer resolve")
+	cm.failStale = fs.Bool("fail-on-stale", false, "with -refs: exit non-zero when a commit reference is stale or orphaned")
 }
 
 func (cm *verifyCmd) Run(_ context.Context, args []string) error {
@@ -55,9 +64,41 @@ func (cm *verifyCmd) run(args []string) {
 	fs := flagSetFor(cm)
 	openspec, store, repo, change, asJSON, checklist := cm.openspec, cm.store, cm.repo, cm.change, cm.asJSON, cm.checklist
 	_ = fs.Parse(args)
-	checkArgs(fs, args, 0)
+	if *cm.refs {
+		checkArgs(fs, args, -1)
+	} else {
+		checkArgs(fs, args, 0)
+		if *cm.failStale {
+			fail(fmt.Errorf("-fail-on-stale needs -refs"))
+		}
+	}
 
 	root := resolveRoot(fs, openspec, store)
+
+	if *cm.refs {
+		if *change != "" || *checklist || *asJSON {
+			fail(fmt.Errorf("-refs cannot be combined with -change, -checklist or -json"))
+		}
+		repoDir, err := os.Getwd()
+		if err != nil {
+			fail(err)
+		}
+		prov := makeProvider(*repo, false, "github", "")
+		key := "github"
+		if gp, ok := prov.(*specsync.GitHubProvider); ok {
+			key = gp.Name()
+		}
+		stale, err := verifyRefs(context.Background(), os.Stdout, verifyRefsOptions{
+			OpenSpecDir: root.Dir, RepoDir: repoDir, Paths: fs.Args(), Provider: prov, DefaultKey: key,
+		})
+		if err != nil {
+			fail(err)
+		}
+		if stale > 0 && *cm.failStale {
+			os.Exit(1)
+		}
+		return
+	}
 
 	// -change verifies one change against its behaviour contract; without it,
 	// verify sweeps the release for change -> issue -> PR traceability.
