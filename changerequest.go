@@ -3,6 +3,7 @@ package specsync
 import (
 	"context"
 	"sort"
+	"strings"
 )
 
 // ChangeRequest is a pull or merge request as the work provider reports it.
@@ -150,4 +151,31 @@ func sortedUnique(in []string) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// ForIssue returns the request that closes the issue, as the provider asserts:
+// an open one if any, else the newest. Requests from forks are ignored.
+func (s ChangeRequestSet) ForIssue(issue string) *ChangeRequest {
+	var best *ChangeRequest
+	for i := range s.Requests {
+		c := &s.Requests[i]
+		if c.Fork || !containsString(c.Closes, issue) {
+			continue
+		}
+		switch {
+		case best == nil:
+			best = c
+		case c.State == "open" && best.State != "open":
+			best = c
+		case (c.State == "open") == (best.State == "open") && c.Number > best.Number:
+			best = c
+		}
+	}
+	return best
+}
+
+// PRBodyReferencesIssue reports whether body contains a reference to the issue
+// number, such as "#42", "Closes #42" or "Part of #42".
+func PRBodyReferencesIssue(body, issueNum string) bool {
+	return strings.Contains(body, "#"+issueNum)
 }
