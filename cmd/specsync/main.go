@@ -132,7 +132,7 @@ func reorderFlagsFirst(args []string) []string {
 // elsewhere (e.g. link, scan, set-stage, set-priority, note, epic).
 //
 // This is the fix for the 2026-09-24 incident: `specsync -repo
-// ExopenGitHub/portal <issue-url> -dry-run` silently discarded the URL
+// acme/app <issue-url> -dry-run` silently discarded the URL
 // (leaving -change unset, meaning "sync everything") and never even parsed
 // -dry-run (shadowed by the URL), turning a mistyped single-issue command
 // into a full live sync with zero warning.
