@@ -128,3 +128,79 @@ func TestResolveReviewRange(t *testing.T) {
 		t.Fatal("no origin/HEAD and no -base must be an error naming -base")
 	}
 }
+
+func exitCode(err error) int {
+	if ee, ok := err.(*exec.ExitError); ok {
+		return ee.ExitCode()
+	}
+	return -1
+}
+
+func TestReviewMapDocumentedExampleFormWorks(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env := reviewRepo(t, "# My change\n")
+	out, err := runIn(t, bin, repo, env, "review-map", "main..feat/my-change", "-json")
+	if err != nil || !strings.Contains(out, `"commits"`) {
+		t.Fatalf("flag after the positional must work: err=%v\n%s", err, out)
+	}
+	out, err = runIn(t, bin, repo, env, "review-map", "-change", "my-change", "main..feat/my-change", "-json")
+	if err != nil || !strings.Contains(out, `"change": "my-change"`) {
+		t.Fatalf("value flag before and boolean after: err=%v\n%s", err, out)
+	}
+}
+
+func TestReviewMapEquivalentExitCodesDistinguishDifferenceFromError(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env := reviewRepo(t, "# My change\n")
+	if _, err := runIn(t, bin, repo, env, "review-map", "-equivalent", "main", "feat/my-change"); exitCode(err) != 1 {
+		t.Fatalf("differs must exit 1, got %v", err)
+	}
+	if _, err := runIn(t, bin, repo, env, "review-map", "-equivalent", "main", "no-such-rev"); exitCode(err) != 2 {
+		t.Fatalf("an error must exit 2, got %v", err)
+	}
+}
+
+func TestReviewMapReadsFocusFromTheMappedRevisionNotTheWorkingTree(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env := reviewRepo(t, "# My change\n\n## Review focus\n\n- `src/auth/**` \u2014 committed focus\n")
+	if err := os.WriteFile(filepath.Join(repo, "openspec/changes/my-change/proposal.md"), []byte("# My change\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, err := runIn(t, bin, repo, env, "review-map", "-change", "my-change", "main..feat/my-change")
+	if err != nil || !strings.Contains(out, "committed focus") {
+		t.Fatalf("the committed proposal at the head must be used: err=%v\n%s", err, out)
+	}
+}
+
+func TestReviewMapSaysWhenTheChangeIsNotAtTheRevision(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env := reviewRepo(t, "# My change\n")
+	out, err := runIn(t, bin, repo, env, "review-map", "-change", "nope", "main..feat/my-change")
+	if err != nil || !strings.Contains(out, "change nope not found at feat/my-change") || strings.Contains(out, "Nothing declared") {
+		t.Fatalf("err=%v\n%s", err, out)
+	}
+	out, err = runIn(t, bin, repo, env, "review-map", "main..main")
+	if err != nil || !strings.Contains(out, "No change matched") {
+		t.Fatalf("an unmatched branch must say so: err=%v\n%s", err, out)
+	}
+}
+
+func TestResolveReviewRangeHonoursBaseForPullRequestsAndPrefersCommits(t *testing.T) {
+	stub := func(_ context.Context, _, ref string) (string, string, error) {
+		return "basesha", "headsha-" + ref, nil
+	}
+	ctx := context.Background()
+	base, head, err := resolveReviewRange(ctx, t.TempDir(), "7", "develop", stub)
+	if err != nil || base != "develop" || head != "headsha-7" {
+		t.Fatalf("-base must override a pull request's base: %q %q %v", base, head, err)
+	}
+	repo, _ := reviewRepo(t, "# x\n")
+	cmd := exec.Command("git", "branch", "123")
+	cmd.Dir = repo
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if _, head, err = resolveReviewRange(ctx, repo, "123", "main", stub); err != nil || head != "123" {
+		t.Fatalf("a digit-only target that is a commit must be a ref, not a pull request: %q %v", head, err)
+	}
+}

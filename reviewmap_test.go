@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -186,5 +187,98 @@ func TestReviewMapLeavesTheRepoUntouched(t *testing.T) {
 	}
 	if after := snapshot(); after != before {
 		t.Fatalf("worktree, index, refs or config changed:\nbefore: %s\nafter: %s", before, after)
+	}
+}
+
+func TestParseReviewFocusKeepsHyphensInGlobs(t *testing.T) {
+	doc := "## Review focus\n\n- cmd/specsync/review-map.go: parses git\n- internal/a-b/*.go - careful here\n- `x-y/**` \u2014 backticked\n- plain-glob\n"
+	want := []ReviewFocus{
+		{Glob: "cmd/specsync/review-map.go", Reason: "parses git"},
+		{Glob: "internal/a-b/*.go", Reason: "careful here"},
+		{Glob: "x-y/**", Reason: "backticked"},
+		{Glob: "plain-glob"},
+	}
+	if got := ParseReviewFocus(doc); !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %+v, want %+v", got, want)
+	}
+}
+
+func TestCategoryOfAnchorsTestAndDocsRules(t *testing.T) {
+	cases := map[string]string{
+		"src/latest.java":      "source",
+		"src/FooTest.java":     "test",
+		"src/FooTests.cs":      "test",
+		"src/contests.cs":      "source",
+		"app/protest/x.ts":     "source",
+		"docs/gen.go":          "source",
+		"docs/guide/intro.png": "docs",
+		"docs/notes.txt":       "docs",
+		"pkg/docs/x.go":        "source",
+		"x/__tests__/a.js":     "test",
+		"src/attest.go":        "source",
+	}
+	for p, want := range cases {
+		if got := CategoryOf(p); got != want {
+			t.Errorf("CategoryOf(%q) = %q, want %q", p, got, want)
+		}
+	}
+}
+
+func TestTreesEqualRejectsOptionLikeAndUnknownRevisions(t *testing.T) {
+	clone := reviewFixture(t)
+	out := filepath.Join(t.TempDir(), "x")
+	if _, _, err := TreesEqual(context.Background(), clone, "--output="+out, "HEAD"); err == nil {
+		t.Fatal("an option-like revision must be rejected")
+	}
+	if _, err := os.Stat(out); err == nil {
+		t.Fatal("git was run with an attacker-chosen option")
+	}
+	if _, _, err := TreesEqual(context.Background(), clone, "HEAD", "no-such-rev"); err == nil {
+		t.Fatal("an unknown revision must be an error, not a difference")
+	}
+}
+
+func TestBuildReviewMapSkipsMergesAndSaysSo(t *testing.T) {
+	clone, _ := repoWithOrigin(t)
+	commitFiles(t, clone, "feat: one", map[string]string{"one.go": "1\n"})
+	gitFixture(t, clone, "checkout", "-q", "-b", "side", "origin/main")
+	commitFiles(t, clone, "feat: side", map[string]string{"side.go": "1\n"})
+	gitFixture(t, clone, "checkout", "-q", "feature")
+	gitFixture(t, clone, "merge", "-q", "--no-ff", "-m", "Merge side", "side")
+	m, err := BuildReviewMap(context.Background(), clone, "origin/main", "HEAD", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	subjects := []string{}
+	files := 0
+	for _, c := range m.Commits {
+		subjects = append(subjects, c.Subject)
+		files += len(c.Files)
+	}
+	sort.Strings(subjects)
+	if !reflect.DeepEqual(subjects, []string{"feat: one", "feat: side"}) || m.MergesSkipped != 1 || files != 2 {
+		t.Fatalf("subjects=%v merges=%d files=%d", subjects, m.MergesSkipped, files)
+	}
+	if !strings.Contains(m.Markdown(), "1 merge commit skipped") {
+		t.Fatalf("markdown must say merges were skipped:\n%s", m.Markdown())
+	}
+}
+
+func TestBuildReviewMapParsesAwkwardMessagesAndPaths(t *testing.T) {
+	clone, _ := repoWithOrigin(t)
+	commitFiles(t, clone, "feat: tab\there\n\nbody line 1\nbody task 2.1\n", map[string]string{"dir with space/a b.go": "1\n", "caf\u00e9.go": "1\n"})
+	m, err := BuildReviewMap(context.Background(), clone, "origin/main", "HEAD", nil, []TaskRef{{ID: "2.1", Text: "x"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(m.Commits) != 1 || m.Commits[0].Subject != "feat: tab\there" || m.Commits[0].Task != "2.1" {
+		t.Fatalf("commit = %+v", m.Commits)
+	}
+	got := []string{}
+	for _, f := range m.Commits[0].Files {
+		got = append(got, f.Path)
+	}
+	if !reflect.DeepEqual(got, []string{"caf\u00e9.go", "dir with space/a b.go"}) {
+		t.Fatalf("files = %v", got)
 	}
 }

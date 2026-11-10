@@ -22,7 +22,8 @@ var (
 	generatedSuffixes = []string{".min.js", ".min.css", ".pb.go", ".pb.cc", ".pb.h", "_generated.go", ".generated.ts", ".snap"}
 	generatedDirs     = map[string]bool{"dist": true, "vendor": true, "node_modules": true, "__generated__": true}
 	testDirs          = map[string]bool{"test": true, "tests": true, "__tests__": true, "spec": true, "testdata": true, "e2e": true, "fixtures": true}
-	testSuffixes      = []string{"_test.go", ".test.js", ".test.ts", ".test.tsx", ".spec.js", ".spec.ts", ".spec.tsx", "_test.py", "_spec.rb", "test.java", "tests.cs"}
+	testSuffixes      = []string{"_test.go", ".test.js", ".test.ts", ".test.tsx", ".spec.js", ".spec.ts", ".spec.tsx", "_test.py", "_spec.rb"}
+	testClassSuffixes = []string{"Test.java", "Tests.java", "Test.kt", "Tests.kt", "Test.cs", "Tests.cs"}
 	docExts           = map[string]bool{".md": true, ".mdx": true, ".rst": true, ".txt": true, ".adoc": true}
 	configExts        = map[string]bool{".yml": true, ".yaml": true, ".json": true, ".toml": true, ".ini": true, ".cfg": true, ".conf": true, ".env": true, ".properties": true}
 	configNames       = map[string]bool{"dockerfile": true, "makefile": true, ".gitignore": true, ".gitattributes": true, ".editorconfig": true, "go.mod": true, "go.work": true}
@@ -67,8 +68,14 @@ func CategoryOf(file string) string {
 	if strings.HasPrefix(base, "test_") {
 		return "test"
 	}
+	origBase := path.Base(file)
+	for _, s := range testClassSuffixes {
+		if strings.HasSuffix(origBase, s) {
+			return "test"
+		}
+	}
 	ext := path.Ext(base)
-	if docExts[ext] || dirs[0] == "docs" || strings.HasPrefix(base, "readme") || strings.HasPrefix(base, "license") || strings.HasPrefix(base, "changelog") {
+	if docExts[ext] || (dirs[0] == "docs" && !sourceExts[ext]) || strings.HasPrefix(base, "readme") || strings.HasPrefix(base, "license") || strings.HasPrefix(base, "changelog") {
 		return "docs"
 	}
 	if configExts[ext] || configNames[base] || dirs[0] == ".github" {
@@ -88,7 +95,7 @@ type ReviewFocus struct {
 
 var focusHeading = regexp.MustCompile(`(?mi)^#{2,4}\s+Review focus\s*$`)
 var nextHeading = regexp.MustCompile(`(?m)^#{1,4}\s`)
-var focusItem = regexp.MustCompile("^\\s*[-*]\\s+(?:`([^`]+)`|(\\S+?))\\s*(?:[:—–-]+\\s*(.*))?$")
+var bulletLine = regexp.MustCompile(`^\s*[-*]\s+(.*)$`)
 
 // ParseReviewFocus reads the `## Review focus` section of a proposal: one
 // bullet per glob, optionally in backticks, followed by a reason after a colon
@@ -104,20 +111,45 @@ func ParseReviewFocus(proposal string) []ReviewFocus {
 	}
 	var out []ReviewFocus
 	for _, line := range strings.Split(rest, "\n") {
-		m := focusItem.FindStringSubmatch(line)
-		if m == nil {
-			continue
+		if glob, reason, ok := parseFocusLine(line); ok {
+			out = append(out, ReviewFocus{Glob: glob, Reason: reason})
 		}
-		glob := m[1]
-		if glob == "" {
-			glob = strings.TrimRight(m[2], ":")
-		}
-		if glob == "" {
-			continue
-		}
-		out = append(out, ReviewFocus{Glob: glob, Reason: strings.TrimSpace(m[3])})
 	}
 	return out
+}
+
+// parseFocusLine reads "- `glob` — reason" or "- glob: reason". A hyphen inside
+// an unquoted glob stays in the glob: a dash only separates when it is
+// surrounded by spaces.
+func parseFocusLine(line string) (glob, reason string, ok bool) {
+	m := bulletLine.FindStringSubmatch(line)
+	if m == nil {
+		return "", "", false
+	}
+	rest := strings.TrimSpace(m[1])
+	if strings.HasPrefix(rest, "`") {
+		end := strings.Index(rest[1:], "`")
+		if end < 0 {
+			return "", "", false
+		}
+		glob, rest = rest[1:1+end], rest[end+2:]
+	} else if i := strings.IndexAny(rest, " \t"); i < 0 {
+		glob, rest = rest, ""
+	} else {
+		glob, rest = rest[:i], rest[i:]
+	}
+	glob = strings.TrimSuffix(glob, ":")
+	if glob == "" {
+		return "", "", false
+	}
+	rest = strings.TrimSpace(rest)
+	for _, sep := range []string{"\u2014", "\u2013", "-", ":"} {
+		if strings.HasPrefix(rest, sep) {
+			rest = strings.TrimSpace(strings.TrimPrefix(rest, sep))
+			break
+		}
+	}
+	return glob, rest, true
 }
 
 var taskLine = regexp.MustCompile(`(?m)^\s*[-*]\s+\[[ xX]\]\s+(\d+(?:\.\d+)*)\s+(.*?)\s*$`)
@@ -189,12 +221,14 @@ type CategoryTotal struct {
 
 // ReviewMap is the checklist for one branch or range.
 type ReviewMap struct {
-	Base      string          `json:"base"`
-	Head      string          `json:"head"`
-	Change    string          `json:"change,omitempty"`
-	Judgement []JudgementFile `json:"needsJudgement"`
-	Commits   []MapCommit     `json:"commits"`
-	Totals    []CategoryTotal `json:"totals"`
+	Base          string          `json:"base"`
+	Head          string          `json:"head"`
+	Change        string          `json:"change,omitempty"`
+	Judgement     []JudgementFile `json:"needsJudgement"`
+	Commits       []MapCommit     `json:"commits"`
+	MergesSkipped int             `json:"mergesSkipped,omitempty"`
+	Note          string          `json:"note,omitempty"`
+	Totals        []CategoryTotal `json:"totals"`
 }
 
 type numstatFile struct {
@@ -242,25 +276,27 @@ func BuildReviewMap(ctx context.Context, dir, base, head string, focus []ReviewF
 	}
 
 	m := &ReviewMap{Base: base, Head: head, Judgement: []JudgementFile{}, Commits: []MapCommit{}}
-	shas, err := gitIn(ctx, dir, "rev-list", "--reverse", base+".."+head)
+	merges, err := gitIn(ctx, dir, "rev-list", "--merges", "--count", base+".."+head)
 	if err != nil {
 		return nil, err
 	}
-	for _, sha := range strings.Fields(shas) {
-		subject, err := gitIn(ctx, dir, "log", "-1", "--format=%s", sha)
-		if err != nil {
-			return nil, err
+	m.MergesSkipped, _ = strconv.Atoi(strings.TrimSpace(merges))
+	log, err := gitIn(ctx, dir, "log", "--reverse", "--topo-order", "--no-merges", "--no-renames", "--numstat", "-z",
+		"--format=%x01%H%x1f%s%x1f%B%x1e", base+".."+head)
+	if err != nil {
+		return nil, err
+	}
+	for _, chunk := range strings.Split(log, "\x01") {
+		end := strings.Index(chunk, "\x1e")
+		if end < 0 {
+			continue
 		}
-		body, err := gitIn(ctx, dir, "log", "-1", "--format=%B", sha)
-		if err != nil {
-			return nil, err
+		head3 := strings.SplitN(chunk[:end], "\x1f", 3)
+		if len(head3) < 3 {
+			continue
 		}
-		stat, err := gitIn(ctx, dir, "show", "--format=", "--numstat", "-z", "--no-renames", sha)
-		if err != nil {
-			return nil, err
-		}
-		c := MapCommit{SHA: sha, Subject: subject, Files: []MapFile{}}
-		if id := LinkTask(body, tasks); id != "" {
+		c := MapCommit{SHA: head3[0], Subject: head3[1], Files: []MapFile{}}
+		if id := LinkTask(head3[2], tasks); id != "" {
 			c.Task = id
 			for _, t := range tasks {
 				if t.ID == id {
@@ -268,7 +304,7 @@ func BuildReviewMap(ctx context.Context, dir, base, head string, focus []ReviewF
 				}
 			}
 		}
-		for _, nf := range parseNumstatZ(stat) {
+		for _, nf := range parseNumstatZ(chunk[end+1:]) {
 			_, hit := match(nf.path)
 			c.Files = append(c.Files, MapFile{Path: nf.path, Category: CategoryOf(nf.path), Additions: nf.add, Deletions: nf.del, Judgement: hit})
 		}
@@ -311,7 +347,11 @@ func (m *ReviewMap) Markdown() string {
 	}
 	b.WriteString("\n## Needs human judgement\n\n")
 	if len(m.Judgement) == 0 {
-		b.WriteString("Nothing declared. Add a `## Review focus` section to the change's proposal.md to mark paths.\n")
+		if m.Note != "" {
+			b.WriteString(m.Note + "\n")
+		} else {
+			b.WriteString("Nothing declared.\n")
+		}
 	}
 	for _, j := range m.Judgement {
 		fmt.Fprintf(&b, "- [ ] `%s`", j.Path)
@@ -321,6 +361,13 @@ func (m *ReviewMap) Markdown() string {
 		b.WriteString("\n")
 	}
 	b.WriteString("\n## Commits in order\n")
+	if m.MergesSkipped > 0 {
+		plural := "s"
+		if m.MergesSkipped == 1 {
+			plural = ""
+		}
+		fmt.Fprintf(&b, "\n%d merge commit%s skipped; totals cover the whole range.\n", m.MergesSkipped, plural)
+	}
 	for i, c := range m.Commits {
 		short := c.SHA
 		if len(short) > 7 {
@@ -352,20 +399,24 @@ func (m *ReviewMap) Markdown() string {
 }
 
 // TreesEqual compares the trees of two revisions, not their history. It
-// returns whether they are identical and, when not, the differing paths.
+// returns whether they are identical and, when not, the differing paths. A
+// revision that is option-like or does not resolve is an error.
 func TreesEqual(ctx context.Context, dir, oldRev, newRev string) (bool, []string, error) {
-	a, err := gitIn(ctx, dir, "rev-parse", oldRev+"^{tree}")
-	if err != nil {
-		return false, nil, err
+	trees := make([]string, 2)
+	for i, rev := range []string{oldRev, newRev} {
+		if rev == "" || strings.HasPrefix(rev, "-") {
+			return false, nil, fmt.Errorf("%q is not a revision", rev)
+		}
+		tree, err := gitIn(ctx, dir, "rev-parse", "--verify", "-q", rev+"^{tree}")
+		if err != nil {
+			return false, nil, fmt.Errorf("%q is not a revision in this repository", rev)
+		}
+		trees[i] = tree
 	}
-	b, err := gitIn(ctx, dir, "rev-parse", newRev+"^{tree}")
-	if err != nil {
-		return false, nil, err
-	}
-	if a == b {
+	if trees[0] == trees[1] {
 		return true, nil, nil
 	}
-	out, err := gitIn(ctx, dir, "diff", "--name-only", "-z", "--no-renames", oldRev, newRev)
+	out, err := gitIn(ctx, dir, "diff", "--name-only", "-z", "--no-renames", oldRev, newRev, "--")
 	if err != nil {
 		return false, nil, err
 	}
@@ -377,4 +428,13 @@ func TreesEqual(ctx context.Context, dir, oldRev, newRev string) (bool, []string
 	}
 	sort.Strings(paths)
 	return false, paths, nil
+}
+
+// ShowFileAt returns a file's content at a revision, or an error when the
+// revision or the file does not exist.
+func ShowFileAt(ctx context.Context, dir, rev, file string) (string, error) {
+	if rev == "" || strings.HasPrefix(rev, "-") {
+		return "", fmt.Errorf("%q is not a revision", rev)
+	}
+	return gitIn(ctx, dir, "show", rev+":"+file)
 }

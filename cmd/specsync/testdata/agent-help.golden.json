@@ -1486,7 +1486,7 @@
       "safety_rules": [
         "Read-only: needs git; the provider only resolves a pull request number or URL",
         "Marks files as needing judgement only from the change's `## Review focus` section; it marks nothing as safe and is not a reviewer",
-        "-equivalent compares the content of two revisions, not their history"
+        "-equivalent compares the content of two revisions, not their history; it exits 1 when they differ and 2 on an error"
       ],
       "examples": [
         "specsync review-map",
