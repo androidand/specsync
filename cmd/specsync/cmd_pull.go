@@ -22,6 +22,7 @@ type pullCmd struct {
 	project     *string
 	assignee    *string
 	statusMap   *string
+	initFlag    *bool
 	worktree    *bool
 	worktreeDir *string
 }
@@ -39,12 +40,13 @@ func (*pullCmd) Spec() Spec {
 		Safety: []string{
 			"Use -dry-run to preview before pulling",
 			"Verify the issue number is correct",
+			"No openspec/ in the repo is normal, not a blocker: run `specsync init` (or pass -init) for a scratch spec kept out of git, then pull. Never commit the scratch openspec/",
 			"Work each issue in its own branch (feat/<n>-<slug>) and, ideally, its own worktree — pass -worktree to have pull set both up automatically, rather than accumulating unrelated changes on whatever branch happens to be checked out",
 		},
 		Examples: []string{
 			"specsync pull -issue 42 -dry-run",
 			"specsync pull -issue 42",
-			"specsync pull -issue 42 -dry-run",
+			"specsync pull -issue 42 -init",
 		},
 	}
 }
@@ -58,6 +60,7 @@ func (cm *pullCmd) Flags(fs *flag.FlagSet) {
 	cm.project = fs.String("project", "", "target GitHub Projects board as owner/number (default: openspec/specsync.yml board; unset = no board)")
 	cm.assignee = fs.String("assignee", "", "board assignee login (default: the acting viewer, \"me\")")
 	cm.statusMap = fs.String("status-map", "", "stage→Status overrides as stage=Name pairs, e.g. \"active=In Progress,archived=Done\" (default: $SPECSYNC_STATUS_MAP)")
+	cm.initFlag = fs.Bool("init", false, "when the repo has no openspec/, create a scratch one first (same as `specsync init`). Without it, pull fails and creates nothing")
 	cm.worktree = fs.Bool("worktree", false, "create or reuse a worktree and run pull inside it")
 	cm.worktreeDir = fs.String("worktree-dir", "", "worktree base directory (default: $SPECSYNC_WORKTREE_DIR or ../worktrees)")
 }
@@ -69,14 +72,17 @@ func (cm *pullCmd) Run(_ context.Context, args []string) error {
 
 func (cm *pullCmd) run(args []string) {
 	fs := flagSetFor(cm)
-	openspec, storeFlag, issue, change, repo, dryRun, project, assignee, statusMap, worktree, worktreeDir := cm.openspec, cm.storeFlag, cm.issue, cm.change, cm.repo, cm.dryRun, cm.project, cm.assignee, cm.statusMap, cm.worktree, cm.worktreeDir
+	openspec, storeFlag, issue, change, repo, dryRun, project, assignee, statusMap, worktree, worktreeDir, initFlag := cm.openspec, cm.storeFlag, cm.issue, cm.change, cm.repo, cm.dryRun, cm.project, cm.assignee, cm.statusMap, cm.worktree, cm.worktreeDir, cm.initFlag
 	if err := deprecatedSlugFlag(args); err != nil {
 		fail(err)
 	}
 	_ = fs.Parse(args)
 	checkArgs(fs, args, 0)
 
-	abs := resolveRoot(fs, openspec, storeFlag).Dir
+	if *worktree && *initFlag {
+		fail(fmt.Errorf("-init cannot be combined with -worktree: run specsync init inside the worktree, then pull there"))
+	}
+	abs := resolveRootInit(fs, openspec, storeFlag, *initFlag, *dryRun).Dir
 	repoRoot := filepath.Dir(abs)
 
 	resolvedBoard, err := specsync.ResolveBoard(*project, repoRoot)
@@ -119,6 +125,8 @@ func (cm *pullCmd) run(args []string) {
 		printPreview("proposal.md", res.Proposal)
 		if res.Tasks != "" {
 			printPreview("tasks.md", res.Tasks)
+		} else if res.StarterTasks {
+			fmt.Println("\nwould write an empty starter tasks.md (the issue has no task list)")
 		}
 		if res.MarkerPresent {
 			fmt.Printf("\nissue %s already carries the marker %s (no edit needed)\n", res.IssueID, res.Marker)
@@ -150,6 +158,8 @@ func (cm *pullCmd) run(args []string) {
 	fmt.Println("  + specsync.yml (target)")
 	if res.Tasks != "" {
 		fmt.Println("  + tasks.md")
+	} else if res.StarterTasks {
+		fmt.Println("  + tasks.md (empty starter; the issue had no task list)")
 	}
 	if res.TitleSuggestion != "" {
 		fmt.Printf("  title could be tighter: %q — edit the proposal.md H1 if you agree\n", res.TitleSuggestion)

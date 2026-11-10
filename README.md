@@ -120,6 +120,7 @@ appear on someone else's repository.
 | `adopt` | Bind an existing local change to an existing tracker issue, when neither one knows about the other. |
 | `epic` | Create a coordination issue and wire children to it. |
 | `idea` | Capture a free-text idea as a stage:intake issue. |
+| `init` | Create a scratch openspec/ here and keep it out of git. |
 | `link` | Cross-link two or more OpenSpec changes. |
 | `note` | Append a discovery line to a change's discoveries.md. |
 | `pull` | Pull an issue into a local OpenSpec change. |
