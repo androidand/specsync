@@ -21,6 +21,9 @@ type ChangeRequest struct {
 	Checks         ChangeRequestChecks `json:"checks"`
 	Size           ChangeRequestSize   `json:"size"`
 	Closes         []string            `json:"closes,omitempty"` // issue numbers it closes
+	// ClosesRefs names the same issues as owner/repo#N when the provider says
+	// which repository each belongs to.
+	ClosesRefs []string `json:"closesRefs,omitempty"`
 	// HeadSHA is the commit the request's head branch pointed at.
 	HeadSHA string `json:"headSha,omitempty"`
 	// Fork is true when the request comes from another repository, so its head
@@ -52,6 +55,8 @@ type ChangeRequestSize struct {
 type ChangeRequestSet struct {
 	Requests  []ChangeRequest
 	Truncated bool
+	// Repo is the repository the listing came from.
+	Repo string
 }
 
 // ChangeRequestSource is an optional provider capability: list a repo's
@@ -154,13 +159,23 @@ func sortedUnique(in []string) []string {
 	return out
 }
 
-// ForIssue returns the request that closes the issue, as the provider asserts:
-// an open one if any, else the newest. Requests from forks are ignored.
-func (s ChangeRequestSet) ForIssue(issue string) *ChangeRequest {
+// ForIssue returns the request that closes the issue (issueRepo#id), as the
+// provider asserts: an open one if any, else the newest. Requests from forks
+// are ignored. A request that names the repository of each closed issue
+// matches only that one; a bare number matches only when the listing came from
+// issueRepo itself.
+func (s ChangeRequestSet) ForIssue(issueRepo, id string) *ChangeRequest {
 	var best *ChangeRequest
 	for i := range s.Requests {
 		c := &s.Requests[i]
-		if c.Fork || !containsString(c.Closes, issue) {
+		if c.Fork {
+			continue
+		}
+		if len(c.ClosesRefs) > 0 {
+			if !containsString(c.ClosesRefs, issueRepo+"#"+id) {
+				continue
+			}
+		} else if s.Repo != issueRepo || !containsString(c.Closes, id) {
 			continue
 		}
 		switch {

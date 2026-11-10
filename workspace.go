@@ -178,3 +178,15 @@ func gitCommonDirReal(ctx context.Context, dir string) (string, error) {
 	}
 	return strings.TrimSpace(string(out)), nil
 }
+
+// SameFolder reports whether two paths name the same folder, after making them
+// absolute and resolving symlinks. Relative paths resolve against the current
+// directory.
+func SameFolder(a, b string) bool {
+	aa, errA := filepath.Abs(a)
+	bb, errB := filepath.Abs(b)
+	if errA != nil || errB != nil {
+		return a == b
+	}
+	return resolved(aa) == resolved(bb)
+}

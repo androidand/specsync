@@ -79,12 +79,43 @@ func CollectWorkRows(ctx context.Context, opts OverviewOptions) (*WorkRows, erro
 			continue
 		}
 		out.Rows = append(out.Rows, topo.Changes...)
-		out.Status = append(out.Status, topo.Status...)
+		for _, s := range topo.Status {
+			if clone.Repo == "" && strings.HasPrefix(s, "no git remote in store") {
+				continue
+			}
+			out.Status = append(out.Status, s)
+		}
 		if topo.RequestState == "omitted" || (out.RequestState == "" && topo.RequestState != "") {
 			out.RequestState = topo.RequestState
 		}
 	}
+	out.Status = append(out.Status, BuildWorkGraph(out.Rows).Unresolved...)
+	out.Status = uniqueStrings(out.Status)
 	return out, nil
+}
+
+func uniqueStrings(in []string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, s := range in {
+		if !seen[s] {
+			seen[s] = true
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// IncompleteReasons drops the status lines that only report an unresolved
+// link, which say nothing is missing from a source.
+func IncompleteReasons(status []string) []string {
+	var out []string
+	for _, s := range status {
+		if !strings.HasPrefix(s, "unresolved link:") {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // EpicGroup is the work under one epic.
@@ -161,7 +192,7 @@ func BuildOverview(ctx context.Context, opts OverviewOptions) (*Overview, error)
 	sort.Slice(ov.Epics, func(i, j int) bool { return ov.Epics[i].Epic < ov.Epics[j].Epic })
 	sortRows(ov.NoEpic)
 	sortRows(ov.Unlinked)
-	ov.Incomplete = len(ov.Status) > 0
+	ov.Incomplete = len(IncompleteReasons(ov.Status)) > 0
 	return ov, nil
 }
 
@@ -196,7 +227,7 @@ func (s OverviewScope) keeps(row ChangeTopology, me string) bool {
 	}
 	if s.Mine {
 		if row.PR != nil && me != "" {
-			return row.PR.Author == me
+			return row.PR.Author == "" || row.PR.Author == me
 		}
 		return row.PR == nil && row.Worktree != ""
 	}

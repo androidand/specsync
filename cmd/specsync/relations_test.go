@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	specsync "github.com/androidand/specsync"
 )
 
 func relGit(t *testing.T, dir string, args ...string) {
@@ -182,5 +184,29 @@ func TestStatusOutsideAWorktreeListsTheRepoChanges(t *testing.T) {
 	}
 	if !strings.Contains(out, "plain-change") || !strings.Contains(out, "not inside a git worktree") {
 		t.Errorf("outside a worktree status lists the repo's changes and says why:\n%s", out)
+	}
+}
+
+func TestPrintRelatedDoesNotRepeatTheSyncSuggestion(t *testing.T) {
+	rel := &specsync.RelatedWork{Current: "a/b:x", Blocks: []specsync.RelatedItem{{Key: "a/b#2"}}}
+	out := captureStdout(t, func() { printRelated(rel) })
+	if strings.Contains(out, "next:") {
+		t.Fatalf("printCurrentStatus already prints suggest:, so related must not repeat it:\n%s", out)
+	}
+}
+
+func TestStatusRelatedMatchesTheCurrentRowFromARelativeOpenspec(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	w := newRelWorkspace(t)
+	relFile(t, filepath.Join(w.worktree, "openspec", "changes", "scope-list", "links.md"), "## Related\n- acme/web#2\n")
+	out, err := runIn(t, bin, w.worktree, w.env, "status", "-state=off", "-json")
+	if err != nil {
+		t.Fatalf("status: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, `"linked": [`) || !strings.Contains(out, `"key": "acme/web#2"`) {
+		t.Fatalf("a link to a change in another clone must show under linked:\n%s", out)
+	}
+	if n := strings.Count(out, `"slug": "scope-list"`); n != 1 {
+		t.Fatalf("the current row must appear once (%d):\n%s", n, out)
 	}
 }

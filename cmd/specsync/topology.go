@@ -104,7 +104,7 @@ func (cm *statusCmd) run(args []string) {
 		}{topo, related})
 	case current && len(topo.Changes) == 1:
 		printCurrentStatus(topo.Changes[0], topo.RequestState == "ok")
-		printRelated(related, topo.Changes[0])
+		printRelated(related)
 		for _, s := range topo.Status {
 			fmt.Println("status:", s)
 		}
@@ -339,7 +339,7 @@ func orDash(s string) string {
 
 // hasRelations reports whether the row asserts anything worth a workspace walk.
 func hasRelations(row specsync.ChangeTopology) bool {
-	return row.Epic != "" || len(row.BlockedBy) > 0 || len(row.Blocks) > 0 || len(row.Linked) > 0
+	return row.Epic != "" || len(row.BlockedBy) > 0 || len(row.Blocks) > 0 || len(row.Linked) > 0 || len(row.LinkedRefs) > 0
 }
 
 // relatedWork finds what relates to the current work across the workspace.
@@ -358,7 +358,7 @@ func relatedWork(ctx context.Context, current specsync.ChangeTopology, state str
 	rows := make([]specsync.ChangeTopology, 0, len(work.Rows)+1)
 	key, found := specsync.RowKey(current), false
 	for _, r := range work.Rows {
-		if specsync.RowKey(r) == key && r.Store == current.Store {
+		if specsync.RowKey(r) == key && specsync.SameFolder(r.Store, current.Store) {
 			r, found = current, true
 		}
 		rows = append(rows, r)
@@ -366,16 +366,16 @@ func relatedWork(ctx context.Context, current specsync.ChangeTopology, state str
 	if !found {
 		rows = append(rows, current)
 	}
-	rel := specsync.RelatedTo(current, rows, work.Status)
-	if rel == nil && len(work.Status) > 0 {
-		rel = &specsync.RelatedWork{Current: key, Incomplete: work.Status}
+	rel := specsync.RelatedTo(current, rows, specsync.IncompleteReasons(work.Status))
+	if reasons := specsync.IncompleteReasons(work.Status); rel == nil && len(reasons) > 0 {
+		rel = &specsync.RelatedWork{Current: key, Incomplete: reasons}
 	}
 	return rel
 }
 
 // printRelated prints the epic chain, siblings and blockers around the current
-// work, marks it, and ends with the next step.
-func printRelated(rel *specsync.RelatedWork, current specsync.ChangeTopology) {
+// work and marks it. The next step is the suggestion printed with the work itself.
+func printRelated(rel *specsync.RelatedWork) {
 	if rel == nil {
 		return
 	}
@@ -407,9 +407,6 @@ func printRelated(rel *specsync.RelatedWork, current specsync.ChangeTopology) {
 	}
 	for _, reason := range rel.Incomplete {
 		fmt.Println("incomplete:", reason)
-	}
-	if current.Sync != nil {
-		fmt.Println("next:", current.Sync.Summary)
 	}
 }
 

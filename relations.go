@@ -29,6 +29,8 @@ type WorkEdge struct {
 // titles or similarity.
 type WorkGraph struct {
 	Edges []WorkEdge `json:"edges"`
+	// Unresolved lists links that point at work not found among the rows.
+	Unresolved []string `json:"unresolved,omitempty"`
 }
 
 // RowKey names a row's work item: its issue as owner/repo#N, else its change
@@ -59,10 +61,26 @@ func BuildWorkGraph(rows []ChangeTopology) *WorkGraph {
 		seen[e] = true
 		g.Edges = append(g.Edges, e)
 	}
-	keyBySlug := map[string]string{}
+	bySlug := map[string][]ChangeTopology{}
+	known := map[string]bool{}
 	for _, r := range rows {
 		if r.Slug != "" {
-			keyBySlug[r.Store+"\x00"+r.Slug] = RowKey(r)
+			bySlug[r.Slug] = append(bySlug[r.Slug], r)
+		}
+		known[RowKey(r)] = true
+	}
+	link := func(from, to string) {
+		if to < from {
+			from, to = to, from
+		}
+		add(WorkEdge{From: from, To: to, Kind: WorkEdgeLinked, Source: "specsync"})
+	}
+	unresolved := map[string]bool{}
+	note := func(from, to string) {
+		msg := "unresolved link: " + from + " -> " + to + " (not found in the workspace)"
+		if !unresolved[msg] {
+			unresolved[msg] = true
+			g.Unresolved = append(g.Unresolved, msg)
 		}
 	}
 	for _, r := range rows {
@@ -77,12 +95,32 @@ func BuildWorkGraph(rows []ChangeTopology) *WorkGraph {
 			add(WorkEdge{From: b, To: key, Kind: WorkEdgeBlockedBy, Source: "specsync"})
 		}
 		for _, slug := range r.Linked {
-			if other, ok := keyBySlug[r.Store+"\x00"+slug]; ok {
-				a, b := key, other
-				if b < a {
-					a, b = b, a
+			var pick []ChangeTopology
+			for _, c := range bySlug[slug] {
+				if RowKey(c) != key {
+					pick = append(pick, c)
 				}
-				add(WorkEdge{From: a, To: b, Kind: WorkEdgeLinked, Source: "specsync"})
+			}
+			if len(pick) > 1 {
+				var same []ChangeTopology
+				for _, c := range pick {
+					if SameFolder(c.Store, r.Store) {
+						same = append(same, c)
+					}
+				}
+				pick = same
+			}
+			if len(pick) != 1 {
+				note(key, slug)
+				continue
+			}
+			link(key, RowKey(pick[0]))
+		}
+		for _, ref := range r.LinkedRefs {
+			if known[ref] {
+				link(key, ref)
+			} else {
+				note(key, ref)
 			}
 		}
 		if r.PR != nil && r.Repo != "" {
@@ -94,6 +132,7 @@ func BuildWorkGraph(rows []ChangeTopology) *WorkGraph {
 			add(WorkEdge{From: r.Repo + ":" + r.Branch, To: r.Worktree, Kind: WorkEdgeWorktree, Source: "git"})
 		}
 	}
+	sort.Strings(g.Unresolved)
 	sort.Slice(g.Edges, func(i, j int) bool {
 		a, b := g.Edges[i], g.Edges[j]
 		if a.Kind != b.Kind {

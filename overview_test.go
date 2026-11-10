@@ -260,3 +260,87 @@ func TestRelatedTo_EpicSiblingsBlockersAndAlone(t *testing.T) {
 		t.Fatalf("an item outside the workspace is kept by key and the incompleteness carried: %+v", rel)
 	}
 }
+
+func TestBuildWorkGraph_LinksResolveAcrossClonesAndReportTheRest(t *testing.T) {
+	a := issueRow("acme/api", "scope-list", "12")
+	a.Linked = []string{"company-scope"}
+	a.LinkedRefs = []string{"acme/web#5", "acme/ghost#9"}
+	b := issueRow("acme/web", "company-scope", "2")
+	c := issueRow("acme/web", "picker-ui", "5")
+	g := BuildWorkGraph([]ChangeTopology{a, b, c})
+	have := map[string]bool{}
+	for _, e := range g.Edges {
+		if e.Kind == WorkEdgeLinked {
+			have[e.From+" "+e.To] = true
+		}
+	}
+	if !have["acme/api#12 acme/web#2"] || !have["acme/api#12 acme/web#5"] {
+		t.Fatalf("a link to a change in another clone, by slug or by repo#number, must resolve: %+v", g.Edges)
+	}
+	if len(g.Unresolved) != 1 || !strings.Contains(g.Unresolved[0], "acme/ghost#9") {
+		t.Fatalf("a link that resolves to nothing is reported, not dropped: %v", g.Unresolved)
+	}
+}
+
+func TestForIssueIgnoresRequestsThatCloseAnotherRepoIssue(t *testing.T) {
+	set := ChangeRequestSet{Requests: []ChangeRequest{
+		{Number: 1, State: "open", Branch: "a", Closes: []string{"12"}, ClosesRefs: []string{"acme/other#12"}},
+		{Number: 2, State: "open", Branch: "b", Closes: []string{"12"}, ClosesRefs: []string{"acme/api#12"}},
+	}}
+	if got := set.ForIssue("acme/api", "12"); got == nil || got.Number != 2 {
+		t.Fatalf("only the request closing acme/api#12 matches: %+v", got)
+	}
+	if set.ForIssue("acme/missing", "12") != nil {
+		t.Fatal("no match across repos")
+	}
+}
+
+func TestUnlinkedRowsSkipDetachedAndBareEntries(t *testing.T) {
+	st := storeEntry{path: "/clone"}
+	entries := []worktreeEntry{{path: "/w/detached"}, {path: "/w/other", branch: "spike"}}
+	rows := unlinkedRows(st, nil, "acme/api", entries, func(string) *ChangeRequestSet { return nil }, func(*ChangeTopology) {})
+	if len(rows) != 1 || rows[0].Branch != "spike" {
+		t.Fatalf("an entry with no branch must not become a row that collides with others: %+v", rows)
+	}
+}
+
+func TestOverviewMineKeepsRequestsWithUnknownAuthor(t *testing.T) {
+	row := ChangeTopology{Slug: "x", PR: &ChangeRequest{Number: 3, State: "open"}}
+	if !(OverviewScope{Mine: true}).keeps(row, "me") {
+		t.Fatal("a request cached before authors were recorded must not drop the user's work")
+	}
+	row.PR.Author = "someone"
+	if (OverviewScope{Mine: true}).keeps(row, "me") {
+		t.Fatal("another author's request is not mine")
+	}
+}
+
+func TestBuildOverview_NoOriginIsReportedOnce(t *testing.T) {
+	w := newEpicWorkspace(t)
+	ov, err := BuildOverview(context.Background(), w.opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := 0
+	for _, s := range ov.Status {
+		if strings.Contains(s, "bare") {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Fatalf("the clone with no origin is named once, got %d in %v", n, ov.Status)
+	}
+}
+
+func TestBuildWorkGraph_RelativeStoreMatchesAbsolute(t *testing.T) {
+	dir := t.TempDir()
+	a := issueRow("acme/api", "one", "1")
+	a.Store = dir
+	a.Linked = []string{"two"}
+	b := issueRow("acme/api", "two", "2")
+	b.Store = dir + "/."
+	g := BuildWorkGraph([]ChangeTopology{a, b})
+	if len(g.Edges) != 1 {
+		t.Fatalf("stores that are the same folder must compare equal: %+v", g.Edges)
+	}
+}

@@ -42,6 +42,9 @@ type ChangeTopology struct {
 	// links.md; the relations graph also reads Blocks as the inverse.
 	BlockedBy []string `json:"blockedBy,omitempty"`
 	Blocks    []string `json:"blocks,omitempty"`
+	// LinkedRefs are related issues (owner/repo#N) that are not changes in this
+	// store and not the epic; the graph resolves them across clones.
+	LinkedRefs []string `json:"linkedRefs,omitempty"`
 	// Local and Attention come from git alone, for the row's worktree.
 	Local     *LocalState `json:"local,omitempty"`
 	Attention []string    `json:"attention,omitempty"`
@@ -315,6 +318,9 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 		if requestState == "" {
 			requestState = "ok"
 		}
+		if got != nil && got.Repo == "" {
+			got.Repo = repo
+		}
 		requestSets[repo] = got
 		if got != nil && got.Truncated {
 			addStatus("request listing for %s may be truncated; older requests can be missing", repo)
@@ -417,7 +423,7 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 			row.Worktree = path
 		} else if row.Issue != nil {
 			if set := requestsFor(row.Repo); set != nil {
-				if cr := set.ForIssue(row.Issue.ID); cr != nil {
+				if cr := set.ForIssue(repoFromKey(row.Issue.Provider), row.Issue.ID); cr != nil {
 					row.Branch = cr.Branch
 					for _, e := range worktreesOf(l.store.path) {
 						if e.branch == cr.Branch {
@@ -437,7 +443,11 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 				row.Linked = append(row.Linked, slug)
 				continue
 			}
+			ref := refFromURL(link.URL)
 			if row.Epic != "" || ghDown {
+				if ref != nil && refKey(*ref) != "" && link.URL != row.Epic {
+					row.LinkedRefs = append(row.LinkedRefs, refKey(*ref))
+				}
 				continue
 			}
 			// An unresolved related URL might be the change's coordination
@@ -445,7 +455,6 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 			// child, only a remote "## Related" edit — see epic.go). Confirm
 			// via the epic's "type:epic" label rather than guessing from
 			// text, since a sibling link renders identically.
-			ref := refFromURL(link.URL)
 			if ref == nil || ref.ID == "" || ref.Provider == "" {
 				continue
 			}
@@ -463,6 +472,8 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 			}
 			if isEpic {
 				row.Epic = link.URL
+			} else if k := refKey(*ref); k != "" {
+				row.LinkedRefs = append(row.LinkedRefs, k)
 			}
 		}
 
@@ -682,6 +693,9 @@ func unlinkedRows(st storeEntry, existing []ChangeTopology, repo string, entries
 	var out []ChangeTopology
 	seen := map[string]bool{}
 	for _, e := range entries {
+		if e.branch == "" {
+			continue
+		}
 		seen[e.branch] = true
 		if claimedPath[resolved(e.path)] || (e.branch != "" && claimedBranch[e.branch]) {
 			continue

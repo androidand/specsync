@@ -43,7 +43,13 @@ type ghChangeRequest struct {
 	Deletions      int    `json:"deletions"`
 	ChangedFiles   int    `json:"changedFiles"`
 	Closing        []struct {
-		Number int `json:"number"`
+		Number     int `json:"number"`
+		Repository struct {
+			Name  string `json:"name"`
+			Owner struct {
+				Login string `json:"login"`
+			} `json:"owner"`
+		} `json:"repository"`
 	} `json:"closingIssuesReferences"`
 	Checks []ghCheck `json:"statusCheckRollup"`
 }
@@ -183,6 +189,9 @@ func (r ghChangeRequest) toChangeRequest() ChangeRequest {
 	}
 	for _, c := range r.Closing {
 		cr.Closes = append(cr.Closes, strconv.Itoa(c.Number))
+		if c.Repository.Name != "" && c.Repository.Owner.Login != "" {
+			cr.ClosesRefs = append(cr.ClosesRefs, c.Repository.Owner.Login+"/"+c.Repository.Name+"#"+strconv.Itoa(c.Number))
+		}
 	}
 	var failing []string
 	for _, c := range r.Checks {

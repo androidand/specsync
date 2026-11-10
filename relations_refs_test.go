@@ -30,14 +30,15 @@ func TestForIssuePrefersOpenThenNewest(t *testing.T) {
 		{Number: 6, State: "open", Branch: "d", Closes: []string{"10"}},
 		{Number: 7, State: "open", Branch: "e", Closes: []string{"9"}, Fork: true},
 	}}
-	if got := set.ForIssue("9"); got == nil || got.Number != 4 {
+	set.Repo = "acme/api"
+	if got := set.ForIssue("acme/api", "9"); got == nil || got.Number != 4 {
 		t.Fatalf("want the open request 4, got %+v", got)
 	}
 	set.Requests[2].State = "merged"
-	if got := set.ForIssue("9"); got == nil || got.Number != 5 {
+	if got := set.ForIssue("acme/api", "9"); got == nil || got.Number != 5 {
 		t.Fatalf("want the newest non-open request 5, got %+v", got)
 	}
-	if set.ForIssue("11") != nil {
+	if set.ForIssue("acme/api", "11") != nil {
 		t.Fatal("no request closes issue 11")
 	}
 }
