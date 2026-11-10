@@ -162,5 +162,9 @@
   {
     "title": "Plan a big change as slices",
     "body": "Declare reviewable slices in <code>tasks.md</code>, each with a contract, an order and a size budget. <code>specsync slices</code> shows each slice's branch and pull request, <code>slice start</code> opens the next one stacked on the last, and <code>sync -slices</code> mirrors them as child issues."
+  },
+  {
+    "title": "Clean up finished work safely",
+    "body": "<code>specsync cleanup</code> lists worktrees whose work is provably merged and, with <code>-apply</code>, removes them, their branches and archives the change. It never touches dirty trees, unpushed commits, open requests or live sessions; hooks run only after <code>specsync trust</code>."
   }
 ]

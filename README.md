@@ -157,6 +157,7 @@ appear on someone else's repository.
 | Command | What it does |
 |---|---|
 | `agent-help` | Show how to use any specsync command, for people and agents. |
+| `cleanup` | List finished worktrees and, with -apply, remove them and their branches. |
 | `doctor` | Diagnose skill installation, environment, and context health. |
 | `install-skill` | Install the specsync skill for your coding agent. |
 | `trust` | Allow specsync to run the commands in this repo's specsync.yml. |
@@ -561,6 +562,29 @@ specsync -change my-change -slices -dry-run    # child issue per slice, blocked-
 under no slice, and slices without a contract. `status` shows which slice a branch was started for and uses that
 slice's budget as the size threshold. `-slices` is off by default; a provider that cannot nest issues gets the
 slices listed in the issue body instead. `sync -slices` heals on every run (it adds a missing child, nesting or edge and skips what exists), and exits non-zero listing any step that failed. specsync records the order and reports state; it creates no pull request.
+
+### `cleanup` — remove finished work
+
+```bash
+specsync cleanup                 # dry run: what is finished, why, and what would be done
+specsync cleanup -apply          # remove worktree, delete the local branch, archive the change
+specsync cleanup -root ~/dev     # every repo under a folder
+```
+
+A worktree is finished only when its work is provably in the base: its request merged with this
+head, or the head is already in the base, and the tree is clean. A request closed without merging
+is never a candidate, and old work with unpushed commits is listed as needing attention, never
+removed. Dirty trees, open requests, the current worktree, the main checkout and worktrees with a
+live session are skipped. Each candidate is checked again just before removal. Configure it in
+`openspec/specsync.yml`; hooks run only after `specsync trust -yes`:
+
+```yaml
+cleanup:
+  remote_branch: keep   # keep | delete
+  archive: false        # true archives the change when its issue is closed
+  min_age_days: 0       # age before unpushed work is listed as needing attention
+  hooks: []             # for example: make stop
+```
 
 ### `scan` — what already exists here?
 

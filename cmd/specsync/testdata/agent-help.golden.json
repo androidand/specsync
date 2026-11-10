@@ -7,6 +7,7 @@
     "audit-tasks",
     "changelog",
     "changes",
+    "cleanup",
     "doctor",
     "epic",
     "flow",
@@ -534,6 +535,75 @@
         "specsync changes -json",
         "specsync changes -issues",
         "specsync changes -drift"
+      ]
+    },
+    "cleanup": {
+      "command": "cleanup",
+      "description": "List finished worktrees and, with -apply, remove them and their branches.",
+      "mutates": true,
+      "workflow": {
+        "position": "cleanup",
+        "related_before": [
+          "overview",
+          "status"
+        ]
+      },
+      "flags": [
+        {
+          "name": "apply",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "remove the candidates; without it nothing changes"
+        },
+        {
+          "name": "json",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "output as JSON"
+        },
+        {
+          "name": "root",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "folders to look in, separated by the path list separator (default: $SPECSYNC_ROOTS, else the folder holding the current clone)"
+        },
+        {
+          "name": "sessions-cmd",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "command that prints a JSON array of agent sessions (cwd, id, name, status, updatedAt, resume) to show how to resume each piece of work; default $SPECSYNC_SESSIONS_CMD; an empty value disables it for this run; it does not run with -state=off. Taken only from here or the environment, never from a repository file"
+        },
+        {
+          "name": "sessions-timeout",
+          "type": "string",
+          "required": false,
+          "default": "5s",
+          "description": "how long to wait for the session provider"
+        },
+        {
+          "name": "state",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "on (default), fresh to bypass the request cache, or off for local facts only (then only work whose head is in the base is recognised)"
+        }
+      ],
+      "safety_rules": [
+        "Dry run by default: nothing is removed unless -apply is given",
+        "A worktree is a candidate only when its work is provably in the base (its request merged with this head, or the head is in the base) and its tree is clean; a request closed without merging is never a candidate",
+        "Never removes a dirty tree, unpushed commits, an open request, the current worktree, the main checkout, or a worktree with a live session; each candidate is checked again just before removal",
+        "Configured cleanup hooks run only when the repo's config is trusted (specsync trust)",
+        "Never deletes anything on the tracker; archiving a change closes nothing that is not already closed"
+      ],
+      "examples": [
+        "specsync cleanup",
+        "specsync cleanup -root ~/dev",
+        "specsync cleanup -apply",
+        "specsync cleanup -json"
       ]
     },
     "doctor": {
