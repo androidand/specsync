@@ -37,6 +37,9 @@ type GitHubProvider struct {
 	// and Status schema per run so repeated projections don't re-query the schema.
 	boardMu    sync.Mutex
 	boardCache map[string]*boardSchema
+
+	// changeRequestLimit overrides the page size of ChangeRequests; 0 = default.
+	changeRequestLimit int
 }
 
 // NewGitHubProvider returns a provider that drives the real `gh` binary,
@@ -387,7 +390,7 @@ func (p *GitHubProvider) Push(ctx context.Context, item WorkItem, existing *Ref)
 		}
 		if item.Closed {
 			ref.BaseClosed = boolPtr(true)
-			return ref, p.close(ctx, ref.ID)
+			return ref, p.close(ctx, ref.ID, item)
 		}
 		if item.ManageClosed {
 			ref.BaseClosed = boolPtr(false)
@@ -410,7 +413,7 @@ func (p *GitHubProvider) Push(ctx context.Context, item WorkItem, existing *Ref)
 	// (!ManageClosed). A plain content/task sync has no reason to touch a
 	// closed issue, so a closed state there is the strongest available
 	// signal that the ref is stale: this is what let a sync go on writing to
-	// FusionHub's closed duplicate #3692 and report success while updating
+	// api's closed duplicate #3692 and report success while updating
 	// something nobody reads. When ManageClosed is true, the three-way merge
 	// below already decides reopen-vs-defer deliberately and safely; gating
 	// that on -force too would just make -close-completed unusable.
@@ -446,7 +449,10 @@ func (p *GitHubProvider) Push(ctx context.Context, item WorkItem, existing *Ref)
 	switch {
 	case item.Closed && !currentlyClosed:
 		ref.BaseClosed = boolPtr(true)
-		return ref, p.close(ctx, num)
+		return ref, p.close(ctx, num, item)
+
+	case item.Closed && currentlyClosed && (item.CloseComment != "" || (item.CloseReason != "" && item.CloseReason != CloseReasonCompleted)):
+		return ref, fmt.Errorf("issue #%s is already closed, so the close reason and comment cannot be recorded; reopen it (gh issue reopen %s) and archive again", num, num)
 
 	case !item.Closed && currentlyClosed:
 		// Three-way merge on open/closed state, mirroring the board's human-move
@@ -484,7 +490,7 @@ func boolPtr(b bool) *bool { return &b }
 
 // AmbiguousMarkerError reports that marker search matched more than one
 // issue for a change's slug. This is the exact shape of the observed
-// FusionHub failure: a hand-added marker raced GitHub's search index, a sync
+// api failure: a hand-added marker raced GitHub's search index, a sync
 // found nothing and created a duplicate, and a *later* sync's marker search
 // then had two candidates to choose between — silently taking the first was
 // how it kept writing to the wrong one. Find refuses to pick; the caller
@@ -522,9 +528,38 @@ func (e *ClosedIssueError) Error() string {
 
 func (p *GitHubProvider) Find(ctx context.Context, slug string) (*Ref, error) {
 	// Search the inner token (not the full HTML comment) for friendlier indexing.
+	// A slug with a colon (an epic or a slice) is quoted: unquoted, GitHub reads
+	// the colon as a qualifier.
 	search := fmt.Sprintf("specsync:change=%s in:body", slug)
+	if strings.Contains(slug, ":") {
+		search = fmt.Sprintf("\"specsync:change=%s\" in:body", slug)
+	}
 	args := append([]string{"issue", "list"}, p.repoFlag()...)
 	args = append(args, "--state", "all", "--search", search, "--json", "number,url,body", "--limit", "30")
+	matches, err := p.findMarker(ctx, args, slug)
+	if err != nil {
+		return nil, err
+	}
+	if len(matches) == 0 && sliceMarkerSlug.MatchString(slug) {
+		listArgs := append([]string{"issue", "list"}, p.repoFlag()...)
+		listArgs = append(listArgs, "--state", "all", "--label", "type:slice", "--json", "number,url,body", "--limit", "200")
+		if matches, err = p.findMarker(ctx, listArgs, slug); err != nil {
+			return nil, err
+		}
+	}
+	switch len(matches) {
+	case 0:
+		return nil, nil
+	case 1:
+		return &matches[0], nil
+	default:
+		return nil, &AmbiguousMarkerError{Slug: slug, Candidates: matches}
+	}
+}
+
+// findMarker runs an issue listing and keeps the issues whose body carries
+// slug's identity marker; the search index is a hint, the marker is the proof.
+func (p *GitHubProvider) findMarker(ctx context.Context, args []string, slug string) ([]Ref, error) {
 	out, err := p.run(ctx, args...)
 	if err != nil {
 		return nil, err
@@ -547,14 +582,7 @@ func (p *GitHubProvider) Find(ctx context.Context, slug string) (*Ref, error) {
 			matches = append(matches, Ref{Provider: p.Name(), ID: fmt.Sprintf("%d", it.Number), URL: it.URL})
 		}
 	}
-	switch len(matches) {
-	case 0:
-		return nil, nil
-	case 1:
-		return &matches[0], nil
-	default:
-		return nil, &AmbiguousMarkerError{Slug: slug, Candidates: matches}
-	}
+	return matches, nil
 }
 
 // SearchOpenIssues finds open issues matching a free-text query, satisfying the
@@ -629,8 +657,22 @@ func (p *GitHubProvider) ListRecentMergedPRs(ctx context.Context) ([]PRState, er
 	return items, nil
 }
 
-func (p *GitHubProvider) close(ctx context.Context, num string) error {
+// SupportsCloseReason reports that GitHub closes with a reason.
+func (p *GitHubProvider) SupportsCloseReason() bool { return true }
+
+// close closes the issue with the item's reason and optional comment in one
+// call, so a failure posts nothing and a retry cannot duplicate the comment.
+func (p *GitHubProvider) close(ctx context.Context, num string, item WorkItem) error {
 	args := append([]string{"issue", "close", num}, p.repoFlag()...)
+	if item.CloseComment != "" {
+		args = append(args, "--comment", item.CloseComment)
+	}
+	switch item.CloseReason {
+	case CloseReasonNotPlanned:
+		args = append(args, "--reason", "not planned")
+	case CloseReasonDuplicate:
+		args = append(args, "--reason", "duplicate", "--duplicate-of", item.DuplicateOf)
+	}
 	_, err := p.run(ctx, args...)
 	return err
 }
@@ -930,4 +972,83 @@ func (p *GitHubProvider) RemoveBlockedBy(ctx context.Context, issueNum, blockedB
 		"-f", "issueId="+issueNum,
 		"-f", "blockedById="+blockedByNodeID,
 	)
+}
+
+// LinkSubIssue nests child under parent as a native GitHub sub-issue.
+func (p *GitHubProvider) LinkSubIssue(ctx context.Context, parent, child Ref) error {
+	parentID, err := p.ResolveNodeID(ctx, parent.URL)
+	if err != nil {
+		return err
+	}
+	childID, err := p.ResolveNodeID(ctx, child.URL)
+	if err != nil {
+		return err
+	}
+	mutation := `
+		mutation($issueId: ID!, $subIssueId: ID!) {
+			addSubIssue(input: {issueId: $issueId, subIssueId: $subIssueId}) {
+				clientMutationId
+			}
+		}
+	`
+	return p.graphql(ctx, "addSubIssue", mutation, nil, "-f", "issueId="+parentID, "-f", "subIssueId="+childID)
+}
+
+// AddBlockedByRef records that issue is blocked by blocker.
+func (p *GitHubProvider) AddBlockedByRef(ctx context.Context, issue, blocker Ref) error {
+	issueID, err := p.ResolveNodeID(ctx, issue.URL)
+	if err != nil {
+		return err
+	}
+	blockerID, err := p.ResolveNodeID(ctx, blocker.URL)
+	if err != nil {
+		return err
+	}
+	return p.AddBlockedBy(ctx, issueID, blockerID)
+}
+
+// IsSubIssue reports whether child is already nested under parent.
+func (p *GitHubProvider) IsSubIssue(ctx context.Context, parent, child Ref) (bool, error) {
+	owner, repo, number, err := parseIssueURL(child.URL)
+	if err != nil {
+		return false, err
+	}
+	query := `
+		query($owner: String!, $repo: String!, $number: Int!) {
+			repository(owner: $owner, name: $repo) {
+				issue(number: $number) {
+					parent {
+						url
+					}
+				}
+			}
+		}
+	`
+	var out struct {
+		Repository struct {
+			Issue struct {
+				Parent *struct {
+					URL string `json:"url"`
+				} `json:"parent"`
+			} `json:"issue"`
+		} `json:"repository"`
+	}
+	if err := p.graphql(ctx, "readParent", query, &out,
+		"-f", "owner="+owner, "-f", "repo="+repo, "-F", fmt.Sprintf("number=%d", number)); err != nil {
+		return false, err
+	}
+	return out.Repository.Issue.Parent != nil && out.Repository.Issue.Parent.URL == parent.URL, nil
+}
+
+// BlockedByRefs lists the issues that block issue.
+func (p *GitHubProvider) BlockedByRefs(ctx context.Context, issue Ref) ([]Ref, error) {
+	edges, err := p.ReadDependenciesForRef(ctx, issue)
+	if err != nil {
+		return nil, err
+	}
+	refs := make([]Ref, 0, len(edges))
+	for _, e := range edges {
+		refs = append(refs, e.Ref)
+	}
+	return refs, nil
 }

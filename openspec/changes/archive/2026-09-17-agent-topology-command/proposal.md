@@ -45,13 +45,13 @@ JSON shape, one entry per change:
       "title": "Auto-render field forms",
       "stage": "active",
       "store": "/home/user/projects/portal",
-      "repo": "ExopenGitHub/portal",
-      "issue": {"provider": "github:ExopenGitHub/portal", "id": "4231",
-                "url": "https://github.com/ExopenGitHub/portal/issues/4231",
+      "repo": "acme/app",
+      "issue": {"provider": "github:acme/app", "id": "4231",
+                "url": "https://github.com/acme/app/issues/4231",
                 "state": "open"},
       "branch": "feat/4231-add-field-forms",
       "worktree": "/home/user/projects/portal-worktrees/add-field-forms",
-      "epic": "https://github.com/ExopenGitHub/planning/issues/88",
+      "epic": "https://github.com/acme/planning/issues/88",
       "linked": ["add-field-forms-api"]
     }
   ],

@@ -180,8 +180,8 @@ func TestRemoveBlockedBy(t *testing.T) {
 // TestDepKey verifies the stable key generation for refs.
 func TestDepKey(t *testing.T) {
 	tests := []struct {
-		ref    Ref
-		want   string
+		ref  Ref
+		want string
 	}{
 		{
 			ref:  Ref{Provider: "github:owner/repo", ID: "42", URL: "https://github.com/owner/repo/issues/42"},

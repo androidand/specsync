@@ -14,24 +14,61 @@ import (
 	"github.com/androidand/specsync"
 )
 
-// runWorkspace implements `specsync workspace setup|archive`, meant to run
+// workspaceCmd implements `specsync workspace setup|archive`, meant to run
 // from an orchestrator's workspace hooks (Orca's orca.yaml scripts.setup and
 // scripts.archive).
-func runWorkspace(args []string) {
+type workspaceCmd struct {
+	openspec  *string
+	storeFlag *string
+	repo      *string
+	sync      *bool
+	dryRun    *bool
+}
+
+func init() { Register(&workspaceCmd{}) }
+
+func (*workspaceCmd) Spec() Spec {
+	return Spec{
+		Name:     "workspace",
+		Group:    GroupPlan,
+		Summary:  "Workspace hooks: setup finds the change from the branch or Orca's linked issue and sets it active; archive sets it back to auto.",
+		Intents:  []string{"orca hook", "orca.yaml setup", "workspace created from an issue"},
+		Mutates:  true,
+		Workflow: AgentCommandWorkflow{Position: "implementation", RelatedBefore: []string{"pull"}, RelatedAfter: []string{"sync"}},
+		Args: []Arg{
+			{Name: "action", Description: "setup or archive", Required: true},
+		},
+		Safety: []string{
+			"Meant for orca.yaml scripts.setup / scripts.archive; exits 0 and writes nothing when the workspace names no change",
+			"setup pulls the linked issue into a new change only when no local change is linked to it",
+			"Never syncs the tracker unless -sync is passed; use -sync on archive, since the stage is kept per checkout and Orca removes the worktree",
+		},
+		Examples: []string{
+			"specsync workspace setup -dry-run",
+			"specsync workspace setup",
+			"specsync workspace archive -sync",
+		},
+	}
+}
+
+func (cm *workspaceCmd) Flags(fs *flag.FlagSet) {
+	cm.openspec, cm.storeFlag = addRootFlags(fs)
+	cm.repo = fs.String("repo", "", "repo as owner/name for reading the linked issue (default: auto-detect from git remote)")
+	cm.sync = fs.Bool("sync", false, "sync the change to the tracker after updating its stage")
+	cm.dryRun = fs.Bool("dry-run", false, "report the change and what would be done without writing anything")
+}
+
+func (cm *workspaceCmd) Run(_ context.Context, args []string) error {
 	if len(args) == 0 || (args[0] != "setup" && args[0] != "archive") {
-		fail(fmt.Errorf("usage: specsync workspace setup|archive [flags]"))
+		return fmt.Errorf("usage: specsync workspace setup|archive [flags]")
 	}
 	action := args[0]
-	fs := flag.NewFlagSet("workspace "+action, flag.ExitOnError)
-	openspec, storeFlag := addRootFlags(fs)
-	repo := fs.String("repo", "", "repo as owner/name for reading the linked issue (default: auto-detect from git remote)")
-	doSync := fs.Bool("sync", false, "sync the change to the tracker after updating its stage")
-	dryRun := fs.Bool("dry-run", false, "report the change and what would be done without writing anything")
+	fs := flagSetFor(cm)
 	if err := fs.Parse(args[1:]); err != nil {
-		fail(err)
+		return err
 	}
 	checkArgs(fs, args[1:], 0)
-	root := resolveRoot(fs, openspec, storeFlag).Dir
+	root := resolveRoot(fs, cm.openspec, cm.storeFlag).Dir
 
 	branch, def := specsync.CurrentBranches()
 	linkedIssue := func() string {
@@ -50,21 +87,25 @@ func runWorkspace(args []string) {
 		Branch:        branch,
 		DefaultBranch: def,
 		LinkedIssueFn: linkedIssue,
-		Provider:      makeProvider(*repo, false, "github", ""),
+		Provider:      makeProvider(*cm.repo, false, "github", ""),
 		PullMissing:   action == "setup",
-		DryRun:        *dryRun,
+		DryRun:        *cm.dryRun,
 	})
 	if err != nil {
-		fail(err)
+		return err
 	}
-	if slug == "" || !*doSync {
-		return
+	if slug == "" || !*cm.sync {
+		return nil
 	}
-	if *dryRun {
+	if *cm.dryRun {
 		fmt.Printf("  would sync: specsync -change %s\n", slug)
-		return
+		return nil
 	}
-	runSync([]string{"-openspec", root, "-change", slug})
+	syncCmd, ok := lookupCommand("sync")
+	if !ok {
+		return fmt.Errorf("sync command not registered")
+	}
+	return syncCmd.Run(context.Background(), []string{"-openspec", root, "-change", slug})
 }
 
 // workspaceAction finds the workspace's change and sets its stage: active on

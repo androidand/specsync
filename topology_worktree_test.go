@@ -2,6 +2,7 @@ package specsync
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 )
 
@@ -86,4 +87,47 @@ func TestMatchWorktree(t *testing.T) {
 			t.Error("expected no match against an empty entry list")
 		}
 	})
+}
+
+func TestMatchWorktreeByIssue(t *testing.T) {
+	entries := []worktreeEntry{
+		{path: "/w/a", branch: "feat/186-status-local-state"},
+		{path: "/w/b", branch: "fix/18-other"},
+		{path: "/w/c", branch: "1860-not-it"},
+		{path: "/w/d", branch: "main"},
+	}
+	cases := []struct {
+		issue, wantPath string
+	}{
+		{"186", "/w/a"},
+		{"18", "/w/b"},
+		{"1860", "/w/c"},
+		{"19", ""},
+		{"", ""},
+	}
+	for _, c := range cases {
+		_, path, ok := matchWorktreeByIssue(entries, c.issue)
+		if path != c.wantPath || ok != (c.wantPath != "") {
+			t.Errorf("issue %q: got (%q, %v), want %q", c.issue, path, ok, c.wantPath)
+		}
+	}
+}
+
+func TestBuildTopology_ResolvesTheWorktreeThroughTheIssueNumber(t *testing.T) {
+	opts, _ := localStateFixture(t)
+	root := opts.OpenSpecDir
+	// The branch carries the issue number but not the slug.
+	mustWrite(t, filepath.Join(root, "changes", "add-field-forms", ".specsync", "refs.json"),
+		`{"github:acme/portal":{"provider":"github:acme/portal","id":"4231","url":"https://github.com/acme/portal/issues/4231"}}`)
+	porcelain := "worktree " + filepath.Dir(root) + "\nHEAD a\nbranch refs/heads/main\n\n" +
+		"worktree /elsewhere/wt\nHEAD b\nbranch refs/heads/feat/4231-something-else\n"
+	opts.gitWorktreeList = fakeGitWorktreeList(map[string]string{filepath.Dir(root): porcelain}, nil)
+	opts.localState = func(context.Context, string, LocalStateOptions) (*LocalState, error) { return &LocalState{}, nil }
+	topo, err := BuildTopology(context.Background(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if row := topo.Changes[0]; row.Branch != "feat/4231-something-else" || row.Worktree != "/elsewhere/wt" {
+		t.Fatalf("row = %+v", row)
+	}
 }

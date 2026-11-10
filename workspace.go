@@ -2,130 +2,196 @@ package specsync
 
 import (
 	"context"
-	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"sort"
 	"strings"
 )
 
-// WorkspaceChangeOptions describes the workspace whose change is wanted.
-type WorkspaceChangeOptions struct {
-	OpenSpecDir string
-	// Branch is the checked-out branch; "" when detached or unknown.
-	Branch string
-	// DefaultBranch never names a change.
-	DefaultBranch string
-	// LinkedIssue is the issue an orchestrator linked the workspace to, or "".
-	LinkedIssue string
-	// LinkedIssueFn, when LinkedIssue is empty, is asked for it — only if the
-	// branch names no change, so the orchestrator is not queried needlessly.
-	LinkedIssueFn func() string
-	// Provider reads the linked issue. Needed only when LinkedIssue is set and
-	// no local ref cache names it.
-	Provider WorkProvider
-	// PullMissing pulls the linked issue into a new change when no local
-	// change is linked to it.
-	PullMissing bool
-	// DryRun reports what would be found without writing anything.
-	DryRun bool
+// WorkspaceEnv names the environment variable that lists workspace roots.
+const WorkspaceEnv = "SPECSYNC_ROOTS"
+
+const workspaceDepth = 2
+
+// WorkspaceOptions says where to look. Roots come from Roots, else
+// SPECSYNC_ROOTS, else the folder that holds the current clone.
+type WorkspaceOptions struct {
+	Roots []string
+	Cwd   string
+
+	// VolatileDirs are the temporary directories; nil means the system defaults.
+	VolatileDirs []string
+
+	getenv          func(string) string
+	gitCommonDir    func(ctx context.Context, dir string) (string, error)
+	gitWorktreeList func(ctx context.Context, repoDir string) (string, error)
+	gitRemoteOrigin func(ctx context.Context, repoDir string) (string, error)
 }
 
-// WorkspaceChangeResult names the change and how it was found.
-type WorkspaceChangeResult struct {
-	Slug string // "" when the workspace names no change
-	// Source is "branch", "ref-cache", "issue-marker" or "pulled".
-	Source string
-	// WouldPull is set on a dry run when the issue would be pulled.
-	WouldPull bool
-	// Issue is the linked issue consulted, if any.
-	Issue string
+// WorkspaceWorktree is one worktree of a clone.
+type WorkspaceWorktree struct {
+	Path     string `json:"path"`
+	Branch   string `json:"branch,omitempty"`
+	Volatile bool   `json:"volatile,omitempty"`
 }
 
-// WorkspaceChange finds the change a workspace is for: from the branch, then
-// from the workspace's linked issue — a local ref cache naming it, then the
-// issue's identity marker naming a local change — and finally, with
-// PullMissing, by pulling the issue into a new change. A workspace that names
-// no work yields an empty Slug and no error.
-//
-// A fresh worktree has no ref caches (they are gitignored), so the marker
-// step is what finds a committed change there; it binds the cache with Adopt
-// rather than Pull, because Pull would create a suffixed copy and overwrite
-// the proposal with the issue's rendering.
-func WorkspaceChange(ctx context.Context, opts WorkspaceChangeOptions) (WorkspaceChangeResult, error) {
-	if slug := ChangeForBranch(opts.OpenSpecDir, opts.Branch, opts.DefaultBranch); slug != "" {
-		return WorkspaceChangeResult{Slug: slug, Source: "branch"}, nil
-	}
-	linked := opts.LinkedIssue
-	if linked == "" && opts.LinkedIssueFn != nil {
-		linked = opts.LinkedIssueFn()
-	}
-	issue := strings.TrimPrefix(strings.TrimSpace(linked), "#")
-	if issue == "" {
-		return WorkspaceChangeResult{}, nil
-	}
-	res, err := changeForLinkedIssue(ctx, opts, issue)
-	res.Issue = issue
-	return res, err
+// Clone is a main clone found under a root. Repo is the tracker repository
+// mapped from its origin URL, empty when there is no origin.
+type Clone struct {
+	Path      string              `json:"path"`
+	Repo      string              `json:"repo,omitempty"`
+	HasSpecs  bool                `json:"hasSpecs,omitempty"`
+	Worktrees []WorkspaceWorktree `json:"worktrees,omitempty"`
 }
 
-func changeForLinkedIssue(ctx context.Context, opts WorkspaceChangeOptions, issue string) (WorkspaceChangeResult, error) {
-	slug, err := changeForIssueInCache(opts.OpenSpecDir, issue)
-	if err != nil {
-		return WorkspaceChangeResult{}, err
+// Workspace is what discovery found. Status lines name what could not be
+// mapped or listed; the rest is still returned.
+type Workspace struct {
+	Roots  []string `json:"roots"`
+	Clones []Clone  `json:"clones"`
+	Status []string `json:"status,omitempty"`
+}
+
+// DiscoverWorkspace finds main clones under the roots to a depth of two,
+// lists their worktrees wherever they are, and maps each clone to a tracker
+// repository. It only reads: nothing is written and no path is remembered.
+func DiscoverWorkspace(ctx context.Context, opts WorkspaceOptions) (*Workspace, error) {
+	if opts.getenv == nil {
+		opts.getenv = os.Getenv
 	}
-	if slug != "" {
-		return WorkspaceChangeResult{Slug: slug, Source: "ref-cache"}, nil
+	if opts.gitCommonDir == nil {
+		opts.gitCommonDir = gitCommonDirReal
 	}
-	if opts.Provider == nil {
-		return WorkspaceChangeResult{}, fmt.Errorf("issue %s: no provider to read it", issue)
+	if opts.gitWorktreeList == nil {
+		opts.gitWorktreeList = gitWorktreeListReal
 	}
-	reader, ok := opts.Provider.(IssueReader)
-	if !ok {
-		return WorkspaceChangeResult{}, fmt.Errorf("provider %q cannot read issues", opts.Provider.Name())
+	if opts.gitRemoteOrigin == nil {
+		opts.gitRemoteOrigin = gitRemoteOriginReal
 	}
-	item, err := reader.Get(ctx, issue)
-	if err != nil {
-		return WorkspaceChangeResult{}, fmt.Errorf("read issue %s: %w", issue, err)
+	if opts.Cwd == "" {
+		opts.Cwd, _ = os.Getwd()
 	}
-	if slug := slugFromMarker(item.Body); slug != "" && isActiveChange(opts.OpenSpecDir, slug) {
-		if !opts.DryRun {
-			if _, err := Adopt(ctx, AdoptOptions{OpenSpecDir: opts.OpenSpecDir, Provider: opts.Provider, IssueID: issue, Slug: slug}); err != nil {
-				return WorkspaceChangeResult{}, fmt.Errorf("bind %s to issue %s: %w", slug, issue, err)
+	volatile := opts.VolatileDirs
+	if volatile == nil {
+		volatile = defaultVolatileDirs()
+	}
+
+	ws := &Workspace{}
+	roots := opts.Roots
+	if len(roots) == 0 {
+		for _, r := range filepath.SplitList(opts.getenv(WorkspaceEnv)) {
+			if r = strings.TrimSpace(r); r != "" {
+				roots = append(roots, r)
 			}
 		}
-		return WorkspaceChangeResult{Slug: slug, Source: "issue-marker"}, nil
 	}
-	if !opts.PullMissing {
-		return WorkspaceChangeResult{}, nil
+	if len(roots) == 0 {
+		roots = []string{defaultRoot(ctx, opts)}
 	}
-	if opts.DryRun {
-		return WorkspaceChangeResult{Source: "pulled", WouldPull: true}, nil
+	seenRoot := map[string]bool{}
+	for _, r := range roots {
+		abs, err := filepath.Abs(r)
+		if err != nil || seenRoot[resolved(abs)] {
+			continue
+		}
+		seenRoot[resolved(abs)] = true
+		ws.Roots = append(ws.Roots, abs)
 	}
-	res, err := Pull(ctx, PullOptions{OpenSpecDir: opts.OpenSpecDir, Provider: opts.Provider, IssueID: issue})
-	if err != nil {
-		return WorkspaceChangeResult{}, fmt.Errorf("pull issue %s: %w", issue, err)
+
+	seen := map[string]bool{}
+	for _, root := range ws.Roots {
+		for _, path := range findClones(root, workspaceDepth) {
+			real := resolved(path)
+			if seen[real] {
+				continue
+			}
+			seen[real] = true
+			clone := Clone{Path: path}
+			if info, err := os.Stat(filepath.Join(path, "openspec")); err == nil && info.IsDir() {
+				clone.HasSpecs = true
+			}
+			if repo, err := opts.gitRemoteOrigin(ctx, path); err != nil || repo == "" {
+				ws.Status = append(ws.Status, "clone "+path+" has no origin, so it is not mapped to a tracker repository")
+			} else {
+				clone.Repo = repo
+			}
+			entries, err := listWorktrees(ctx, opts.gitWorktreeList, path)
+			if err != nil {
+				ws.Status = append(ws.Status, "git worktree list failed in "+path+": "+errReason(err))
+			}
+			listed := map[string]bool{}
+			for _, e := range entries {
+				rp := resolved(e.path)
+				if listed[rp] {
+					continue
+				}
+				listed[rp] = true
+				clone.Worktrees = append(clone.Worktrees, WorkspaceWorktree{Path: e.path, Branch: e.branch, Volatile: isVolatilePath(e.path, volatile)})
+			}
+			ws.Clones = append(ws.Clones, clone)
+		}
 	}
-	return WorkspaceChangeResult{Slug: res.Slug, Source: "pulled"}, nil
+	sort.Slice(ws.Clones, func(i, j int) bool { return ws.Clones[i].Path < ws.Clones[j].Path })
+	return ws, nil
 }
 
-// changeForIssueInCache returns the active change whose GitHub ref cache
-// names issue, or "".
-func changeForIssueInCache(openspecDir, issue string) (string, error) {
-	changes, err := LoadChanges(openspecDir)
+// defaultRoot is the folder that holds the current clone's main checkout, or
+// the current directory outside a git repository.
+func defaultRoot(ctx context.Context, opts WorkspaceOptions) string {
+	common, err := opts.gitCommonDir(ctx, opts.Cwd)
+	if err != nil || common == "" {
+		return opts.Cwd
+	}
+	return filepath.Dir(filepath.Dir(common))
+}
+
+// findClones returns the main clones at or under root, to depth levels below
+// it. A main clone has a .git directory; a linked worktree has a .git file and
+// is found through its clone instead. It does not descend into a clone.
+func findClones(root string, depth int) []string {
+	if info, err := os.Stat(filepath.Join(root, ".git")); err == nil && info.IsDir() {
+		return []string{root}
+	}
+	if depth == 0 {
+		return nil
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, e := range entries {
+		name := e.Name()
+		if !e.IsDir() || strings.HasPrefix(name, ".") || name == "node_modules" {
+			continue
+		}
+		out = append(out, findClones(filepath.Join(root, name), depth-1)...)
+	}
+	return out
+}
+
+func gitCommonDirReal(ctx context.Context, dir string) (string, error) {
+	out, err := exec.CommandContext(ctx, "git", "-C", dir, "rev-parse", "--path-format=absolute", "--git-common-dir").Output()
 	if err != nil {
 		return "", err
 	}
-	for _, c := range changes {
-		if c.Archived {
-			continue
-		}
-		refs, err := LoadRefs(c.Dir)
-		if err != nil {
-			continue
-		}
-		for key, ref := range refs {
-			if strings.HasPrefix(key, "github") && ref.ID == issue {
-				return c.Slug, nil
-			}
-		}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// SameFolder reports whether two paths name the same folder, after making them
+// absolute and resolving symlinks. Relative paths resolve against the current
+// directory.
+func SameFolder(a, b string) bool {
+	aa, errA := filepath.Abs(a)
+	bb, errB := filepath.Abs(b)
+	if errA != nil || errB != nil {
+		return a == b
 	}
-	return "", nil
+	if resolved(aa) == resolved(bb) {
+		return true
+	}
+	sa, errA := os.Stat(aa)
+	sb, errB := os.Stat(bb)
+	return errA == nil && errB == nil && os.SameFile(sa, sb)
 }

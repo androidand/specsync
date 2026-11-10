@@ -54,7 +54,7 @@ func runWithOrca(dir, bin, orca string, args ...string) (string, error) {
 func TestWorkspaceSetupAndArchiveFromBranch(t *testing.T) {
 	bin := buildSpecsync(t)
 	repo := changeRepo(t)
-	gitIn(t, repo, "checkout", "-q", "-b", "someuser/fix-login-race")
+	branchGit(t, repo, "checkout", "-q", "-b", "someuser/fix-login-race")
 	orca, ran := fakeOrca(t, "null")
 
 	out, err := runWithOrca(repo, bin, orca, "workspace", "setup")
@@ -80,7 +80,7 @@ func TestWorkspaceSetupAndArchiveFromBranch(t *testing.T) {
 func TestWorkspaceSetupFromOrcaLinkedIssue(t *testing.T) {
 	bin := buildSpecsync(t)
 	repo := changeRepo(t)
-	gitIn(t, repo, "checkout", "-q", "-b", "someuser/login-work")
+	branchGit(t, repo, "checkout", "-q", "-b", "someuser/login-work")
 	refs := filepath.Join(repo, "openspec", "changes", "fix-login-race", ".specsync")
 	if err := os.MkdirAll(refs, 0o755); err != nil {
 		t.Fatal(err)
@@ -108,7 +108,7 @@ func TestWorkspaceSetupFromOrcaLinkedIssue(t *testing.T) {
 func TestWorkspaceSetupUnrelatedWorkspaceIsNoOp(t *testing.T) {
 	bin := buildSpecsync(t)
 	repo := changeRepo(t)
-	gitIn(t, repo, "checkout", "-q", "-b", "someuser/spike")
+	branchGit(t, repo, "checkout", "-q", "-b", "someuser/spike")
 	orca, _ := fakeOrca(t, "null")
 
 	for _, action := range []string{"setup", "archive"} {
@@ -130,7 +130,7 @@ func TestWorkspaceSetupUnrelatedWorkspaceIsNoOp(t *testing.T) {
 func TestWorkspaceDryRunWritesNothing(t *testing.T) {
 	bin := buildSpecsync(t)
 	repo := changeRepo(t)
-	gitIn(t, repo, "checkout", "-q", "-b", "someuser/fix-login-race")
+	branchGit(t, repo, "checkout", "-q", "-b", "someuser/fix-login-race")
 	orca, _ := fakeOrca(t, "null")
 
 	out, err := runWithOrca(repo, bin, orca, "workspace", "setup", "-dry-run")
@@ -148,7 +148,7 @@ func TestWorkspaceDryRunWritesNothing(t *testing.T) {
 func TestWorkspaceRejectsUnknownAction(t *testing.T) {
 	bin := buildSpecsync(t)
 	repo := changeRepo(t)
-	if out, err := runIn(repo, bin, "workspace", "open"); err == nil {
+	if out, err := branchRun(repo, bin, "workspace", "open"); err == nil {
 		t.Fatalf("accepted an unknown action:\n%s", out)
 	}
 }

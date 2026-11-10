@@ -97,6 +97,81 @@ reports the divergence. It refuses to write to the upstream parent without an
 explicit `-repo` — a fork user's internal planning content should not silently
 appear on someone else's repository.
 
+### Commands
+
+<!-- specsync:commands:start -->
+**See what is going on.** Start with `specsync changes`.
+
+| Command | What it does |
+|---|---|
+| `audit` | Audit OpenSpec changes for structural issues. |
+| `audit-tasks` | Audit that task status matches code changes (dogfooding). |
+| `changes` | List all OpenSpec changes with status. |
+| `flow` | Show this repo's flow and mark where your current work is in it. |
+| `ideas` | List open stage:intake issues for the repo. |
+| `next` | Say the next step for your current work, and the command for it. |
+| `overview` | List all work in all repositories, grouped by epic. |
+| `relate` | Show the work connected to a change or a file path. |
+| `scan` | Scan for existing work in a code area or topic. |
+| `status` | Show where your current work stands, or every change with -everything. |
+| `trace` | Trace dependencies and relationships of a change. |
+
+**Plan work.** Start with `specsync pull -issue <n>`.
+
+| Command | What it does |
+|---|---|
+| `adopt` | Bind an existing local change to an existing tracker issue, when neither one knows about the other. |
+| `epic` | Create a coordination issue and wire children to it. |
+| `idea` | Capture a free-text idea as a stage:intake issue. |
+| `init` | Create a scratch openspec/ here and keep it out of git. |
+| `link` | Cross-link two or more OpenSpec changes. |
+| `new` | Create a change from a short template, after showing likely duplicates; the issue is created only on -yes. |
+| `note` | Append a discovery line to a change's discoveries.md. |
+| `park` | Stop work so another session can resume: save, set the stage and leave a note. |
+| `pull` | Pull an issue into a local OpenSpec change. |
+| `save` | Commit your work safely: refuses secrets and forbidden trailers, pushes only when asked. |
+| `set-priority` | Set or unset a change's numeric priority override. |
+| `set-stage` | Set the workflow stage of a change. |
+| `slice` | Start a slice: create its branch and worktree, stacked on the previous slice. |
+| `slices` | List a change's slices with progress, order, budget and state. |
+| `spinoff` | Spin off emergent work from a discovery. |
+| `start` | Start or resume work on a change in its own worktree, the same way every time. |
+| `update` | Bring your branch up to date with its base or upstream: a plan first, then -apply. |
+| `workspace` | Workspace hooks: setup finds the change from the branch or Orca's linked issue and sets it active; archive sets it back to auto. |
+
+**Sync with the tracker.** Start with `specsync -dry-run -change <slug>`.
+
+| Command | What it does |
+|---|---|
+| `sync` | Synchronize an OpenSpec change with GitHub Issues. |
+
+**Review and release.** Start with `specsync verify`.
+
+| Command | What it does |
+|---|---|
+| `archive` | Archive a completed change: final push, close, then retention. |
+| `changelog` | Generate release notes from OpenSpec changes and commits. |
+| `gates` | Run the repo's configured gates in order and stamp the commit when they pass. |
+| `lint` | Check titles and issue or PR text against the short-text standard. |
+| `pr` | Check a branch is ready for a pull request (prep) and open one with a short generated body (open). |
+| `pr-body` | Generate the correct PR body fragment for a change. |
+| `release-plan` | Inspect release impact and generate release notes. |
+| `review-map` | Turn a branch into a review checklist, or prove a rewritten branch has the same content. |
+| `validate` | Validate OpenSpec change structure. |
+| `verify` | Verify PR references to their change issues, or with -refs the commit and request references in change documents. |
+
+**Housekeeping.** Start with `specsync doctor`.
+
+| Command | What it does |
+|---|---|
+| `agent-help` | Show how to use any specsync command, for people and agents. |
+| `cleanup` | List finished worktrees and, with -apply, remove them and their branches. |
+| `doctor` | Diagnose skill installation, environment, and context health. |
+| `install-skill` | Install the specsync skill for your coding agent. |
+| `trust` | Allow specsync to run the commands in this repo's specsync.yml. |
+| `version` | Print the specsync version. |
+<!-- specsync:commands:end -->
+
 ### First run, end to end
 
 Say you already have a change at `openspec/changes/dark-mode/` (write one by
@@ -409,13 +484,139 @@ it as a spec and keep syncing:
 ```bash
 specsync pull -issue 42              # issue 42 -> openspec/changes/<slug>/
 specsync pull -issue 42 -dry-run     # read the issue, show what would be written
+specsync pull -issue 42 -init        # repo has no openspec/: make a scratch one first
 specsync pull -issue 42 -change my-feature   # override the derived slug
 ```
 
 `pull` writes `proposal.md` (from the issue body, titled by the issue) and
-`tasks.md` (from a `## Tasks` checklist when present), and links the change to
-the issue so a later `specsync` push updates that same issue. A dry run reads the
-issue but writes nothing.
+`tasks.md` (from a `## Tasks` checklist when present, else an empty starter so the
+change validates), and links the change to the issue so a later `specsync` push
+updates that same issue. A dry run reads the issue but writes nothing.
+
+A repo with no `openspec/` is normal. `specsync init` (or `pull -init`) creates a
+scratch `openspec/changes/` and adds `/openspec/` to the repo's local git exclude
+file (`git rev-parse --git-path info/exclude`, which a clone shares with its linked
+worktrees; it never edits a tracked `.gitignore`). It is idempotent, refuses where `openspec/` is
+tracked, and nothing creates the folder without it. To keep specs in a shared
+store instead, pass `-store <id>` or set `SPECSYNC_DEFAULT_STORE` (or
+`default-store:` in `~/.config/specsync/config.yaml`); the default store applies
+only when there is no local `openspec/`.
+
+### See all your work
+
+`specsync status` in a worktree shows where that work stands. When its change has an
+epic, blockers or links, it also lists every related item in the clones around it,
+marks where you are, and ends with the next step. `specsync overview` lists all work
+in all repos under the workspace roots (`-root`, `SPECSYNC_ROOTS`, else the folder
+holding the current clone, two levels deep), grouped by epic, then work under no
+epic, then branches with no change:
+
+```bash
+specsync overview -attention             # only work that needs a look
+specsync overview -repo api -epic #1     # scopes combine
+specsync overview -mine -json            # for agents
+```
+
+Each row also says how to resume it: `resume` is `cd <worktree>`, or the agent
+session reported by an optional provider (`-sessions-cmd` or `SPECSYNC_SESSIONS_CMD`,
+a command that prints JSON; taken only from the flag or environment, never from a
+repository file; see [docs/sessions-provider.md](docs/sessions-provider.md)), and the
+last `specsync note` on the change is shown with it.
+
+Relations come only from what is asserted: an epic link confirmed by the tracker,
+`## Blocked by` / `## Blocks` in `links.md`, and the request that closes an issue,
+which also names a change's branch when its name follows no convention. Both
+commands are read-only, and mark a result incomplete, with the reason, when a source
+such as the tracker was unreachable.
+
+
+### Catch oversized branches early
+
+`specsync status` flags a branch that is `oversized` (files, changed lines or commits over
+the budget), has `mixed-scopes` (commits with more than one conventional scope, such as
+`feat(billing)` and `feat(onboarding)`), or is oversized with `no-slice-plan` (its change
+declares no `## Slice` headings). It is advice, never a gate. Size comes from git alone.
+
+```bash
+specsync verify -size                          # advisory, exits 0
+specsync verify -size -fail-on-oversized       # a CI gate, if you want one
+specsync verify -size -budget files=15,lines=400 -exclude go.sum -exclude 'vendor/'
+```
+
+`-exclude` takes globs: `*` stays within a directory, `**` crosses directories, a trailing `/`
+means everything under that directory, and a glob with no slash matches the file name at any
+depth. `status`, `overview` and `verify -size` all accept `-budget` and `-exclude`.
+
+The budget is `-budget`, then a `budget: files<=5` line in the change (`verify -size` finds the
+change from the branch name), then `SPECSYNC_BUDGET`, then defaults of 30 files, 1000 lines and
+30 commits per measure. Write `files=0` to remove a limit. Only `key=n` and `key<=n` are accepted.
+Flags apply to unmerged work only: no size flag appears once the request is merged or closed. Defaults are policy, not a
+claim about the right size.
+
+### Plan a large change as slices
+
+Declare the parts of a change in `tasks.md` before the code. A `## Slice <n>: <title>` heading starts a slice, with
+optional `after: 1, 2`, `budget: files<=15, lines<=400` and `contract: <one sentence>` lines; the checkboxes below
+belong to it. A change without slice headings behaves as before, and specsync never proposes or infers slices.
+
+```bash
+specsync slices -change my-change              # progress, order, budget and state of each slice
+specsync slice start -change my-change -dry-run 2
+specsync slice start -change my-change 2       # branch and worktree, stacked on slice 1 when `after: 1`
+specsync -change my-change -slices -dry-run    # child issue per slice, blocked-by per `after`
+```
+
+`validate` reports slice numbers that are not contiguous, `after` targets that are missing or form a cycle, tasks
+under no slice, and slices without a contract. `status` shows which slice a branch was started for and uses that
+slice's budget as the size threshold. `-slices` is off by default; a provider that cannot nest issues gets the
+slices listed in the issue body instead. `sync -slices` heals on every run (it adds a missing child, nesting or edge and skips what exists), and exits non-zero listing any step that failed. specsync records the order and reports state; it creates no pull request.
+
+### `cleanup` — remove finished work
+
+```bash
+specsync cleanup                 # dry run: what is finished, why, and what would be done
+specsync cleanup -apply          # remove the worktree and its local branch (-assume-no-sessions if no provider)
+specsync cleanup -root ~/dev     # every repo under a folder
+```
+
+A worktree is finished only when its work is provably in the base: its request merged with this
+head into the base branch (a request merged into another feature branch proves nothing), or the
+head is already in the base, the branch's reflog shows commits made on it and no reset (a reset can
+discard commits, so a reset branch needs a merged request), and the tree is clean. A request closed without merging is never a
+candidate, and old work with unpushed commits is listed as needing attention, never removed.
+
+Skipped, with the reason shown: dirty trees or a `git status` that cannot be read, worktrees with
+ignored files (a top-level `node_modules`, `dist`, `build`, `target`, `.next`, `vendor` or
+`__pycache__` alone does not block; a nested one does; `-include-ignored` overrides), open requests, protected
+branches (`main`, `master`, `develop`, `trunk`, `staging`, `production`, `prod`, `gh-pages`,
+`release/*`, `hotfix/*`, `cleanup.protect` globs where a trailing `/*` covers every depth, the base
+and default branch on any remote, the one checked out in the main checkout), branches with commits
+from several authors (or whose authors cannot be told), a config with problems (`fix
+openspec/specsync.yml: ...`, never silently defaulted), the current worktree, the
+main checkout, worktrees with a live session, and items whose hooks cannot run because the config
+is not trusted. Live sessions are checked only when a session provider is configured
+(`-sessions-cmd`): without one a dry run warns, and `-apply` refuses unless `-assume-no-sessions`
+is given.
+
+Each candidate is checked again from fresh facts just before it is touched, then done in this
+order: hooks (in the main checkout, never the worktree, with `SPECSYNC_WORKTREE` set, a 60 s limit
+and capped output; they must not rely on the working directory), remove the worktree, delete the
+local branch (only if its tip is still the verified head; the result says how to restore it and the
+branch's config is removed), delete the remote branch (only when its upstream has the same name, its
+tip, read now, is this head, and no open request targets it). A dry run writes nothing: no git
+objects and no request cache. A failed hook leaves the worktree and
+branch in place. Cleanup never archives: with `archive: true` and a closed issue it prints
+`specsync archive -change <slug>` as a follow-up. `specsync trust` lists every gate and cleanup
+hook, and `trust -yes` records them. Configure it in `openspec/specsync.yml`:
+
+```yaml
+cleanup:
+  remote_branch: keep   # keep | delete
+  archive: false        # true prints the archive command as a follow-up when the issue is closed
+  min_age_days: 0       # age before unpushed work is listed as needing attention
+  hooks: []             # for example: make stop
+  protect: []           # branch globs that are never removed, for example: keep/*
+```
 
 ### `scan` — what already exists here?
 
@@ -494,6 +695,86 @@ ideas_repo: my-org/ideas
 ```
 
 Or use the `SPECSYNC_IDEAS_REPO` environment variable.
+
+### `openspec/specsync.yml` format
+
+specsync reads this file with a small built-in parser for a YAML subset: block maps, block lists
+(`- item`, or `- key: value` for a map item), inline `{k: v}` maps and `[a, b]` lists of scalars,
+quoted and bare scalars, and `#` comments. Anchors, aliases, tags, multi-line scalars, nested
+inline collections, duplicate keys and tab indentation are errors reported with their line number.
+Nested keys never act as top-level ones, so `board:` inside a section does not change the board.
+
+### Your flow, gates and the next step
+
+```yaml
+flow: pr-review          # minimal | pr-review (default) | strict, or a list of steps
+gates:
+  - {name: lint, run: "make lint"}
+  - {name: e2e, run: "make e2e", optional: true}
+worktrees:
+  dir: "../worktrees"
+  branch: "{type}/{issue}-{slug}"
+  hooks: ["make setup"]       # run in a new worktree, after trust
+save: {forbid_trailers: [Co-Authored-By], forbid_files: ["*.sql"]}
+pr: {confirm: [tests-run, manual-test]}
+cleanup: {remote_branch: keep, archive: true}
+sync: {strategy: rebase, after_review: merge, force: with-lease}
+```
+
+Steps are `new, start, build, gate, review, merge, cleanup`. `specsync next` reads the current
+work's state (the same facts as `status`) and prints the next step and its command; `specsync flow`
+marks where the work is. Both only report. A gate counts as run when the commit it passed for is
+written to `<git-dir>/specsync/gates-passed`. `specsync doctor config` validates the file, with
+line numbers. Commands defined in the file run only after `specsync trust` records its hash for
+you and this repository: `specsync trust` prints them and records nothing, `specsync trust -yes`
+records trust, and a changed file needs trust again. Until then `next` and `flow` point at
+`specsync trust` instead of the commands.
+
+### Start, check and open work the same way every time
+
+The flow verbs do the mechanical steps and refuse unsafe states; the conventions come from the
+config above, never from code. All of them print a plan with `-dry-run` (or without `-apply`) and
+change nothing then. See `docs/flow-verbs.md` for moving a personal script onto them.
+
+- `specsync new <title>` creates a change from a short template after showing likely duplicate
+  changes and open issues; the tracker issue is created only with `-yes`, and only once the template placeholders have been edited away.
+- `specsync start <slug|issue>` reuses the change's worktree or creates one from `worktrees:`,
+  runs the start hooks there (after trust) and refuses when the session provider reports a live session.
+- `specsync save -m <msg>` commits tracked changes (untracked files only with `-add`), refuses
+  secret-looking files and forbidden trailers, pushes only with `-push` (by explicit refspec to the
+  branch's own name), and not onto a branch with an open pull request without `-push-to-request`.
+  `-sync` previews the tracker sync first and creates a new issue only with `-yes`.
+  It scans only the lines a change adds (and the message), refuses a detached HEAD, and takes `-allow <file>` for a reviewed false positive. `specsync park -m <note>` saves, sets the stage and leaves a note.
+- `specsync gates` runs the configured gates after trust and stamps the commit when a full run passes on a clean tree.
+- `specsync update` plans how to bring the branch current (the `sync:` strategy); `-apply` runs it,
+  stops at a conflict, and `-push` publishes a rebase of a pushed branch only with `-force-with-lease`, leased on a freshly fetched sha; shared branches, and branches whose pull request state is open or unknown, are merged, never rewritten.
+- `specsync pr prep` checks tasks, freshness, the gate stamp and the size budget; `specsync pr open`
+  creates the pull request with the generated short body once prep passes and every `pr.confirm` entry is given with `-confirm`.
+
+### Keep issue and PR text short
+
+```bash
+specsync lint -change my-change          # title and proposal, as an issue
+specsync lint -title 'fix(sync): keep links out of sections' -fail
+specsync lint -pr 42                     # a pull request's title and body
+specsync pr-body -change my-change -template   # a short body from the change
+```
+
+`lint` checks titles (Conventional Commits for PRs, sentence case for issues), headers, sentence and
+paragraph length and a word budget, then reports the line, rule and a suggestion. It exits 0 unless
+`-fail` is given and never edits text. `pr-body -template` fills Summary, Changes, Review focus, Size,
+Verification and Closes from the change, each within a word budget, or fills the sections of your
+`.github/pull_request_template.md`. Change the standard in `openspec/specsync.yml`:
+
+```yaml
+text:
+  profile: conventional   # or plain: titles need not be Conventional Commits
+  pr_title: 72            # limits; 0 turns one off
+  issue_words: 150
+  headers: [Non-goals]    # added to the allowed headers
+  filler: [leverage]      # added to the phrases to avoid
+  template: docs/pr.md    # default: the usual .github locations
+```
 
 ### `ideas` — list open intake issues
 

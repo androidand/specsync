@@ -53,7 +53,7 @@ func resolveAdoptSlug() (string, error) {
 // Adopt binds an existing change to an existing issue: it writes
 // .specsync/refs.json *before* touching the issue body, so the link holds
 // immediately and does not depend on marker-search indexing catching up (the
-// race that produced FusionHub's duplicate #3692). The marker is then added
+// race that produced api's duplicate #3692). The marker is then added
 // to the issue body for durability and for other worktrees/clones.
 func Adopt(ctx context.Context, opts AdoptOptions) (AdoptResult, error) {
 	if opts.Provider == nil {
@@ -90,6 +90,9 @@ func Adopt(ctx context.Context, opts AdoptOptions) (AdoptResult, error) {
 	// Refuse when the issue already carries another change's marker, unless
 	// -force. Adopting it anyway would silently steal a binding that some
 	// other change depends on.
+	if parent, n, ok := SliceMarker(item.Body); ok {
+		return AdoptResult{}, fmt.Errorf("issue %s is slice %d of change %q and cannot be adopted as a change", item.URL, n, parent)
+	}
 	if owner := slugFromMarker(item.Body); owner != "" && owner != slug && !opts.Force {
 		return AdoptResult{}, fmt.Errorf("issue %s already carries the marker for change %q; pass -force to rebind it to %q", item.URL, owner, slug)
 	}

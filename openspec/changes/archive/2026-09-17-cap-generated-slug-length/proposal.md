@@ -6,7 +6,7 @@
 all — it emits one hyphen-joined token per word for the entire input. Every
 generated change name is therefore as long as whatever it was derived from.
 
-Observed in real use: pulling ExopenGitHub/portal#4331, whose title is
+Observed in real use: pulling acme/app#4331, whose title is
 
 > Multi-entity integrations: "Create all" has no selection UI, and company-name
 > display is inconsistent across pages

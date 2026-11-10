@@ -71,7 +71,7 @@
 
 ## Phase 4: Verify
 
-- [x] 4.1 Dogfood against this repo and one multi-repo exopen change
+- [x] 4.1 Dogfood against this repo and one multi-repo change
   - Validation: ran `specsync topology` against this repo (~29 changes,
     correctly shows `agent-topology-command` itself with its real branch
     `feat/168-agent-topology-command` and worktree path — this change was
@@ -81,7 +81,7 @@
     via a real `gh` call), branch, and worktree. Re-ran with `gh` removed
     from `PATH`: repo/branch/worktree still resolved, issue state omitted,
     with `"gh unavailable: issue state omitted"` in `status[]` — exactly the
-    documented degradation. Did not have a second, real multi-repo exopen
+    documented degradation. Did not have a second, real multi-repo
     change available in this session to hand-verify against; the multi-store
     join path is covered by `TestBuildTopology_MultiRepoJoinAcrossCoordinatedStores`
     instead.

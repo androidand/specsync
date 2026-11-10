@@ -11,12 +11,12 @@ treatment anywhere in `change.go` or `sync.go`. The asymmetry is undocumented
 too: README's behaviors list documents Original ask and Discoveries
 rendering but never mentions design.md.
 
-This isn't theoretical. Reproduced 2026-08-27 in `ExopenGitHub/portal`: a
+This isn't theoretical. Reproduced 2026-08-27 in `acme/app`: a
 `bolag-legal-entity-picker` change had a substantial `design.md` (picker
 pattern decision, a component-extraction plan for an ExoKit-shared molecule,
 several other recorded decisions) written entirely locally. The worktree it
 lived in was force-removed as part of routine cleanup after its sibling PR
-merged. `openspec/` is gitignored by convention (`portal/.gitignore:32`), so
+merged. `openspec/` is gitignored by convention (`app/.gitignore:32`), so
 there was no git history to recover from, and `specsync pull -issue 4276`
 only restored `proposal.md` + `tasks.md` — because that's all `sync` had
 ever written to the issue. The design.md content was gone; it happened to be
@@ -52,7 +52,7 @@ the durable, recoverable copy. For `design.md`, today it silently isn't.
   the right answer when a change has genuinely outgrown itself, but a fat
   `design.md` next to a normal-sized proposal/tasks isn't that — it's one
   section, and design.md is very often the largest single contributor in
-  practice (it was the largest section by far in the portal case above).
+  practice (it was the largest section by far in the acme/app case above).
   This change adds a lighter remedy specific to that shape: when the
   rendered body would exceed the limit, post `design.md`'s content as an
   issue comment instead of inlining it, and leave a linked pointer in the
