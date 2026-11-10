@@ -138,6 +138,10 @@ func printPrep(rep specsync.PrepReport) {
 func (cm *prCmd) open(ctx context.Context, cwd string, ways specsync.Ways, change *specsync.Change, rep specsync.PrepReport, base string) error {
 	var blocked []string
 	for _, c := range rep.Checks {
+		if c.Overridden && !slices.Contains(cm.confirm, "oversized") {
+			blocked = append(blocked, c.Name+": "+c.Detail+" (acknowledge with -confirm oversized)")
+			continue
+		}
 		if c.Status == "skipped" && c.Blocking && !slices.Contains(cm.confirm, c.Name) {
 			blocked = append(blocked, c.Name+" was skipped and could not be measured ("+c.Detail+"); fix that or acknowledge it with -confirm "+c.Name)
 			continue

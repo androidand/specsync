@@ -36,6 +36,10 @@ type PrepCheck struct {
 	// thing it checks could not be measured. A caller that opens a pull request
 	// stops on it unless the check is acknowledged by name.
 	Blocking bool `json:"blocking,omitempty"`
+	// Overridden marks a size check that passed or failed under a budget looser
+	// than the default, or with files excluded: a waiver the caller must
+	// acknowledge before opening a pull request.
+	Overridden bool `json:"overridden,omitempty"`
 }
 
 // PrepReport is the outcome of the checks. Passed is true when none failed.
@@ -73,7 +77,8 @@ func PreparePR(ctx context.Context, o PrepOptions) (PrepReport, error) {
 
 	switch {
 	case o.Change == nil:
-		add("tasks", "skipped", "no change matched this branch")
+		add("tasks", "skipped", "could not find the change for this branch; pass -change <slug> or acknowledge with -confirm tasks")
+		rep.Checks[len(rep.Checks)-1].Blocking = true
 	default:
 		total, done := CountCheckboxes(o.Change.TasksMarkdown)
 		switch {
@@ -115,7 +120,12 @@ func PreparePR(ctx context.Context, o PrepOptions) (PrepReport, error) {
 	if ls != nil && ls.Base != "" {
 		size, _, sizeErr = analyze(ctx, o.Dir, ls.Base, "HEAD", o.Exclude)
 	}
-	budget, berr := ResolveBudget(o.BudgetFlag, o.BudgetLine, os.Getenv(BudgetEnv))
+	env := os.Getenv(BudgetEnv)
+	budget, berr := ResolveBudget(o.BudgetFlag, o.BudgetLine, env)
+	override := ""
+	if berr == nil {
+		override = budgetOverride(budget, o, env)
+	}
 	switch {
 	case berr != nil:
 		add("size", "fail", berr.Error())
@@ -133,6 +143,11 @@ func PreparePR(ctx context.Context, o PrepOptions) (PrepReport, error) {
 		}
 	}
 
+	if sz := &rep.Checks[len(rep.Checks)-1]; override != "" && sz.Name == "size" && (sz.Status == "pass" || sz.Waivable) {
+		sz.Overridden = true
+		sz.Detail += "; budget overridden: " + override
+	}
+
 	rep.Passed = true
 	for _, c := range rep.Checks {
 		if c.Status == "fail" {
@@ -140,4 +155,29 @@ func PreparePR(ctx context.Context, o PrepOptions) (PrepReport, error) {
 		}
 	}
 	return rep, nil
+}
+
+// budgetOverride says how the effective budget is looser than the default, or
+// "" when it is not: a raised or removed limit, or files hidden by -exclude.
+func budgetOverride(b Budget, o PrepOptions, env string) string {
+	loose := func(v, def int) bool { return def > 0 && (v == 0 || v > def) }
+	var how []string
+	if loose(b.Files, DefaultBudget.Files) || loose(b.Lines, DefaultBudget.Lines) || loose(b.Commits, DefaultBudget.Commits) {
+		if o.BudgetFlag != "" {
+			how = append(how, "-budget "+o.BudgetFlag)
+		}
+		if env != "" {
+			how = append(how, BudgetEnv+"="+env)
+		}
+		if o.BudgetLine != "" {
+			how = append(how, "the branch's budget line "+o.BudgetLine)
+		}
+		if len(how) == 0 {
+			how = append(how, "a looser budget")
+		}
+	}
+	if len(o.Exclude) > 0 {
+		how = append(how, "-exclude "+strings.Join(o.Exclude, ","))
+	}
+	return strings.Join(how, "; ")
 }

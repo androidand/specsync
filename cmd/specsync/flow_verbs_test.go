@@ -793,3 +793,41 @@ func TestOpenRequestLookupFallsBackToADirectQueryWhenTheListingIsTruncated(t *te
 		t.Fatalf("a match needs no second query: %d %v", n, err)
 	}
 }
+
+func TestPrOpenNeedsConfirmOversizedForAnyLoosenedBudgetOrExclude(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env, ghLog := prRepo(t, "flow: minimal\n")
+	for _, flags := range [][]string{{"-budget", "files=0"}, {"-exclude", "*.txt"}} {
+		out, err := runIn(t, bin, repo, env, append([]string{"pr", "open"}, flags...)...)
+		if err == nil || !strings.Contains(out, "budget overridden") || !strings.Contains(out, "-confirm oversized") {
+			t.Fatalf("%v: err=%v\n%s", flags, err, out)
+		}
+	}
+	out, err := runIn(t, bin, repo, env, "pr", "prep", "-budget", "files=0")
+	if err != nil || !strings.Contains(out, "budget overridden: -budget files=0") {
+		t.Fatalf("prep shows the override without failing: err=%v\n%s", err, out)
+	}
+	if b, _ := os.ReadFile(ghLog); strings.Contains(string(b), "pr create") {
+		t.Fatal("nothing may be created without the acknowledgement")
+	}
+	out, err = runIn(t, bin, repo, env, "pr", "open", "-budget", "files=0", "-confirm", "oversized")
+	if err != nil || !strings.Contains(out, "pull/9") {
+		t.Fatalf("acknowledged: err=%v\n%s", err, out)
+	}
+}
+
+func TestPrOpenBlocksWhenNoChangeCanBeFoundUnlessTasksIsAcknowledged(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env, ghLog := prRepo(t, "flow: minimal\n")
+	gitIn(t, repo, "branch", "-m", "wip-stuff")
+	gitIn(t, repo, "push", "-q", "-u", "origin", "wip-stuff")
+	out, err := runIn(t, bin, repo, env, "pr", "open", "-title", "Add x", "-body-file", filepath.Join(repo, "x.txt"))
+	if err == nil || !strings.Contains(out, "-confirm tasks") {
+		t.Fatalf("err=%v\n%s", err, out)
+	}
+	out, err = runIn(t, bin, repo, env, "pr", "open", "-title", "Add x", "-body-file", filepath.Join(repo, "x.txt"), "-confirm", "tasks")
+	if err != nil || !strings.Contains(out, "pull/9") {
+		t.Fatalf("acknowledged: err=%v\n%s", err, out)
+	}
+	_ = ghLog
+}

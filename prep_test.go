@@ -148,7 +148,39 @@ func TestPrepMeasuresAgainstTheBaseGivenAndMarksAnUnmeasurableBaseAsBlocking(t *
 	if c := checkOf(rep, "gates"); c.Status != "skipped" || c.Blocking {
 		t.Errorf("no gates configured is fine: %+v", c)
 	}
-	if c := checkOf(rep, "tasks"); c.Status != "skipped" || c.Blocking {
-		t.Errorf("no matched change is fine: %+v", c)
+	if c := checkOf(rep, "tasks"); c.Status != "skipped" || !c.Blocking || !strings.Contains(c.Detail, "-confirm tasks") {
+		t.Errorf("no matched change cannot be read as tasks done: %+v", c)
+	}
+}
+
+func TestPrepReportsALoosenedBudgetAsAnOverrideTheCallerMustAcknowledge(t *testing.T) {
+	clone, _ := repoWithOrigin(t)
+	commitFile(t, clone, "x.txt", "x")
+	cases := []struct {
+		name string
+		o    PrepOptions
+		env  string
+		want string
+	}{
+		{"flag removes a limit", PrepOptions{BudgetFlag: "files=0"}, "", "-budget"},
+		{"flag raises a limit", PrepOptions{BudgetFlag: "lines=5000"}, "", "-budget"},
+		{"env loosens", PrepOptions{}, "commits=0", BudgetEnv},
+		{"the branch's own budget line loosens", PrepOptions{BudgetLine: "files<=500"}, "", "budget line"},
+		{"exclude hides files", PrepOptions{Exclude: []string{"*.txt"}}, "", "-exclude"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Setenv(BudgetEnv, c.env)
+			chk := checkOf(prepFor(t, clone, c.o), "size")
+			if !chk.Overridden || !strings.Contains(chk.Detail, "budget overridden") || !strings.Contains(chk.Detail, c.want) {
+				t.Fatalf("%+v", chk)
+			}
+		})
+	}
+	t.Setenv(BudgetEnv, "")
+	for _, o := range []PrepOptions{{}, {BudgetFlag: "files=5"}, {BudgetLine: "lines<=100"}} {
+		if chk := checkOf(prepFor(t, clone, o), "size"); chk.Overridden {
+			t.Fatalf("a tighter or default budget is not an override: %+v", chk)
+		}
 	}
 }
