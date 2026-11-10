@@ -929,3 +929,39 @@ func TestBuildTopology_AnOpenNonDraftRequestIsUnderReview(t *testing.T) {
 		t.Fatalf("closed: %+v", got)
 	}
 }
+
+func TestBuildTopology_SizeBudgetPrecedenceAndSliceFlag(t *testing.T) {
+	opts, _ := localStateFixture(t)
+	cdir := filepath.Join(opts.OpenSpecDir, "changes", "add-field-forms")
+	mustWrite(t, filepath.Join(cdir, "tasks.md"), "# Tasks\n\nbudget: files<=5,lines<=50\n- [ ] a\n")
+	t.Setenv(BudgetEnv, "files=7,commits=9")
+	var got LocalStateOptions
+	opts.Budget = "lines=20"
+	opts.Exclude = []string{"go.sum"}
+	opts.localState = func(_ context.Context, _ string, lo LocalStateOptions) (*LocalState, error) {
+		got = lo
+		return &LocalState{Upstream: "origin/x", Exceeded: []string{"lines 99 > 20"}}, nil
+	}
+	topo, err := BuildTopology(context.Background(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := (Budget{Files: 5, Lines: 20, Commits: 9}); got.Budget != want {
+		t.Fatalf("budget = %+v, want %+v (flag, then slice line, then env)", got.Budget, want)
+	}
+	if !reflect.DeepEqual(got.Exclude, []string{"go.sum"}) {
+		t.Fatalf("exclude = %v", got.Exclude)
+	}
+	if want := []string{"oversized", "no-slice-plan"}; !reflect.DeepEqual(topo.Changes[0].Attention, want) {
+		t.Fatalf("attention = %v, want %v", topo.Changes[0].Attention, want)
+	}
+
+	mustWrite(t, filepath.Join(cdir, "tasks.md"), "# Tasks\n\n## Slice 1: parser\nbudget: files<=5\n- [ ] a\n")
+	topo, err = BuildTopology(context.Background(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"oversized"}; !reflect.DeepEqual(topo.Changes[0].Attention, want) {
+		t.Fatalf("a change with slices must not get no-slice-plan: %v", topo.Changes[0].Attention)
+	}
+}
