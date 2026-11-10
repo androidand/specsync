@@ -68,6 +68,12 @@ func ApplyUpdate(ctx context.Context, dir string, plan UpdatePlan, push bool) (U
 	if st != "" {
 		return res, fmt.Errorf("the working tree has changes: commit or stash them first (specsync save), then update")
 	}
+	expected := ""
+	if push {
+		if remote, err := pushRemote(ctx, dir, plan.Branch); err == nil {
+			expected, _ = gitIn(ctx, dir, "rev-parse", "--verify", "--quiet", "refs/remotes/"+remote+"/"+plan.Branch)
+		}
+	}
 	for _, c := range a.Commands {
 		args, ok := gitStep(c)
 		if !ok {
@@ -91,13 +97,23 @@ func ApplyUpdate(ctx context.Context, dir string, plan UpdatePlan, push bool) (U
 	if !push {
 		return res, nil
 	}
+	if plan.Branch == "" || plan.Branch == "HEAD" {
+		return res, fmt.Errorf("not pushed: HEAD is detached")
+	}
+	remote, err := pushRemote(ctx, dir, plan.Branch)
+	if err != nil {
+		return res, err
+	}
 	pushArgs := []string{"push"}
 	if a.ForcePush {
 		if plan.Shared {
 			return res, fmt.Errorf("not pushed: the branch is shared, so it is never force-pushed")
 		}
-		pushArgs = append(pushArgs, "--force-with-lease")
+		if expected != "" {
+			pushArgs = append(pushArgs, "--force-with-lease=refs/heads/"+plan.Branch+":"+expected)
+		}
 	}
+	pushArgs = append(pushArgs, "-u", remote, plan.Branch+":refs/heads/"+plan.Branch)
 	if _, err := gitIn(ctx, dir, pushArgs...); err != nil {
 		return res, err
 	}

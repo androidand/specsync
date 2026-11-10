@@ -149,3 +149,49 @@ func TestUpdateReportsNothingToDo(t *testing.T) {
 		t.Fatalf("an up-to-date branch needs no steps: %+v", plan)
 	}
 }
+
+func TestUpdatePushNeverGoesToTheUpstreamNameWhenItDiffersFromTheBranch(t *testing.T) {
+	clone, origin := repoWithOrigin(t)
+	gitFixture(t, clone, "checkout", "-q", "-b", "work", "origin/main")
+	gitFixture(t, clone, "config", "push.default", "upstream")
+	commitFile(t, clone, "mine.txt", "mine")
+	advanceRemote(t, origin, "main", "m.txt", "m")
+	mainTip := gitFixture(t, clone, "ls-remote", "origin", "refs/heads/main")
+	_ = mainTip
+	_, res, err := planAndApply(t, clone, Ways{}, true, true)
+	if err != nil || !res.Pushed {
+		t.Fatalf("%v %+v", err, res)
+	}
+	remoteMain := gitFixture(t, clone, "ls-remote", "origin", "refs/heads/main")
+	fetched := gitFixture(t, clone, "rev-parse", "origin/main")
+	if !strings.HasPrefix(remoteMain, fetched) {
+		t.Fatalf("main on the remote must not be overwritten by a branch push: %q vs %s", remoteMain, fetched)
+	}
+	if gitFixture(t, clone, "ls-remote", "origin", "refs/heads/work") == "" {
+		t.Fatal("the branch must be pushed under its own name")
+	}
+}
+
+func TestUpdatePushLeaseRefusesWhenTheRemoteBranchMovedSincePlanning(t *testing.T) {
+	clone, origin := repoWithOrigin(t)
+	commitFile(t, clone, "mine.txt", "mine")
+	gitFixture(t, clone, "push", "-q")
+	advanceRemote(t, origin, "main", "m.txt", "m")
+	t.Setenv("GIT_AUTHOR_NAME", "Test")
+	t.Setenv("GIT_AUTHOR_EMAIL", "test@example.com")
+	t.Setenv("GIT_COMMITTER_NAME", "Test")
+	t.Setenv("GIT_COMMITTER_EMAIL", "test@example.com")
+	gitFixture(t, clone, "fetch", "-q")
+	plan, err := PlanUpdate(context.Background(), clone, Ways{}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	advanceRemote(t, origin, "feature", "theirs.txt", "theirs")
+	res, err := ApplyUpdate(context.Background(), clone, plan, true)
+	if err == nil || res.Pushed {
+		t.Fatalf("a push over commits the plan never saw must be refused: %v %+v", err, res)
+	}
+	if !strings.Contains(gitFixture(t, clone, "ls-tree", "--name-only", "origin/feature"), "mine.txt") {
+		t.Fatal("the remote branch must be untouched")
+	}
+}

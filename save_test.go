@@ -172,3 +172,46 @@ func TestSaveWithNothingToCommitAndDryRun(t *testing.T) {
 		t.Fatal("an empty message must be refused")
 	}
 }
+
+func TestSavePushNeverGoesToTheUpstreamNameWhenItDiffersFromTheBranch(t *testing.T) {
+	clone, _ := repoWithOrigin(t)
+	gitFixture(t, clone, "checkout", "-q", "-b", "work", "origin/main")
+	gitFixture(t, clone, "config", "push.default", "upstream")
+	os.WriteFile(filepath.Join(clone, "a.txt"), []byte("c\n"), 0o644)
+	mainBefore := gitFixture(t, clone, "rev-parse", "origin/main")
+	o := saveOpts(t, clone, "work")
+	o.Push = true
+	if res, err := Save(context.Background(), o); err != nil || !res.Pushed {
+		t.Fatalf("%v %+v", err, res)
+	}
+	if got := gitFixture(t, clone, "ls-remote", "origin", "refs/heads/main"); !strings.HasPrefix(got, mainBefore) {
+		t.Fatalf("main on the remote moved: %q (was %s)", got, mainBefore)
+	}
+	if got := gitFixture(t, clone, "ls-remote", "origin", "refs/heads/work"); got == "" {
+		t.Fatal("the branch must be pushed under its own name")
+	}
+	if up := gitFixture(t, clone, "rev-parse", "--abbrev-ref", "@{u}"); up != "origin/work" {
+		t.Fatalf("the upstream must be fixed to the branch's own name, got %q", up)
+	}
+}
+
+func TestSaveFromASubdirectoryUsesRepoRootPathsForTheSecretScanAndAdd(t *testing.T) {
+	clone, _ := repoWithOrigin(t)
+	sub := filepath.Join(clone, "sub")
+	os.MkdirAll(sub, 0o755)
+	os.WriteFile(filepath.Join(sub, "key.txt"), []byte("ok\n"), 0o644)
+	gitFixture(t, clone, "add", "sub/key.txt")
+	gitFixture(t, clone, "commit", "-q", "-m", "key file")
+	os.WriteFile(filepath.Join(sub, "key.txt"), []byte("-----BEGIN RSA PRIVATE KEY-----\nabc\n"), 0o644)
+	o := saveOpts(t, sub, "x")
+	if _, err := Save(context.Background(), o); err == nil || !strings.Contains(err.Error(), "sub/key.txt") {
+		t.Fatalf("a private key in a tracked file under the cwd must be refused, got %v", err)
+	}
+	os.WriteFile(filepath.Join(sub, "key.txt"), []byte("ok\n"), 0o644)
+	os.WriteFile(filepath.Join(sub, "new.txt"), []byte("new\n"), 0o644)
+	o.Add = []string{"new.txt"}
+	res, err := Save(context.Background(), o)
+	if err != nil || len(res.Files) != 1 || res.Files[0] != "sub/new.txt" {
+		t.Fatalf("-add is relative to the cwd and files are reported from the root: %v %+v", err, res)
+	}
+}

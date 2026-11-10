@@ -86,19 +86,26 @@ func forbiddenTrailer(message string, forbidden []string) string {
 	return ""
 }
 
-func checkAddPath(dir, p string) (string, error) {
+// checkAddPath validates a path named with -add (relative to dir) and returns
+// it relative to the repository root.
+func checkAddPath(dir, top, p string) (string, error) {
 	clean := filepath.Clean(p)
 	if filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
 		return "", fmt.Errorf("%s is outside the worktree", p)
 	}
-	info, err := os.Stat(filepath.Join(dir, clean))
+	abs := filepath.Join(dir, clean)
+	info, err := os.Stat(abs)
 	if err != nil {
 		return "", fmt.Errorf("%s: %v", p, err)
 	}
 	if info.IsDir() {
 		return "", fmt.Errorf("%s is a folder: name the files to add", p)
 	}
-	return filepath.ToSlash(clean), nil
+	rel, err := filepath.Rel(resolved(absPath(top)), resolved(absPath(abs)))
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("%s is outside the repository", p)
+	}
+	return filepath.ToSlash(rel), nil
 }
 
 // Save commits the tracked changes (and the untracked files named in Add),
@@ -117,8 +124,12 @@ func Save(ctx context.Context, o SaveOptions) (SaveResult, error) {
 		return res, err
 	}
 	res.Branch = branch
+	top, err := gitIn(ctx, o.Dir, "rev-parse", "--show-toplevel")
+	if err != nil {
+		return res, err
+	}
 
-	tracked, err := gitIn(ctx, o.Dir, "diff", "--name-only", "-z", "HEAD")
+	tracked, err := gitIn(ctx, top, "diff", "--name-only", "-z", "HEAD")
 	if err != nil {
 		return res, err
 	}
@@ -132,7 +143,7 @@ func Save(ctx context.Context, o SaveOptions) (SaveResult, error) {
 	}
 	var adds []string
 	for _, a := range o.Add {
-		clean, err := checkAddPath(o.Dir, a)
+		clean, err := checkAddPath(o.Dir, top, a)
 		if err != nil {
 			return res, err
 		}
@@ -153,7 +164,7 @@ func Save(ctx context.Context, o SaveOptions) (SaveResult, error) {
 			refused = append(refused, f+" ("+why+")")
 			continue
 		}
-		if data, err := os.ReadFile(filepath.Join(o.Dir, f)); err == nil && len(data) <= 1<<20 && secretContent.Match(data) {
+		if data, err := os.ReadFile(filepath.Join(top, f)); err == nil && len(data) <= 1<<20 && secretContent.Match(data) {
 			refused = append(refused, f+" (contains what looks like a key or token)")
 		}
 	}
@@ -164,19 +175,19 @@ func Save(ctx context.Context, o SaveOptions) (SaveResult, error) {
 	if o.DryRun {
 		return res, nil
 	}
-	if _, err := gitIn(ctx, o.Dir, "add", "-u"); err != nil {
+	if _, err := gitIn(ctx, top, "add", "-u"); err != nil {
 		return res, err
 	}
 	if len(adds) > 0 {
-		if _, err := gitIn(ctx, o.Dir, append([]string{"add", "--"}, adds...)...); err != nil {
+		if _, err := gitIn(ctx, top, append([]string{"add", "--"}, adds...)...); err != nil {
 			return res, err
 		}
 	}
-	if _, err := gitIn(ctx, o.Dir, "commit", "-q", "-m", o.Message); err != nil {
+	if _, err := gitIn(ctx, top, "commit", "-q", "-m", o.Message); err != nil {
 		return res, err
 	}
 	res.Committed = true
-	res.Commit, _ = gitIn(ctx, o.Dir, "rev-parse", "HEAD")
+	res.Commit, _ = gitIn(ctx, top, "rev-parse", "HEAD")
 
 	if !o.Push {
 		return res, nil
@@ -200,35 +211,35 @@ func pushBranch(ctx context.Context, o SaveOptions, branch string, res *SaveResu
 			return fmt.Errorf("not pushed: %s has an open pull request (#%d), and a push notifies its reviewers; pass -push-to-request to push anyway", branch, n)
 		}
 	}
-	remote, _ := gitIn(ctx, o.Dir, "config", "--get", "branch."+branch+".remote")
-	if remote != "" {
-		if _, err := gitIn(ctx, o.Dir, "push"); err != nil {
-			return err
-		}
-		res.Pushed = true
-		return nil
-	}
-	remotes, err := gitIn(ctx, o.Dir, "remote")
+	remote, err := pushRemote(ctx, o.Dir, branch)
 	if err != nil {
 		return err
 	}
-	var name string
-	for _, r := range strings.Fields(remotes) {
-		if r == "origin" {
-			name = r
-		}
-	}
-	if name == "" {
-		if f := strings.Fields(remotes); len(f) == 1 {
-			name = f[0]
-		}
-	}
-	if name == "" {
-		return fmt.Errorf("not pushed: no remote to push %s to", branch)
-	}
-	if _, err := gitIn(ctx, o.Dir, "push", "-u", name, branch); err != nil {
+	if _, err := gitIn(ctx, o.Dir, "push", "-u", remote, branch+":refs/heads/"+branch); err != nil {
 		return err
 	}
 	res.Pushed = true
 	return nil
+}
+
+// pushRemote is the remote a branch is pushed to: its configured remote, else
+// origin, else the only remote.
+func pushRemote(ctx context.Context, dir, branch string) (string, error) {
+	if r, _ := gitIn(ctx, dir, "config", "--get", "branch."+branch+".remote"); r != "" && r != "." {
+		return r, nil
+	}
+	remotes, err := gitIn(ctx, dir, "remote")
+	if err != nil {
+		return "", err
+	}
+	names := strings.Fields(remotes)
+	for _, r := range names {
+		if r == "origin" {
+			return r, nil
+		}
+	}
+	if len(names) == 1 {
+		return names[0], nil
+	}
+	return "", fmt.Errorf("not pushed: no remote to push %s to", branch)
 }
