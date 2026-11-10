@@ -390,7 +390,7 @@ func (p *GitHubProvider) Push(ctx context.Context, item WorkItem, existing *Ref)
 		}
 		if item.Closed {
 			ref.BaseClosed = boolPtr(true)
-			return ref, p.close(ctx, ref.ID)
+			return ref, p.close(ctx, ref.ID, item)
 		}
 		if item.ManageClosed {
 			ref.BaseClosed = boolPtr(false)
@@ -449,7 +449,7 @@ func (p *GitHubProvider) Push(ctx context.Context, item WorkItem, existing *Ref)
 	switch {
 	case item.Closed && !currentlyClosed:
 		ref.BaseClosed = boolPtr(true)
-		return ref, p.close(ctx, num)
+		return ref, p.close(ctx, num, item)
 
 	case !item.Closed && currentlyClosed:
 		// Three-way merge on open/closed state, mirroring the board's human-move
@@ -632,8 +632,26 @@ func (p *GitHubProvider) ListRecentMergedPRs(ctx context.Context) ([]PRState, er
 	return items, nil
 }
 
-func (p *GitHubProvider) close(ctx context.Context, num string) error {
+// SupportsCloseReason reports that GitHub closes with a reason.
+func (p *GitHubProvider) SupportsCloseReason() bool { return true }
+
+// close posts the optional comment first, so a failed comment leaves the
+// issue open, then closes with the item's reason.
+func (p *GitHubProvider) close(ctx context.Context, num string, item WorkItem) error {
+	if item.CloseComment != "" {
+		cargs := append([]string{"issue", "comment", num}, p.repoFlag()...)
+		cargs = append(cargs, "--body", item.CloseComment)
+		if _, err := p.run(ctx, cargs...); err != nil {
+			return fmt.Errorf("post closing comment: %w", err)
+		}
+	}
 	args := append([]string{"issue", "close", num}, p.repoFlag()...)
+	switch item.CloseReason {
+	case CloseReasonNotPlanned:
+		args = append(args, "--reason", "not planned")
+	case CloseReasonDuplicate:
+		args = append(args, "--reason", "duplicate", "--duplicate-of", item.DuplicateOf)
+	}
 	_, err := p.run(ctx, args...)
 	return err
 }

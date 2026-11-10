@@ -80,6 +80,12 @@ type Options struct {
 	// Force overrides provider stale-ref guards (e.g. refusing to write to a
 	// closed issue). Off by default; see WorkItem.Force.
 	Force bool
+	// CloseReason, DuplicateOf and CloseComment apply when the change closes.
+	// A reason other than completed closes the issue even when the change is
+	// not complete.
+	CloseReason  string
+	DuplicateOf  string
+	CloseComment string
 	// Labels controls whether synced issues get the decorative "specsync"
 	// and "stage:<stage>" labels. Off by default (neither is read back by
 	// specsync itself); pass true (the -labels flag) to restore them for
@@ -245,6 +251,10 @@ func Sync(ctx context.Context, opts Options) (Result, error) {
 			item := WorkItemFor(c, opts.CloseCompleted)
 			item.ManagedLabels = opts.Labels
 			item.Force = opts.Force
+			item.CloseReason, item.DuplicateOf, item.CloseComment = opts.CloseReason, opts.DuplicateOf, opts.CloseComment
+			if opts.CloseReason != "" && opts.CloseReason != CloseReasonCompleted {
+				item.Closed, item.ManageClosed = true, true
+			}
 			ref, perr := prov.Push(ctx, item, existingPtr)
 			if perr != nil {
 				providerResults = append(providerResults, ProviderResult{
