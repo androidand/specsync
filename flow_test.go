@@ -60,8 +60,8 @@ func TestFlowGatesNotRunNamesTheGateCommands(t *testing.T) {
 	f := baseFacts()
 	f.GatesPassed = false
 	s := current(t, defaultWays(), f)
-	if s.Step != "gate" || s.Command != "make lint && make test" {
-		t.Fatalf("optional gates stay out by default: %+v", s)
+	if s.Step != "gate" || s.Command != "specsync gates" {
+		t.Fatalf("the default flow points at specsync gates, without optional ones: %+v", s)
 	}
 	if !strings.Contains(s.Reason, "not run") {
 		t.Fatalf("reason = %q", s.Reason)
@@ -82,11 +82,11 @@ func TestFlowGatesUntrustedNeverSuggestsTheCommands(t *testing.T) {
 	}
 }
 
-func TestFlowGatesTrustedExplainsWhoRunsThem(t *testing.T) {
+func TestFlowGatesTrustedPointsAtTheGatesVerb(t *testing.T) {
 	f := baseFacts()
 	f.GatesPassed = false
 	s := current(t, defaultWays(), f)
-	if !strings.Contains(s.Reason, "specsync gates") || !strings.Contains(s.Reason, "yourself") {
+	if s.Command != "specsync gates" || !strings.Contains(s.Reason, "stamps the commit") {
 		t.Fatalf("%+v", s)
 	}
 }
@@ -113,7 +113,7 @@ func TestFlowStrictRunsOptionalGates(t *testing.T) {
 	f := baseFacts()
 	f.GatesPassed = false
 	w, _ := ParseWays([]byte("flow: strict\ngates:\n  - {name: t, run: make test}\n  - {name: e, run: make e2e, optional: true}\n"))
-	if s := current(t, w, f); s.Command != "make test && make e2e" {
+	if s := current(t, w, f); s.Command != "specsync gates -with e" {
 		t.Fatalf("%+v", s)
 	}
 }

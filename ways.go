@@ -326,7 +326,7 @@ func (w *Ways) readSection(sec string, n *YNode, add addIssue) {
 // gates, including optional ones, then the cleanup hooks. Trusting a config
 // trusts all of them.
 func (w Ways) TrustedCommands() []string {
-	return append(w.GateCommands(true, nil), w.Cleanup.Hooks...)
+	return append(append(w.GateCommands(true, nil), w.Worktrees.Hooks...), w.Cleanup.Hooks...)
 }
 
 // GateCommands returns the commands to run, in order. Optional gates are
@@ -388,4 +388,20 @@ func editDistance(a, b string) int {
 		prev = cur
 	}
 	return prev[len(b)]
+}
+
+func (w Ways) optionalGateNames() []string {
+	var out []string
+	for _, g := range w.Gates {
+		if g.Optional {
+			out = append(out, g.Name)
+		}
+	}
+	return out
+}
+
+// RunnableCommands is every command the config can make specsync run: all
+// gates (optional included) and the worktree start hooks.
+func (w Ways) RunnableCommands() []string {
+	return w.TrustedCommands()
 }

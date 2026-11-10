@@ -6,9 +6,9 @@ Depends on `ways-of-working-and-next` slices 0 and 1 for config. Slice 4 also ne
 - contract: Gates run in order and leave a stamp that goes stale on a new commit.
 - budget: files<=8, lines<=300
 
-- [ ] 1.1 `specsync gates [--only a,b] [--with x]`
-- [ ] 1.2 Stamp tied to the head commit; invalid after a new commit
-- [ ] 1.3 Tests: order, optional gates, failure, stale stamp
+- [x] 1.1 `specsync gates [--only a,b] [--with x]`
+- [x] 1.2 Stamp tied to the head commit; invalid after a new commit
+- [x] 1.3 Tests: order, optional gates, failure, stale stamp
 
 ## Slice 2: Start and new
 - after: 1

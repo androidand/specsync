@@ -11,6 +11,7 @@
     "doctor",
     "epic",
     "flow",
+    "gates",
     "idea",
     "ideas",
     "init",
@@ -764,6 +765,75 @@
       "examples": [
         "specsync flow",
         "specsync flow -json"
+      ]
+    },
+    "gates": {
+      "command": "gates",
+      "description": "Run the repo's configured gates in order and stamp the commit when they pass.",
+      "mutates": true,
+      "workflow": {
+        "position": "pre-merge",
+        "related_before": [
+          "next"
+        ],
+        "related_after": [
+          "pr"
+        ]
+      },
+      "flags": [
+        {
+          "name": "continue",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "keep running after a gate fails"
+        },
+        {
+          "name": "dry-run",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "list the gates that would run and run nothing"
+        },
+        {
+          "name": "json",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "output as JSON"
+        },
+        {
+          "name": "only",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "run only these gates (comma-separated names); a partial run never stamps"
+        },
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "with",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "also run these optional gates (comma-separated names)"
+        }
+      ],
+      "safety_rules": [
+        "Runs commands from openspec/specsync.yml, so nothing runs until `specsync trust -yes` has been given for that file",
+        "The stamp is written only for a full passing run on a clean tree; a new commit, a failed run or a partial run leaves no valid stamp",
+        "-dry-run lists the gates that would run and runs nothing"
+      ],
+      "examples": [
+        "specsync gates -dry-run",
+        "specsync gates",
+        "specsync gates -with e2e",
+        "specsync gates -only lint,types -continue"
       ]
     },
     "idea": {

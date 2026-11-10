@@ -146,7 +146,6 @@ func (w Ways) evaluate(step string, f FlowFacts) StepState {
 		if f.GatesPassed && f.Dirty {
 			s.Reason = "uncommitted changes since the last gate run"
 		}
-		cmds := strings.Join(w.GateCommands(strict, nil), " && ")
 		switch {
 		case len(w.Gates) == 0:
 			s.Reason += "; no gates configured: add gates: to openspec/specsync.yml"
@@ -154,8 +153,11 @@ func (w Ways) evaluate(step string, f FlowFacts) StepState {
 			s.Command = "specsync trust"
 			s.Reason += "; the commands in " + SpecSyncConfigPath + " have not been trusted: review the commands first (specsync trust prints them)"
 		default:
-			s.Command = cmds
-			s.Reason += "; gates are run by specsync gates (coming with flow-verbs), so run these yourself"
+			s.Command = "specsync gates"
+			if opt := w.optionalGateNames(); strict && len(opt) > 0 {
+				s.Command = "specsync gates -with " + strings.Join(opt, ",")
+			}
+			s.Reason += "; specsync gates runs the configured gates and stamps the commit"
 		}
 	case "review":
 		s.Done, s.Command, s.Reason = w.reviewState(f, strict)
