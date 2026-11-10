@@ -26,7 +26,7 @@ Depends on `status-pr-and-worktree-state`; benefits from `work-relations-and-ove
 
 ## 4. Docs
 
-- [ ] 4.1 Implement each new command or flag once, as a `Command` type per `make-commands-discoverable`; README, `agent-help`, the overview and the skill are generated, never hand-written
-- [ ] 4.2 Example adapter script in the docs, marked optional and agent-specific
-- [ ] 4.3 Update the skill and `site/features.json`
-- [ ] 4.4 Run `specsync changelog -fail-on-unlinked-commits`
+- [x] 4.1 Implement each new command or flag once, as a `Command` type per `make-commands-discoverable`; README, `agent-help`, the overview and the skill are generated, never hand-written
+- [x] 4.2 Example adapter script in the docs, marked optional and agent-specific
+- [x] 4.3 Update the skill and `site/features.json`
+- [x] 4.4 Run `specsync changelog -fail-on-unlinked-commits` (passes with -resolve-refs as CI runs it; locally it also flags the existing #198 commit and this fresh worktree has no refs cache)
