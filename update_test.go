@@ -16,6 +16,12 @@ func advanceRemote(t *testing.T, origin, branch, file, content string) {
 	gitFixture(t, other, "push", "-q", "origin", branch)
 }
 
+func noRequest(context.Context, string) (int, error) { return 0, nil }
+
+func applyOpts(push bool) UpdateApply {
+	return UpdateApply{Push: push, ForceWithLease: true, OpenRequest: noRequest}
+}
+
 func planAndApply(t *testing.T, clone string, ways Ways, apply, push bool) (UpdatePlan, UpdateResult, error) {
 	t.Helper()
 	t.Setenv("GIT_AUTHOR_NAME", "Test")
@@ -30,7 +36,7 @@ func planAndApply(t *testing.T, clone string, ways Ways, apply, push bool) (Upda
 	if !apply {
 		return plan, UpdateResult{}, nil
 	}
-	res, err := ApplyUpdate(context.Background(), clone, plan, push)
+	res, err := ApplyUpdate(context.Background(), clone, plan, applyOpts(push))
 	return plan, res, err
 }
 
@@ -187,11 +193,85 @@ func TestUpdatePushLeaseRefusesWhenTheRemoteBranchMovedSincePlanning(t *testing.
 		t.Fatal(err)
 	}
 	advanceRemote(t, origin, "feature", "theirs.txt", "theirs")
-	res, err := ApplyUpdate(context.Background(), clone, plan, true)
+	res, err := ApplyUpdate(context.Background(), clone, plan, applyOpts(true))
 	if err == nil || res.Pushed {
 		t.Fatalf("a push over commits the plan never saw must be refused: %v %+v", err, res)
 	}
 	if !strings.Contains(gitFixture(t, clone, "ls-tree", "--name-only", "origin/feature"), "mine.txt") {
 		t.Fatal("the remote branch must be untouched")
+	}
+}
+
+func planFor(t *testing.T, clone string) UpdatePlan {
+	t.Helper()
+	t.Setenv("GIT_AUTHOR_NAME", "Test")
+	t.Setenv("GIT_AUTHOR_EMAIL", "test@example.com")
+	t.Setenv("GIT_COMMITTER_NAME", "Test")
+	t.Setenv("GIT_COMMITTER_EMAIL", "test@example.com")
+	gitFixture(t, clone, "fetch", "-q")
+	plan, err := PlanUpdate(context.Background(), clone, Ways{}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return plan
+}
+
+func TestUpdateForcePushNeedsAnExplicitLeaseFlagAndChangesNothingWithout(t *testing.T) {
+	clone, origin := repoWithOrigin(t)
+	commitFile(t, clone, "mine.txt", "mine")
+	gitFixture(t, clone, "push", "-q")
+	advanceRemote(t, origin, "main", "m.txt", "m")
+	plan := planFor(t, clone)
+	if !plan.Advice.ForcePush || !strings.Contains(plan.Advice.Summary, "rewrites pushed history") || !strings.Contains(plan.Advice.Summary, "-force-with-lease") {
+		t.Fatalf("the plan must say it rewrites pushed history and name the flag: %+v", plan.Advice)
+	}
+	head := gitFixture(t, clone, "rev-parse", "HEAD")
+	o := applyOpts(true)
+	o.ForceWithLease = false
+	res, err := ApplyUpdate(context.Background(), clone, plan, o)
+	if err == nil || !strings.Contains(err.Error(), "-force-with-lease") || res.Applied {
+		t.Fatalf("got %v %+v", err, res)
+	}
+	if gitFixture(t, clone, "rev-parse", "HEAD") != head {
+		t.Fatal("history must not be rewritten when the push is refused")
+	}
+}
+
+func TestUpdateRefusesToForcePushWhenTheRemoteShaCannotBeFetched(t *testing.T) {
+	clone, origin := repoWithOrigin(t)
+	commitFile(t, clone, "mine.txt", "mine")
+	gitFixture(t, clone, "push", "-q")
+	advanceRemote(t, origin, "main", "m.txt", "m")
+	plan := planFor(t, clone)
+	gitFixture(t, clone, "remote", "set-url", "origin", filepath.Join(t.TempDir(), "gone.git"))
+	head := gitFixture(t, clone, "rev-parse", "HEAD")
+	res, err := ApplyUpdate(context.Background(), clone, plan, applyOpts(true))
+	if err == nil || res.Pushed || res.Applied {
+		t.Fatalf("got %v %+v", err, res)
+	}
+	if gitFixture(t, clone, "rev-parse", "HEAD") != head {
+		t.Fatal("nothing may change when the lease cannot be computed")
+	}
+}
+
+func TestUpdateRefusesADetachedHeadAndPushingTheDefaultBranch(t *testing.T) {
+	clone, origin := repoWithOrigin(t)
+	advanceRemote(t, origin, "main", "m.txt", "m")
+	gitFixture(t, clone, "checkout", "-q", "--detach")
+	gitFixture(t, clone, "fetch", "-q")
+	if _, err := PlanUpdate(context.Background(), clone, Ways{}, false); err == nil || !strings.Contains(err.Error(), "detached") {
+		t.Fatalf("got %v", err)
+	}
+	gitFixture(t, clone, "checkout", "-q", "main")
+	commitFile(t, clone, "n.txt", "n")
+	plan := planFor(t, clone)
+	head := gitFixture(t, clone, "rev-parse", "HEAD")
+	o := applyOpts(true)
+	res, err := ApplyUpdate(context.Background(), clone, plan, o)
+	if err == nil || !strings.Contains(err.Error(), "default branch") || res.Applied {
+		t.Fatalf("got %v %+v", err, res)
+	}
+	if gitFixture(t, clone, "rev-parse", "HEAD") != head {
+		t.Fatal("a refused push must not apply the update first")
 	}
 }

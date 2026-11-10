@@ -17,6 +17,9 @@ type PrepOptions struct {
 	// line; ResolveBudget layers them with SPECSYNC_BUDGET.
 	BudgetFlag, BudgetLine string
 	Exclude                []string
+	// Base is the ref the pull request will be measured against, for example
+	// origin/main; empty means the repository's default base.
+	Base string
 	// analyze measures the branch; nil means AnalyzeBranch.
 	analyze func(ctx context.Context, dir, base, head string, exclude []string) (*BranchSize, []string, error)
 }
@@ -29,6 +32,10 @@ type PrepCheck struct {
 	// Waivable is true only for a real over-budget result, which the caller may
 	// acknowledge; analysis and configuration errors are never waivable.
 	Waivable bool `json:"waivable,omitempty"`
+	// Blocking marks a skipped check that must not be read as a pass: the
+	// thing it checks could not be measured. A caller that opens a pull request
+	// stops on it unless the check is acknowledged by name.
+	Blocking bool `json:"blocking,omitempty"`
 }
 
 // PrepReport is the outcome of the checks. Passed is true when none failed.
@@ -81,12 +88,13 @@ func PreparePR(ctx context.Context, o PrepOptions) (PrepReport, error) {
 
 	var size *BranchSize
 	var sizeErr error
-	ls, err := CollectLocalState(ctx, o.Dir, LocalStateOptions{})
+	ls, err := CollectLocalState(ctx, o.Dir, LocalStateOptions{Base: o.Base})
 	switch {
 	case err != nil:
 		add("fresh", "fail", err.Error())
 	case ls.Base == "":
 		add("fresh", "skipped", "no base branch to compare with")
+		rep.Checks[len(rep.Checks)-1].Blocking = true
 	case ls.BehindBase > 0:
 		add("fresh", "fail", fmt.Sprintf("%d commits behind %s: bring it current with specsync update", ls.BehindBase, ls.Base))
 	case len(ls.Conflicts) > 0:
@@ -115,6 +123,7 @@ func PreparePR(ctx context.Context, o PrepOptions) (PrepReport, error) {
 		add("size", "fail", "could not measure: "+sizeErr.Error())
 	case size == nil:
 		add("size", "skipped", "no base branch to measure against")
+		rep.Checks[len(rep.Checks)-1].Blocking = true
 	default:
 		if over := budget.Exceeded(size); len(over) > 0 {
 			add("size", "fail", "over budget ("+strings.Join(over, ", ")+"): split it, see specsync slices")

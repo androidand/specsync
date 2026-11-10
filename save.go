@@ -18,9 +18,13 @@ type SaveOptions struct {
 	// otherwise.
 	Add  []string
 	Ways Ways
+	// Allow names files, relative to Dir, whose scan result a reviewer has
+	// overridden. Each one is reported in SaveResult.Allowed.
+	Allow []string
 	// Push pushes the branch after committing; it never forces.
 	Push bool
-	// PushToRequest allows pushing a branch that has an open request.
+	// PushToRequest allows pushing a branch that has an open request, or the
+	// repository's default branch.
 	PushToRequest bool
 	// OpenRequest reports the number of an open request for the branch, 0 when
 	// there is none. nil means the provider could not be asked.
@@ -31,6 +35,7 @@ type SaveOptions struct {
 // SaveResult reports what a save did, or on a dry run would do.
 type SaveResult struct {
 	Files     []string `json:"files"`
+	Allowed   []string `json:"allowed,omitempty"`
 	Branch    string   `json:"branch"`
 	Committed bool     `json:"committed"`
 	Pushed    bool     `json:"pushed"`
@@ -38,11 +43,21 @@ type SaveResult struct {
 }
 
 var secretNames = []string{".env", ".env.*", "*.pem", "*.key", "*.p12", "*.pfx", "*.keystore", "*.jks",
-	"id_rsa", "id_rsa.*", "id_dsa", "id_ecdsa", "id_ed25519", ".netrc", ".npmrc", ".pgpass", "*.secret", "*.secrets", "secrets.*", "credentials.json"}
+	"id_rsa", "id_rsa.*", "id_dsa", "id_ecdsa", "id_ed25519", ".netrc", ".npmrc", ".pgpass", ".git-credentials", "credentials",
+	"*.secret", "*.secrets", "secrets.*", "credentials.json", "*.tfstate", "*.tfstate.*", "*.tfvars"}
 
 var secretNameExceptions = []string{".env.example", ".env.sample", ".env.template", ".env.dist", "id_rsa.pub", "id_ed25519.pub"}
 
-var secretContent = regexp.MustCompile(`-----BEGIN [A-Z ]*PRIVATE KEY-----|\bgh[pousr]_[A-Za-z0-9]{36,}\b|\bgithub_pat_[A-Za-z0-9_]{20,}\b|\bAKIA[0-9A-Z]{16}\b|\bsk-ant-[A-Za-z0-9_-]{20,}\b`)
+var secretContent = regexp.MustCompile(`-----BEGIN [A-Z ]*PRIVATE KEY-----` +
+	`|\bgh[pousr]_[A-Za-z0-9]{36,}\b|\bgithub_pat_[A-Za-z0-9_]{20,}\b` +
+	`|\bAKIA[0-9A-Z]{16}\b|\bsk-ant-[A-Za-z0-9_-]{20,}\b` +
+	`|\bxox[abprs]-[A-Za-z0-9-]{10,}` +
+	`|\b[rs]k_live_[A-Za-z0-9]{16,}\b` +
+	`|\bAIza[0-9A-Za-z_-]{35}\b` +
+	`|\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}`)
+
+// ScanSecrets reports whether text contains what looks like a key or token.
+func ScanSecrets(text string) bool { return secretContent.MatchString(text) }
 
 func secretReason(name string, extra []string) string {
 	base := strings.ToLower(path.Base(filepath.ToSlash(name)))
@@ -86,21 +101,14 @@ func forbiddenTrailer(message string, forbidden []string) string {
 	return ""
 }
 
-// checkAddPath validates a path named with -add (relative to dir) and returns
-// it relative to the repository root.
-func checkAddPath(dir, top, p string) (string, error) {
+// relToTop converts a path given relative to dir into a slash path relative to
+// the repository root, without requiring that it exists.
+func relToTop(dir, top, p string) (string, error) {
 	clean := filepath.Clean(p)
 	if filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
 		return "", fmt.Errorf("%s is outside the worktree", p)
 	}
 	abs := filepath.Join(dir, clean)
-	info, err := os.Stat(abs)
-	if err != nil {
-		return "", fmt.Errorf("%s: %v", p, err)
-	}
-	if info.IsDir() {
-		return "", fmt.Errorf("%s is a folder: name the files to add", p)
-	}
 	rel, err := filepath.Rel(resolved(absPath(top)), resolved(absPath(abs)))
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return "", fmt.Errorf("%s is outside the repository", p)
@@ -108,9 +116,100 @@ func checkAddPath(dir, top, p string) (string, error) {
 	return filepath.ToSlash(rel), nil
 }
 
+// checkAddPath validates a path named with -add: it must exist as a file. It
+// returns the path relative to the repository root.
+func checkAddPath(dir, top, p string) (string, error) {
+	rel, err := relToTop(dir, top, p)
+	if err != nil {
+		return "", err
+	}
+	info, err := os.Lstat(filepath.Join(top, filepath.FromSlash(rel)))
+	if err != nil {
+		return "", fmt.Errorf("%s: %v", p, err)
+	}
+	if info.IsDir() {
+		return "", fmt.Errorf("%s is a folder: name the files to add", p)
+	}
+	return rel, nil
+}
+
+const maxScanBytes = 1 << 20
+
+// addedText returns what a save would add of file: the whole file when it is
+// new in HEAD, otherwise only the added lines of its diff.
+func addedText(ctx context.Context, top, file string) (string, error) {
+	if _, err := gitIn(ctx, top, "cat-file", "-e", "HEAD:"+file); err != nil {
+		data, err := os.ReadFile(filepath.Join(top, filepath.FromSlash(file)))
+		if err != nil {
+			if os.IsNotExist(err) {
+				return "", nil
+			}
+			return "", err
+		}
+		if len(data) > maxScanBytes {
+			return "", fmt.Errorf("larger than %d bytes", maxScanBytes)
+		}
+		return string(data), nil
+	}
+	diff, err := gitIn(ctx, top, "--literal-pathspecs", "diff", "HEAD", "-U0", "--no-color", "--no-ext-diff", "--", file)
+	if err != nil {
+		return "", err
+	}
+	if len(diff) > maxScanBytes*4 {
+		return "", fmt.Errorf("the change is larger than %d bytes", maxScanBytes*4)
+	}
+	var added []string
+	for _, line := range strings.Split(diff, "\n") {
+		if strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "+++") {
+			added = append(added, line[1:])
+		}
+	}
+	return strings.Join(added, "\n"), nil
+}
+
+// DefaultBranchName is the repository's default branch, without the remote
+// prefix, or "" when it cannot be told.
+func DefaultBranchName(ctx context.Context, dir string) string {
+	b, err := DefaultBase(ctx, dir)
+	if err != nil {
+		return ""
+	}
+	if i := strings.Index(b, "/"); i >= 0 {
+		return b[i+1:]
+	}
+	return b
+}
+
+// PushGuards refuses a push that would surprise someone: from a detached HEAD,
+// from the default branch, or onto a branch with an open pull request or one
+// that could not be checked. pushToRequest overrides the last two.
+func PushGuards(ctx context.Context, dir, branch string, pushToRequest bool, openRequest func(context.Context, string) (int, error)) error {
+	if branch == "HEAD" || branch == "" {
+		return fmt.Errorf("not pushed: HEAD is detached; check out a branch")
+	}
+	if pushToRequest {
+		return nil
+	}
+	if def := DefaultBranchName(ctx, dir); (def != "" && branch == def) || (def == "" && (branch == "main" || branch == "master")) {
+		return fmt.Errorf("not pushed: %s is the default branch; pass -push-to-request to push it anyway", branch)
+	}
+	if openRequest == nil {
+		return fmt.Errorf("not pushed: cannot tell whether a pull request is open for %s; pass -push-to-request to push anyway", branch)
+	}
+	n, err := openRequest(ctx, branch)
+	if err != nil {
+		return fmt.Errorf("not pushed: cannot tell whether a pull request is open for %s (%v); pass -push-to-request to push anyway", branch, err)
+	}
+	if n > 0 {
+		return fmt.Errorf("not pushed: %s has an open pull request (#%d), and a push notifies its reviewers; pass -push-to-request to push anyway", branch, n)
+	}
+	return nil
+}
+
 // Save commits the tracked changes (and the untracked files named in Add),
-// optionally pushes, and refuses what looks unsafe: secret-looking files,
-// trailers the config forbids, and a push onto a branch with an open request.
+// optionally pushes, and refuses what looks unsafe: a detached HEAD, secret-
+// looking files or messages, trailers the config forbids, and a push the push
+// guards refuse. Every refusal happens before anything is committed.
 func Save(ctx context.Context, o SaveOptions) (SaveResult, error) {
 	var res SaveResult
 	if strings.TrimSpace(o.Message) == "" {
@@ -119,14 +218,25 @@ func Save(ctx context.Context, o SaveOptions) (SaveResult, error) {
 	if t := forbiddenTrailer(o.Message, o.Ways.Save.ForbidTrailers); t != "" {
 		return res, fmt.Errorf("the commit message has a %q trailer, which %s forbids (save.forbid_trailers)", t, SpecSyncConfigPath)
 	}
+	if ScanSecrets(o.Message) {
+		return res, fmt.Errorf("the commit message contains what looks like a key or token")
+	}
 	branch, err := gitIn(ctx, o.Dir, "rev-parse", "--abbrev-ref", "HEAD")
 	if err != nil {
 		return res, err
 	}
 	res.Branch = branch
+	if branch == "HEAD" {
+		return res, fmt.Errorf("HEAD is detached: check out a branch before saving")
+	}
 	top, err := gitIn(ctx, o.Dir, "rev-parse", "--show-toplevel")
 	if err != nil {
 		return res, err
+	}
+	if o.Push {
+		if err := PushGuards(ctx, o.Dir, branch, o.PushToRequest, o.OpenRequest); err != nil {
+			return res, err
+		}
 	}
 
 	tracked, err := gitIn(ctx, top, "diff", "--name-only", "-z", "HEAD")
@@ -158,29 +268,64 @@ func Save(ctx context.Context, o SaveOptions) (SaveResult, error) {
 		return res, fmt.Errorf("nothing to commit (untracked files are only included when named with -add)")
 	}
 
+	allowed := map[string]bool{}
+	for _, a := range o.Allow {
+		rel, err := relToTop(o.Dir, top, a)
+		if err != nil {
+			return res, err
+		}
+		allowed[rel] = true
+	}
 	var refused []string
 	for _, f := range files {
+		if allowed[f] {
+			res.Allowed = append(res.Allowed, f)
+			continue
+		}
 		if why := secretReason(f, o.Ways.Save.ForbidFiles); why != "" {
 			refused = append(refused, f+" ("+why+")")
 			continue
 		}
-		if data, err := os.ReadFile(filepath.Join(top, f)); err == nil && len(data) <= 1<<20 && secretContent.Match(data) {
+		text, err := addedText(ctx, top, f)
+		switch {
+		case err != nil:
+			refused = append(refused, f+" (could not scan: "+err.Error()+"; name it with -allow "+f+" once reviewed)")
+		case ScanSecrets(text):
 			refused = append(refused, f+" (contains what looks like a key or token)")
 		}
 	}
 	if len(refused) > 0 {
+		res.Allowed = nil
 		return res, fmt.Errorf("refusing to commit: %s", strings.Join(refused, "; "))
 	}
 
 	if o.DryRun {
 		return res, nil
 	}
+	indexTree, err := gitIn(ctx, top, "write-tree")
+	if err != nil {
+		return res, err
+	}
+	rollback := func() { _, _ = gitIn(ctx, top, "read-tree", indexTree) }
 	if _, err := gitIn(ctx, top, "add", "-u"); err != nil {
+		rollback()
 		return res, err
 	}
 	if len(adds) > 0 {
-		if _, err := gitIn(ctx, top, append([]string{"add", "--"}, adds...)...); err != nil {
+		if _, err := gitIn(ctx, top, append([]string{"--literal-pathspecs", "add", "--"}, adds...)...); err != nil {
+			rollback()
 			return res, err
+		}
+	}
+	staged, err := gitIn(ctx, top, "diff", "--cached", "--name-only", "-z")
+	if err != nil {
+		rollback()
+		return res, err
+	}
+	for _, f := range strings.Split(staged, "\x00") {
+		if f != "" && !seen[f] {
+			rollback()
+			return res, fmt.Errorf("refusing to commit: %s would be committed but was not scanned", f)
 		}
 	}
 	if _, err := gitIn(ctx, top, "commit", "-q", "-m", o.Message); err != nil {
@@ -196,21 +341,6 @@ func Save(ctx context.Context, o SaveOptions) (SaveResult, error) {
 }
 
 func pushBranch(ctx context.Context, o SaveOptions, branch string, res *SaveResult) error {
-	if branch == "HEAD" {
-		return fmt.Errorf("not pushed: HEAD is detached; check out a branch")
-	}
-	if !o.PushToRequest {
-		if o.OpenRequest == nil {
-			return fmt.Errorf("not pushed: cannot tell whether a pull request is open for %s; pass -push-to-request to push anyway", branch)
-		}
-		n, err := o.OpenRequest(ctx, branch)
-		if err != nil {
-			return fmt.Errorf("not pushed: cannot tell whether a pull request is open for %s (%v); pass -push-to-request to push anyway", branch, err)
-		}
-		if n > 0 {
-			return fmt.Errorf("not pushed: %s has an open pull request (#%d), and a push notifies its reviewers; pass -push-to-request to push anyway", branch, n)
-		}
-	}
 	remote, err := pushRemote(ctx, o.Dir, branch)
 	if err != nil {
 		return err

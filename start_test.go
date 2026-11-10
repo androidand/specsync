@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -155,5 +156,17 @@ func TestStartChecksTrustAgainstTheConfigActuallyRead(t *testing.T) {
 	}
 	if _, err := StartWork(context.Background(), StartOptions{RepoDir: clone, ConfigRoot: local, Ways: w, Slug: "add-x"}); err != nil {
 		t.Fatalf("trusted: %v", err)
+	}
+}
+
+func TestStartBranchHasNoUpstreamUntilTheFirstPush(t *testing.T) {
+	clone := startRepo(t, "flow: minimal\n")
+	res, err := startIn(t, clone, StartOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("git", "-C", res.Path, "rev-parse", "--abbrev-ref", "@{u}")
+	if out, err := cmd.CombinedOutput(); err == nil {
+		t.Fatalf("a branch made from origin/main must not track it, got upstream %q", out)
 	}
 }

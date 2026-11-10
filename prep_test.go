@@ -129,3 +129,26 @@ func TestPrepOnlyARealOverBudgetResultIsWaivable(t *testing.T) {
 		t.Fatalf("a budget that does not parse is never waivable: %+v", c)
 	}
 }
+
+func TestPrepMeasuresAgainstTheBaseGivenAndMarksAnUnmeasurableBaseAsBlocking(t *testing.T) {
+	clone, origin := repoWithOrigin(t)
+	commitFile(t, clone, "x.txt", "x")
+	advanceRemote(t, origin, "main", "m.txt", "m")
+	gitFixture(t, clone, "fetch", "-q")
+	if c := checkOf(prepFor(t, clone, PrepOptions{Base: "origin/main"}), "fresh"); c.Status != "fail" || !strings.Contains(c.Detail, "origin/main") {
+		t.Fatalf("freshness must use the base the pull request will use: %+v", c)
+	}
+	gitFixture(t, clone, "remote", "set-head", "origin", "-d")
+	rep := prepFor(t, clone, PrepOptions{})
+	for _, name := range []string{"fresh", "size"} {
+		if c := checkOf(rep, name); c.Status != "skipped" || !c.Blocking {
+			t.Errorf("%s with no measurable base must be skipped and blocking: %+v", name, c)
+		}
+	}
+	if c := checkOf(rep, "gates"); c.Status != "skipped" || c.Blocking {
+		t.Errorf("no gates configured is fine: %+v", c)
+	}
+	if c := checkOf(rep, "tasks"); c.Status != "skipped" || c.Blocking {
+		t.Errorf("no matched change is fine: %+v", c)
+	}
+}

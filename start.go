@@ -144,7 +144,7 @@ func StartWork(ctx context.Context, o StartOptions) (StartResult, error) {
 		if err != nil {
 			return res, err
 		}
-	} else if _, err := gitIn(ctx, root, "worktree", "add", "-b", res.Branch, res.Path, base); err != nil {
+	} else if _, err := gitIn(ctx, root, "worktree", "add", "--no-track", "-b", res.Branch, res.Path, base); err != nil {
 		return res, err
 	}
 	res.Created = true
