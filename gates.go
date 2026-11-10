@@ -144,6 +144,11 @@ func RunGates(ctx context.Context, o GateOptions) (GateReport, error) {
 	if err := RequireTrust(o.Root, cmds); err != nil {
 		return rep, err
 	}
+	top, err := gitIn(ctx, o.Dir, "rev-parse", "--show-toplevel")
+	if err != nil {
+		return rep, err
+	}
+	o.Dir = top
 	head, err := gitIn(ctx, o.Dir, "rev-parse", "HEAD")
 	if err != nil {
 		return rep, err

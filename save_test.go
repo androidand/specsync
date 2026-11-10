@@ -330,3 +330,50 @@ func TestSavePushFromTheDefaultBranchNeedsPushToRequestAndCommitsNothingOtherwis
 		t.Fatalf("explicit permission: %v %+v", err, res)
 	}
 }
+
+func TestSaveRestoresTheExactIndexWhenTheCommitFails(t *testing.T) {
+	clone, _ := repoWithOrigin(t)
+	commitFile(t, clone, "b.txt", "b\n")
+	hook := filepath.Join(clone, ".git", "hooks", "pre-commit")
+	os.MkdirAll(filepath.Dir(hook), 0o755)
+	os.WriteFile(hook, []byte("#!/bin/sh\nexit 1\n"), 0o755)
+	os.WriteFile(filepath.Join(clone, "b.txt"), []byte("b2\n"), 0o644)
+	gitFixture(t, clone, "add", "b.txt")
+	os.WriteFile(filepath.Join(clone, "b.txt"), []byte("b3\n"), 0o644)
+	os.WriteFile(filepath.Join(clone, "a.txt"), []byte("a changed\n"), 0o644)
+	os.WriteFile(filepath.Join(clone, "n.txt"), []byte("intent\n"), 0o644)
+	gitFixture(t, clone, "add", "-N", "n.txt")
+	before := gitFixture(t, clone, "status", "--porcelain=v1") + "\n" + gitFixture(t, clone, "ls-files", "-s") + "\n" + gitFixture(t, clone, "diff", "--cached")
+	if _, err := Save(context.Background(), saveOpts(t, clone, "work")); err == nil {
+		t.Fatal("the failing hook must fail the save")
+	}
+	after := gitFixture(t, clone, "status", "--porcelain=v1") + "\n" + gitFixture(t, clone, "ls-files", "-s") + "\n" + gitFixture(t, clone, "diff", "--cached")
+	if before != after {
+		t.Fatalf("the index must be exactly as it was.\nbefore:\n%s\nafter:\n%s", before, after)
+	}
+}
+
+func TestSaveScansDiffsStructurallyAndRefusesBinaryChanges(t *testing.T) {
+	clone, _ := repoWithOrigin(t)
+	token := "ghp_" + strings.Repeat("c", 36)
+	os.WriteFile(filepath.Join(clone, "notes.txt"), []byte("one\n"), 0o644)
+	gitFixture(t, clone, "add", "notes.txt")
+	gitFixture(t, clone, "commit", "-q", "-m", "notes")
+	os.WriteFile(filepath.Join(clone, "notes.txt"), []byte("one\n++"+token+"\n"), 0o644)
+	if _, err := Save(context.Background(), saveOpts(t, clone, "x")); err == nil || !strings.Contains(err.Error(), "notes.txt") {
+		t.Fatalf("an added line that itself starts with ++ is added content: %v", err)
+	}
+	os.WriteFile(filepath.Join(clone, "notes.txt"), []byte("one\n"), 0o644)
+	os.WriteFile(filepath.Join(clone, "blob.bin"), []byte("a\x00b\x00"), 0o644)
+	gitFixture(t, clone, "add", "blob.bin")
+	gitFixture(t, clone, "commit", "-q", "-m", "blob")
+	os.WriteFile(filepath.Join(clone, "blob.bin"), []byte("a\x00c\x00d\x00"), 0o644)
+	if _, err := Save(context.Background(), saveOpts(t, clone, "x")); err == nil || !strings.Contains(err.Error(), "could not scan") {
+		t.Fatalf("a binary change cannot be scanned and is refused: %v", err)
+	}
+	o := saveOpts(t, clone, "x")
+	o.Allow = []string{"blob.bin"}
+	if _, err := Save(context.Background(), o); err != nil {
+		t.Fatalf("-allow lets a reviewed binary through: %v", err)
+	}
+}

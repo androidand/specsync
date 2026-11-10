@@ -151,7 +151,7 @@ func addedText(ctx context.Context, top, file string) (string, error) {
 		}
 		return string(data), nil
 	}
-	diff, err := gitIn(ctx, top, "--literal-pathspecs", "diff", "HEAD", "-U0", "--no-color", "--no-ext-diff", "--", file)
+	diff, err := gitIn(ctx, top, "--literal-pathspecs", "diff", "HEAD", "-U0", "--no-color", "--no-ext-diff", "--binary", "--", file)
 	if err != nil {
 		return "", err
 	}
@@ -159,8 +159,14 @@ func addedText(ctx context.Context, top, file string) (string, error) {
 		return "", fmt.Errorf("the change is larger than %d bytes", maxScanBytes*4)
 	}
 	var added []string
+	inHunk := false
 	for _, line := range strings.Split(diff, "\n") {
-		if strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "+++") {
+		switch {
+		case strings.HasPrefix(line, "GIT binary patch") || (!inHunk && strings.HasPrefix(line, "Binary files ")):
+			return "", fmt.Errorf("a binary change")
+		case strings.HasPrefix(line, "@@ "):
+			inHunk = true
+		case inHunk && strings.HasPrefix(line, "+"):
 			added = append(added, line[1:])
 		}
 	}
@@ -302,11 +308,11 @@ func Save(ctx context.Context, o SaveOptions) (SaveResult, error) {
 	if o.DryRun {
 		return res, nil
 	}
-	indexTree, err := gitIn(ctx, top, "write-tree")
+	restoreIndex, err := backupIndex(ctx, top)
 	if err != nil {
 		return res, err
 	}
-	rollback := func() { _, _ = gitIn(ctx, top, "read-tree", indexTree) }
+	rollback := restoreIndex
 	if _, err := gitIn(ctx, top, "add", "-u"); err != nil {
 		rollback()
 		return res, err
@@ -329,6 +335,7 @@ func Save(ctx context.Context, o SaveOptions) (SaveResult, error) {
 		}
 	}
 	if _, err := gitIn(ctx, top, "commit", "-q", "-m", o.Message); err != nil {
+		rollback()
 		return res, err
 	}
 	res.Committed = true
@@ -372,4 +379,25 @@ func pushRemote(ctx context.Context, dir, branch string) (string, error) {
 		return names[0], nil
 	}
 	return "", fmt.Errorf("not pushed: no remote to push %s to", branch)
+}
+
+// backupIndex copies the index file and returns a function that puts it back,
+// so a failure after staging leaves the index exactly as it was, intent-to-add
+// entries included. An index that did not exist is removed again.
+func backupIndex(ctx context.Context, top string) (func(), error) {
+	p, err := gitIn(ctx, top, "rev-parse", "--git-path", "index")
+	if err != nil {
+		return nil, err
+	}
+	if !filepath.IsAbs(p) {
+		p = filepath.Join(top, p)
+	}
+	data, err := os.ReadFile(p)
+	if os.IsNotExist(err) {
+		return func() { _ = os.Remove(p) }, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return func() { _ = os.WriteFile(p, data, 0o644) }, nil
 }

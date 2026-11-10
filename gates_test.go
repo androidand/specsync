@@ -154,3 +154,25 @@ func TestGatesWithNothingConfiguredSaysSo(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+func TestGatesRunAtTheRepoTopAndStampFromASubdirectory(t *testing.T) {
+	dir := gateRepo(t, "gates:\n  - {name: where, run: \"pwd > LOG/where.log\"}\n")
+	if _, err := Trust(dir); err != nil {
+		t.Fatal(err)
+	}
+	sub := filepath.Join(dir, "pkg", "x")
+	os.MkdirAll(sub, 0o755)
+	w, _ := LoadWays(dir)
+	var out bytes.Buffer
+	rep, err := RunGates(context.Background(), GateOptions{Dir: sub, Root: dir, Ways: w, Out: &out})
+	if err != nil || !rep.Passed || !rep.Stamped {
+		t.Fatalf("%v %+v", err, rep)
+	}
+	where, _ := os.ReadFile(filepath.Join(gateLogDir, "where.log"))
+	if resolved(absPath(strings.TrimSpace(string(where)))) != resolved(absPath(dir)) {
+		t.Fatalf("gates must run at the repo top, ran in %q", where)
+	}
+	if !GatesPassedAt(context.Background(), sub, gitFixture(t, dir, "rev-parse", "HEAD")) {
+		t.Fatal("the stamp must be valid when read from the subdirectory too")
+	}
+}
