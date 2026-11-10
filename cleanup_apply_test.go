@@ -128,7 +128,7 @@ func TestApplyCleanup_RunsTheHookBeforeTheOtherStepsWhenTrusted(t *testing.T) {
 	opts := hookOpts(&ran)
 	items := mergedCandidate(t, f)
 	it := only(t, ApplyCleanup(context.Background(), items, opts))
-	if !reflect.DeepEqual(ran, []string{"make stop@wt"}) {
+	if !reflect.DeepEqual(ran, []string{"make stop@app"}) {
 		t.Fatalf("ran = %v", ran)
 	}
 	if !strings.HasPrefix(it.Done[0], "ran hook") {
@@ -149,7 +149,7 @@ func TestApplyCleanup_EachRepoDecidesTrustForItsOwnHooks(t *testing.T) {
 	opts := hookOpts(&ran)
 	items := append(mergedCandidate(t, a), mergedCandidate(t, b)...)
 	rep := ApplyCleanup(context.Background(), items, opts)
-	if len(ran) != 1 || ran[0] != "make stop@wt" {
+	if len(ran) != 1 || ran[0] != "make stop@app" {
 		t.Fatalf("only the trusted repo's hook runs: %v", ran)
 	}
 	skipped := 0

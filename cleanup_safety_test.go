@@ -211,7 +211,7 @@ func TestSessionsCheckNoteSaysWhenSessionsWereNotChecked(t *testing.T) {
 	}
 }
 
-func TestApplyCleanup_HooksRunInTheWorktreeBeforeItIsRemoved(t *testing.T) {
+func TestApplyCleanup_HooksRunBeforeTheWorktreeIsRemoved(t *testing.T) {
 	trustFile(t)
 	f := newCleanupFixture(t)
 	f.writeConfig("cleanup:\n  hooks:\n    - make stop\n")
@@ -224,7 +224,7 @@ func TestApplyCleanup_HooksRunInTheWorktreeBeforeItIsRemoved(t *testing.T) {
 	var gotEnv []string
 	opts := CleanupOptions{RunHook: func(_ context.Context, dir, _ string, env []string) error {
 		_, err := os.Stat(dir)
-		existed = err == nil && SameFolder(dir, f.wt)
+		existed = err == nil && SameFolder(dir, f.main) && SameFolder(env0(env, "SPECSYNC_WORKTREE"), f.wt)
 		gotEnv = env
 		return nil
 	}}
@@ -233,7 +233,7 @@ func TestApplyCleanup_HooksRunInTheWorktreeBeforeItIsRemoved(t *testing.T) {
 		t.Fatal(it.Error)
 	}
 	if !existed {
-		t.Fatal("the hook must run with the worktree as its directory while it still exists")
+		t.Fatal("the hook must run in the main checkout with SPECSYNC_WORKTREE set, while the worktree still exists")
 	}
 	if !strings.Contains(strings.Join(gotEnv, " "), "SPECSYNC_WORKTREE="+f.wt) {
 		t.Fatalf("env: %v", gotEnv)
@@ -300,3 +300,12 @@ func TestCleanupBranchWithACommitThatIsInTheBaseIsFinished(t *testing.T) {
 }
 
 var _ = time.Now
+
+func env0(env []string, key string) string {
+	for _, e := range env {
+		if v, ok := strings.CutPrefix(e, key+"="); ok {
+			return v
+		}
+	}
+	return ""
+}

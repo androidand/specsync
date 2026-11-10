@@ -158,6 +158,9 @@ type TopologyOptions struct {
 	Budget  string
 	Exclude []string
 
+	// NoConflictCheck skips the merge prediction, which writes git objects.
+	NoConflictCheck bool
+
 	// NoCoordination skips the coordinated sibling stores: the caller walks
 	// the workspace itself and asks one store at a time.
 	NoCoordination bool
@@ -413,7 +416,7 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 				}
 				budget, _ = ResolveBudget(opts.Budget, "", os.Getenv(BudgetEnv))
 			}
-			if got, err := opts.localState(ctx, row.Worktree, LocalStateOptions{Base: base, Budget: budget, Exclude: opts.Exclude}); err != nil {
+			if got, err := opts.localState(ctx, row.Worktree, LocalStateOptions{Base: base, Budget: budget, Exclude: opts.Exclude, NoConflictCheck: opts.NoConflictCheck}); err != nil {
 				addStatus("local state unavailable for %s: %v", rowLabel(*row), err)
 			} else {
 				ls = got

@@ -70,6 +70,8 @@ type LocalStateOptions struct {
 	Budget Budget
 	// Exclude lists globs left out of the size counts.
 	Exclude []string
+	// NoConflictCheck skips `git merge-tree --write-tree`, which writes objects.
+	NoConflictCheck bool
 }
 
 // CollectLocalState reads the state of the worktree at dir. It only reads:
@@ -128,7 +130,7 @@ func CollectLocalState(ctx context.Context, dir string, opts LocalStateOptions) 
 			}
 			ls.Exceeded = opts.Budget.Exceeded(size)
 		}
-		collectFreshness(ctx, dir, base, ls)
+		collectFreshness(ctx, dir, base, ls, opts.NoConflictCheck)
 		break
 	}
 
@@ -150,7 +152,7 @@ func CollectLocalState(ctx context.Context, dir string, opts LocalStateOptions) 
 // collectFreshness fills the base-movement facts. The conflict check uses
 // `git merge-tree --write-tree`, which computes the merge in memory: it writes
 // objects but never touches the index, the worktree or any ref.
-func collectFreshness(ctx context.Context, dir, base string, ls *LocalState) {
+func collectFreshness(ctx context.Context, dir, base string, ls *LocalState, noConflictCheck bool) {
 	if out, err := gitIn(ctx, dir, "log", "-1", "--format=%cI", base); err == nil {
 		ls.BaseMovedAt = strings.TrimSpace(out)
 	}
@@ -168,6 +170,9 @@ func collectFreshness(ctx context.Context, dir, base string, ls *LocalState) {
 	theirs, err2 := gitIn(ctx, dir, "diff", "--name-only", "HEAD..."+base)
 	if err1 == nil && err2 == nil {
 		ls.BaseTouchesYourFiles = intersectLines(mine, theirs)
+	}
+	if noConflictCheck {
+		return
 	}
 	cmd := exec.CommandContext(ctx, "git", "-C", dir, "merge-tree", "--write-tree", "--name-only", "HEAD", base)
 	cmd.Env = append(os.Environ(), "LC_ALL=C")

@@ -1,15 +1,19 @@
 package specsync
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -30,10 +34,14 @@ type CleanupItem struct {
 	Steps    []string `json:"steps,omitempty"`
 	// FollowUps are things left for the user, such as archiving the change.
 	FollowUps []string `json:"followUps,omitempty"`
-	Done      []string `json:"done,omitempty"`
-	Error     string   `json:"error,omitempty"`
+	// Recovery says how to get the deleted branch back.
+	Recovery string   `json:"recovery,omitempty"`
+	Done     []string `json:"done,omitempty"`
+	Error    string   `json:"error,omitempty"`
 
 	row ChangeTopology
+	// openBases are the branches that open requests in this repo target.
+	openBases map[string]int
 }
 
 // CleanupOptions says what cleanup may look at and do. The zero value plans
@@ -76,12 +84,22 @@ func PlanCleanup(ctx context.Context, rows []ChangeTopology, opts CleanupOptions
 		now = opts.Now
 	}
 	shared := sessionsByWorktree(rows)
+	openBases := map[string]map[string]int{}
+	for _, r := range rows {
+		if r.PR != nil && r.PR.State == "open" && r.PR.Base != "" {
+			if openBases[r.Repo] == nil {
+				openBases[r.Repo] = map[string]int{}
+			}
+			openBases[r.Repo][r.PR.Base] = r.PR.Number
+		}
+	}
 	var items []CleanupItem
 	for _, row := range onePerWorktree(rows) {
 		if row.Worktree != "" {
 			row.Sessions = shared[resolved(absPath(row.Worktree))]
 		}
 		if it, ok := classifyCleanup(ctx, row, opts, now()); ok {
+			it.openBases = openBases[row.Repo]
 			items = append(items, it)
 		}
 	}
@@ -131,19 +149,26 @@ func classifyCleanup(ctx context.Context, row ChangeTopology, opts CleanupOption
 		return it, false
 	}
 
-	mergedHead := pr != nil && pr.State == "merged" && pr.HeadSHA != "" && ls.Head == pr.HeadSHA && baseIsRequestBase(ls.Base, pr.Base)
+	remotes := remoteNames(ctx, row.Store)
+	mergedHead := pr != nil && pr.State == "merged" && pr.HeadSHA != "" && ls.Head == pr.HeadSHA && baseIsRequestBase(ls.Base, pr.Base, remotes)
 	inBase := false
 	if ls.Base != "" {
 		if _, err := gitIn(ctx, row.Worktree, "merge-base", "--is-ancestor", ls.Head, ls.Base); err == nil {
 			inBase = true
 		}
 	}
-	ownCommits := inBase && branchHasCommits(ctx, row.Worktree, row.Branch)
+	hasCommit, resetFrom := branchReflog(ctx, row.Worktree, row.Branch)
+	ownCommits := inBase && hasCommit && resetFrom == ""
 	unpushed := unpushedCommits(ctx, row.Worktree, ls, mergedHead)
 
 	closedUnmerged := pr != nil && pr.State == "closed"
 	provable := (mergedHead || ownCommits) && !closedUnmerged
 
+	if inBase && !mergedHead && hasCommit && resetFrom != "" && !closedUnmerged {
+		it.Status = CleanupSkipped
+		it.Reason = "branch was reset: " + shortSHA(resetFrom) + " before; commits may have been discarded, and only a merged request proves the work is in " + ls.Base
+		return it, true
+	}
 	if !provable {
 		return notFinished(ctx, it, row, opts, now, unpushed, inBase, closedUnmerged)
 	}
@@ -151,6 +176,11 @@ func classifyCleanup(ctx context.Context, row ChangeTopology, opts CleanupOption
 	it.Reason = "its work is in " + ls.Base
 	if mergedHead {
 		it.Reason = fmt.Sprintf("request #%d merged with this head", pr.Number)
+	}
+	if _, issues := LoadWays(row.Store); len(issues) > 0 {
+		it.Status = CleanupSkipped
+		it.Reason = "fix " + SpecSyncConfigPath + ": " + issues[0].String()
+		return it, true
 	}
 	if reason := blockingReason(ctx, row, opts); reason != "" {
 		it.Status, it.Reason = CleanupSkipped, reason
@@ -191,15 +221,30 @@ func followUps(row ChangeTopology) []string {
 // baseIsRequestBase reports whether the branch the work is measured against is
 // the branch the request merged into. A request merged into another feature
 // branch (a stacked change) proves nothing about the base.
-func baseIsRequestBase(base, requestBase string) bool {
+func baseIsRequestBase(base, requestBase string, remotes []string) bool {
 	if base == "" || requestBase == "" {
 		return false
 	}
-	trim := func(s string) string {
-		s = strings.TrimPrefix(s, "refs/remotes/")
-		return strings.TrimPrefix(s, "origin/")
+	return stripRemote(base, remotes) == stripRemote(requestBase, remotes)
+}
+
+func remoteNames(ctx context.Context, dir string) []string {
+	out, err := gitIn(ctx, dir, "remote")
+	if err != nil {
+		return []string{"origin"}
 	}
-	return trim(base) == trim(requestBase)
+	return strings.Fields(out)
+}
+
+// stripRemote removes a leading refs/remotes/ and a known remote name.
+func stripRemote(ref string, remotes []string) string {
+	ref = strings.TrimPrefix(ref, "refs/remotes/")
+	for _, r := range remotes {
+		if strings.HasPrefix(ref, r+"/") {
+			return strings.TrimPrefix(ref, r+"/")
+		}
+	}
+	return ref
 }
 
 func notFinished(ctx context.Context, it CleanupItem, row ChangeTopology, opts CleanupOptions, now time.Time, unpushed int, inBase, closedUnmerged bool) (CleanupItem, bool) {
@@ -285,8 +330,8 @@ func blockingReason(ctx context.Context, row ChangeTopology, opts CleanupOptions
 		return "git status could not be read, so the tree may hold uncommitted work"
 	case protectedBranch(ctx, row) != "":
 		return protectedBranch(ctx, row)
-	case ls.SharedBranch:
-		return "shared branch: it has commits from several authors, so it is never removed automatically"
+	case sharedBranch(ctx, row):
+		return "shared branch: it has commits from several authors (or its authors cannot be told), so it is never removed automatically"
 	case ls.Modified+ls.Untracked > 0:
 		return fmt.Sprintf("uncommitted changes: %d modified, %d untracked", ls.Modified, ls.Untracked)
 	case opts.Current != "" && insideOrSame(opts.Current, row.Worktree):
@@ -306,24 +351,59 @@ func blockingReason(ctx context.Context, row ChangeTopology, opts CleanupOptions
 	return ""
 }
 
+// sharedBranch reports whether the branch's own commits have more than one
+// author. A branch whose head is already in the base has no base..head range,
+// so its range starts where its reflog says it was created; when that cannot
+// be found the branch is treated as shared.
+func sharedBranch(ctx context.Context, row ChangeTopology) bool {
+	ls := row.Local
+	if ls.SharedBranch {
+		return true
+	}
+	if _, err := gitIn(ctx, row.Worktree, "merge-base", "--is-ancestor", ls.Head, ls.Base); err != nil {
+		return false
+	}
+	out, err := gitIn(ctx, row.Worktree, "reflog", "show", "--format=%H %gs", "refs/heads/"+row.Branch)
+	if err != nil {
+		return true
+	}
+	lines := strings.Split(out, "\n")
+	start, subject, _ := strings.Cut(lines[len(lines)-1], " ")
+	if !strings.HasPrefix(subject, "branch: Created") || start == "" {
+		return true
+	}
+	authors, err := gitIn(ctx, row.Worktree, "log", "--format=%ae", start+".."+ls.Head)
+	if err != nil {
+		return true
+	}
+	seen := map[string]bool{}
+	for _, a := range strings.Fields(authors) {
+		seen[a] = true
+	}
+	return len(seen) > 1
+}
+
 var protectedNames = []string{"main", "master", "develop", "trunk", "staging", "production", "prod", "gh-pages"}
 
 var protectedGlobs = []string{"release/*", "hotfix/*"}
 
 // protectedBranch explains why a branch must never be removed: it is a
-// well-known trunk name, the base or default branch, or the one checked out in
-// the main checkout.
+// well-known trunk name, the base or default branch, matches a protect glob,
+// or is the one checked out in the main checkout.
 func protectedBranch(ctx context.Context, row ChangeTopology) string {
 	b := row.Branch
+	remotes := remoteNames(ctx, row.Store)
 	protected := append([]string(nil), protectedNames...)
 	globs := append([]string(nil), protectedGlobs...)
 	cfg, _ := LoadWays(row.Store)
 	globs = append(globs, cfg.Cleanup.Protect...)
 	if base := row.Local.Base; base != "" {
-		protected = append(protected, strings.TrimPrefix(base, "origin/"))
+		protected = append(protected, stripRemote(base, remotes))
 	}
-	if out, err := gitIn(ctx, row.Store, "symbolic-ref", "--short", "refs/remotes/origin/HEAD"); err == nil {
-		protected = append(protected, strings.TrimPrefix(out, "origin/"))
+	for _, r := range remotes {
+		if out, err := gitIn(ctx, row.Store, "symbolic-ref", "--short", "refs/remotes/"+r+"/HEAD"); err == nil {
+			protected = append(protected, stripRemote(out, remotes))
+		}
 	}
 	for _, p := range protected {
 		if p == b {
@@ -331,7 +411,7 @@ func protectedBranch(ctx context.Context, row ChangeTopology) string {
 		}
 	}
 	for _, g := range globs {
-		if ok, _ := path.Match(g, b); ok {
+		if matchBranchGlob(g, b) {
 			return "protected branch " + b + ": it matches " + g
 		}
 	}
@@ -341,13 +421,38 @@ func protectedBranch(ctx context.Context, row ChangeTopology) string {
 	return ""
 }
 
+// matchBranchGlob matches a branch against a glob. A pattern ending in /* or
+// /** covers everything below that prefix, however deep; a malformed pattern
+// matches everything, so a typo protects instead of exposing.
+func matchBranchGlob(glob, branch string) bool {
+	for _, suffix := range []string{"/**", "/*"} {
+		if prefix, ok := strings.CutSuffix(glob, suffix); ok {
+			if _, err := path.Match(prefix, "x"); err != nil {
+				return true
+			}
+			ok, _ := path.Match(prefix+"/*", firstSegments(branch, strings.Count(prefix, "/")+2))
+			return ok
+		}
+	}
+	ok, err := path.Match(glob, branch)
+	return ok || err != nil
+}
+
+func firstSegments(s string, n int) string {
+	parts := strings.SplitN(s, "/", n+1)
+	if len(parts) > n {
+		parts = parts[:n]
+	}
+	return strings.Join(parts, "/")
+}
+
 // defaultIgnored are build output folders whose loss costs only a rebuild.
 var defaultIgnored = []string{"node_modules", "dist", "build", "target", ".next", "vendor", "__pycache__"}
 
 // ignoredFiles lists ignored paths in the worktree other than common build
 // output, a few at most.
 func ignoredFiles(ctx context.Context, dir string) ([]string, error) {
-	out, err := gitIn(ctx, dir, "--no-optional-locks", "status", "--porcelain=v1", "--ignored", "--untracked-files=normal")
+	out, err := gitIn(ctx, dir, "--no-optional-locks", "status", "--porcelain=v1", "--ignored=matching", "--untracked-files=normal")
 	if err != nil {
 		return nil, err
 	}
@@ -357,13 +462,10 @@ func ignoredFiles(ctx context.Context, dir string) ([]string, error) {
 			continue
 		}
 		p := strings.TrimSuffix(strings.TrimPrefix(line, "!! "), "/")
-		skip := false
-		for _, part := range strings.Split(p, "/") {
-			if slices.Contains(defaultIgnored, part) {
-				skip = true
-			}
+		if !strings.Contains(p, "/") && slices.Contains(defaultIgnored, p) {
+			continue
 		}
-		if !skip {
+		{
 			names = append(names, SanitizeText(p, 60))
 		}
 	}
@@ -412,20 +514,29 @@ func sessionName(s SessionEntry) string {
 	return "session"
 }
 
-// branchHasCommits reports whether the branch's reflog records a commit made
-// on it. A branch that points at the base tip because it was created, reset,
-// pulled or rebased there is new work, not finished work.
-func branchHasCommits(ctx context.Context, dir, branch string) bool {
-	out, err := gitIn(ctx, dir, "reflog", "show", "--format=%gs", "refs/heads/"+branch)
+// branchReflog reads the branch's reflog: whether a commit was ever made on
+// it, and, when it was reset, the tip it had before the most recent reset.
+// A reset can discard commits and leave their reflog entries behind, so a
+// reset branch is never proven finished by its history.
+func branchReflog(ctx context.Context, dir, branch string) (hasCommit bool, resetFrom string) {
+	out, err := gitIn(ctx, dir, "reflog", "show", "--format=%H %gs", "refs/heads/"+branch)
 	if err != nil {
-		return false
+		return false, ""
 	}
-	for _, line := range strings.Split(out, "\n") {
-		if strings.HasPrefix(line, "commit") {
-			return true
+	lines := strings.Split(out, "\n")
+	for i, line := range lines {
+		_, subject, _ := strings.Cut(line, " ")
+		switch {
+		case strings.HasPrefix(subject, "commit"):
+			hasCommit = true
+		case strings.HasPrefix(subject, "reset") && resetFrom == "":
+			resetFrom = "unknown"
+			if i+1 < len(lines) {
+				resetFrom, _, _ = strings.Cut(lines[i+1], " ")
+			}
 		}
 	}
-	return false
+	return hasCommit, resetFrom
 }
 
 // cleanupSteps names what applying would do for a candidate, from the repo's
@@ -459,6 +570,10 @@ func remoteOf(row ChangeTopology) string {
 // and, with opts.Apply, carries out the candidates. When live sessions could
 // not be verified, applying is refused unless opts.AssumeNoSessions is set.
 func RunCleanup(ctx context.Context, opts CleanupOptions) (*CleanupReport, error) {
+	opts.Overview.Topology.NoConflictCheck = true
+	if opts.Overview.Topology.Cache != nil {
+		opts.Overview.Topology.Cache = readOnlyCache{opts.Overview.Topology.Cache}
+	}
 	rows, err := CollectWorkRows(ctx, opts.Overview)
 	if err != nil {
 		return nil, err
@@ -474,6 +589,12 @@ func RunCleanup(ctx context.Context, opts CleanupOptions) (*CleanupReport, error
 	}
 	return &CleanupReport{Apply: opts.Apply, Items: items, Status: rows.Status, SessionsNote: note}, nil
 }
+
+// readOnlyCache serves cached request listings but never writes one, so a dry
+// run changes nothing outside memory.
+type readOnlyCache struct{ RequestCache }
+
+func (readOnlyCache) Put(string, ChangeRequestSet) {}
 
 // markSessionsUnverified turns every candidate into a skipped item, because
 // nothing says no agent is working in it.
@@ -541,7 +662,7 @@ func applyOne(ctx context.Context, it CleanupItem, opts CleanupOptions) CleanupI
 		}
 		env := []string{"SPECSYNC_WORKTREE=" + row.Worktree, "SPECSYNC_BRANCH=" + row.Branch, "SPECSYNC_CHANGE=" + row.Slug}
 		for _, h := range hooks {
-			if err := run(ctx, row.Worktree, h, env); err != nil {
+			if err := run(ctx, row.Store, h, env); err != nil {
 				return fail("hook %q: %v; the worktree and branch were left in place", h, err)
 			}
 			it.Done = append(it.Done, "ran hook: "+h)
@@ -553,13 +674,15 @@ func applyOne(ctx context.Context, it CleanupItem, opts CleanupOptions) CleanupI
 	}
 	it.Done = append(it.Done, "removed worktree "+row.Worktree)
 
+	it.Recovery = fmt.Sprintf("removed branch %s at %s; restore with: git branch %s %s", row.Branch, row.Local.Head, row.Branch, row.Local.Head)
 	if err := deleteBranchAt(ctx, row.Store, row.Branch, row.Local.Head); err != nil {
+		it.Done = append(it.Done, it.Recovery)
 		return fail("%v", err)
 	}
-	it.Done = append(it.Done, "deleted local branch "+row.Branch)
+	it.Done = append(it.Done, "deleted local branch "+row.Branch, it.Recovery)
 
 	if cfg.Cleanup.RemoteBranch == "delete" {
-		it.Done = append(it.Done, deleteRemoteBranch(ctx, row))
+		it.Done = append(it.Done, deleteRemoteBranch(ctx, row, it.openBases))
 	}
 	it.FollowUps = followUps(row)
 	return it
@@ -570,6 +693,9 @@ func applyOne(ctx context.Context, it CleanupItem, opts CleanupOptions) CleanupI
 func deleteBranchAt(ctx context.Context, store, branch, head string) error {
 	if _, err := gitIn(ctx, store, "update-ref", "-d", "refs/heads/"+branch, head); err != nil {
 		return fmt.Errorf("the branch %s moved or could not be deleted, so it was left: %w", branch, err)
+	}
+	if _, err := gitIn(ctx, store, "config", "--get-regexp", `^branch\.`+regexp.QuoteMeta(branch)+`\.`); err == nil {
+		_, _ = gitIn(ctx, store, "config", "--remove-section", "branch."+branch)
 	}
 	return nil
 }
@@ -616,13 +742,16 @@ func recheck(ctx context.Context, row ChangeTopology, opts CleanupOptions) (Chan
 // deleteRemoteBranch deletes the branch on its remote only when the upstream
 // is the same remote and branch name and the remote tip, read now, is the head
 // being removed or the head the request merged with.
-func deleteRemoteBranch(ctx context.Context, row ChangeTopology) string {
+func deleteRemoteBranch(ctx context.Context, row ChangeTopology, openBases map[string]int) string {
 	ls := row.Local
 	keep := func(why string) string { return "kept remote branch: " + why }
 	if ls.UpstreamGone {
 		return "remote branch already gone"
 	}
 	remote := remoteOf(row)
+	if n, ok := openBases[row.Branch]; ok {
+		return keep(fmt.Sprintf("open request #%d targets it", n))
+	}
 	if ls.Upstream != remote+"/"+row.Branch {
 		return keep("its upstream is " + orNone(ls.Upstream) + ", not a branch of the same name")
 	}
@@ -635,7 +764,7 @@ func deleteRemoteBranch(ctx context.Context, row ChangeTopology) string {
 		return "remote branch already gone"
 	}
 	tip := fields[0]
-	if tip != ls.Head && (row.PR == nil || tip != row.PR.HeadSHA) {
+	if tip != ls.Head {
 		return keep("the remote tip " + shortSHA(tip) + " is not the head being removed")
 	}
 	if _, err := gitIn(ctx, row.Store, "push", remote, "--delete", row.Branch); err != nil {
@@ -658,13 +787,45 @@ func shortSHA(s string) string {
 	return s
 }
 
+// hookTimeout bounds one hook; the whole process group is killed at the limit.
+var hookTimeout = 60 * time.Second
+
+const maxHookOutput = 64 << 10
+
+type cappedBuffer struct {
+	buf bytes.Buffer
+}
+
+func (c *cappedBuffer) Write(p []byte) (int, error) {
+	if room := maxHookOutput - c.buf.Len(); room > 0 {
+		if len(p) > room {
+			c.buf.Write(p[:room])
+		} else {
+			c.buf.Write(p)
+		}
+	}
+	return len(p), nil
+}
+
+// runShellHook runs one configured hook in dir. Hooks are repository-defined
+// commands, so they run in the main checkout, not in the branch's worktree.
 func runShellHook(ctx context.Context, dir, command string, env []string) error {
+	ctx, cancel := context.WithTimeout(ctx, hookTimeout)
+	defer cancel()
 	cmd := exec.CommandContext(ctx, "sh", "-c", command)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), env...)
-	out, err := cmd.CombinedOutput()
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+	cmd.WaitDelay = 500 * time.Millisecond
+	var out cappedBuffer
+	cmd.Stdout, cmd.Stderr = &out, &out
+	err := cmd.Run()
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return fmt.Errorf("timed out after %s and was stopped", hookTimeout)
+	}
 	if err != nil {
-		return fmt.Errorf("%v: %s", err, SanitizeText(strings.TrimSpace(string(out)), 200))
+		return fmt.Errorf("%v: %s", err, SanitizeText(strings.TrimSpace(out.buf.String()), 200))
 	}
 	return nil
 }

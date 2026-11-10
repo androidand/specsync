@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -267,6 +268,11 @@ func (w *Ways) readSection(sec string, n *YNode, add addIssue) {
 		}
 		w.Cleanup.Hooks = list("hooks", "a command")
 		w.Cleanup.Protect = list("protect", "a branch glob")
+		for _, g := range w.Cleanup.Protect {
+			if _, err := path.Match(g, "x"); err != nil {
+				add(n.KeyLine["protect"], "cleanup.protect", "malformed glob %q in protect", g)
+			}
+		}
 	case "sync":
 		if v := enum("strategy", "rebase", "merge"); v != "" {
 			w.Sync.Strategy = v
