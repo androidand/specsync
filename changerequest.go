@@ -125,6 +125,11 @@ var attentionRules = []struct {
 		}
 		return cr.HeadSHA == "" || ls.Head == "" || cr.HeadSHA == ls.Head
 	}},
+	{"oversized", func(ls *LocalState, _ *ChangeRequest) bool { return ls != nil && len(ls.Exceeded) > 0 }},
+	{"mixed-scopes", func(ls *LocalState, _ *ChangeRequest) bool { return ls != nil && len(ls.Scopes) > 1 }},
+	{"no-slice-plan", func(ls *LocalState, _ *ChangeRequest) bool {
+		return ls != nil && len(ls.Exceeded) > 0 && ls.NoSlicePlan
+	}},
 	{"ready-to-merge", func(_ *LocalState, cr *ChangeRequest) bool {
 		return isOpen(cr) && !cr.Draft && cr.ReviewDecision == "approved" && cr.Checks.Fail == 0 &&
 			cr.Checks.Pending == 0 && cr.Mergeable == "mergeable" &&

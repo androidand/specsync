@@ -38,6 +38,13 @@ type LocalState struct {
 	ConflictCheckUnavailable bool     `json:"conflictCheckUnavailable,omitempty"`
 	// SharedBranch is true when commits on the branch have more than one author.
 	SharedBranch bool `json:"sharedBranch,omitempty"`
+
+	// Exceeded names each budget limit the branch is over; Scopes lists the
+	// distinct conventional-commit scopes on it; NoSlicePlan is set by the
+	// caller when the branch's change declares no slices.
+	Exceeded    []string `json:"sizeExceeded,omitempty"`
+	Scopes      []string `json:"scopes,omitempty"`
+	NoSlicePlan bool     `json:"noSlicePlan,omitempty"`
 }
 
 // BranchSize is the branch's size against its merge base with the base.
@@ -56,6 +63,10 @@ type LocalStateOptions struct {
 	// VolatileDirs are the directories treated as temporary. nil means the
 	// system defaults; an empty non-nil slice means none.
 	VolatileDirs []string
+	// Budget is the advisory size limit; the zero Budget sets no limit.
+	Budget Budget
+	// Exclude lists globs left out of the size counts.
+	Exclude []string
 }
 
 // CollectLocalState reads the state of the worktree at dir. It only reads:
@@ -105,7 +116,13 @@ func CollectLocalState(ctx context.Context, dir string, opts LocalStateOptions) 
 		}
 		ls.Base = base
 		ls.BehindBase, _ = strconv.Atoi(strings.TrimSpace(out))
-		ls.Size = branchSize(ctx, dir, base)
+		if size, scopes, err := AnalyzeBranch(ctx, dir, base, "HEAD", opts.Exclude); err == nil {
+			ls.Size, ls.Scopes = size, scopes
+			if len(scopes) < 2 {
+				ls.Scopes = nil
+			}
+			ls.Exceeded = opts.Budget.Exceeded(size)
+		}
 		collectFreshness(ctx, dir, base, ls)
 		break
 	}
@@ -199,31 +216,6 @@ func intersectLines(a, b string) []string {
 	}
 	sort.Strings(both)
 	return both
-}
-
-func branchSize(ctx context.Context, dir, base string) *BranchSize {
-	size := &BranchSize{}
-	out, err := gitIn(ctx, dir, "rev-list", "--count", base+"..HEAD")
-	if err != nil {
-		return nil
-	}
-	size.Commits, _ = strconv.Atoi(strings.TrimSpace(out))
-	diff, err := gitIn(ctx, dir, "diff", "--numstat", base+"...HEAD")
-	if err != nil {
-		return nil
-	}
-	for _, line := range strings.Split(diff, "\n") {
-		f := strings.Split(line, "\t")
-		if len(f) < 3 {
-			continue
-		}
-		size.Files++
-		a, _ := strconv.Atoi(f[0]) // "-" for binary files counts as 0
-		d, _ := strconv.Atoi(f[1])
-		size.Additions += a
-		size.Deletions += d
-	}
-	return size
 }
 
 func twoInts(s string) (int, int) {
