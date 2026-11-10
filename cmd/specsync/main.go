@@ -607,6 +607,9 @@ func runPull(args []string) {
 	_ = fs.Parse(args)
 	checkArgs(fs, args, 0)
 
+	if *worktree && *initFlag {
+		fail(fmt.Errorf("-init cannot be combined with -worktree: run specsync init inside the worktree, then pull there"))
+	}
 	abs := resolveRootInit(fs, openspec, storeFlag, *initFlag, *dryRun).Dir
 	repoRoot := filepath.Dir(abs)
 

@@ -97,7 +97,7 @@ var commandMetadata = map[string]AgentCommandHelp{
 	},
 	"init": {
 		Command:     "init",
-		Description: "Create a scratch openspec/ in this worktree and keep it out of git.",
+		Description: "Create a scratch openspec/ here and keep it out of git.",
 		Mutates:     true,
 		Workflow: AgentCommandWorkflow{
 			Position:      "issue-first-start",

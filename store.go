@@ -41,15 +41,23 @@ func DefaultStore() string {
 	if v := strings.TrimSpace(os.Getenv(DefaultStoreEnv)); v != "" {
 		return v
 	}
-	home, err := os.UserHomeDir()
+	path := ""
+	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+		path = filepath.Join(xdg, "specsync", "config.yaml")
+	} else if home, err := os.UserHomeDir(); err == nil {
+		path = filepath.Join(home, UserConfigPath)
+	} else {
+		return ""
+	}
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return ""
 	}
-	data, err := os.ReadFile(filepath.Join(home, UserConfigPath))
-	if err != nil {
-		return ""
+	v := scalarField(string(data), "default-store")
+	if i := strings.Index(v, " #"); i >= 0 {
+		v = v[:i]
 	}
-	return scalarField(string(data), "default-store")
+	return strings.TrimSpace(v)
 }
 
 // ResolvedRoot is a spec root and how it was found.
@@ -96,7 +104,7 @@ func ResolveSpecRoot(flagPath string, flagSet bool, storeID, cwd string) (Resolv
 	if err != nil {
 		return ResolvedRoot{}, err
 	}
-	if info, statErr := os.Stat(local); statErr != nil || !info.IsDir() {
+	if !openspecAbove(cwd) {
 		if def := DefaultStore(); def != "" {
 			dir, err := StoreLocation(def)
 			if err != nil {
@@ -335,4 +343,20 @@ func scalarField(src, key string) string {
 		return strings.Trim(strings.TrimSpace(v), `"'`)
 	}
 	return ""
+}
+
+// openspecAbove reports whether dir or any parent holds an openspec/ directory,
+// so running from a subdirectory of a repo with specs never falls back to the
+// default store.
+func openspecAbove(dir string) bool {
+	for {
+		if info, err := os.Stat(filepath.Join(dir, "openspec")); err == nil && info.IsDir() {
+			return true
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return false
+		}
+		dir = parent
+	}
 }

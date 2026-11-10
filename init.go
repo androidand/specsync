@@ -19,8 +19,8 @@ type InitResult struct {
 }
 
 // InitScratch creates a scratch openspec/changes/ at <repoDir>/openspec and
-// keeps it out of git through the worktree-aware info/exclude file, never a
-// tracked .gitignore. It is idempotent and refuses where openspec/ is tracked,
+// keeps it out of git through the clone's info/exclude file (shared by all its
+// worktrees), never a tracked .gitignore. It is idempotent and refuses where openspec/ is tracked,
 // because hiding tracked files would be a silent repo-structure change.
 func InitScratch(repoDir string, dryRun bool) (InitResult, error) {
 	abs, err := filepath.Abs(repoDir)
@@ -37,7 +37,7 @@ func InitScratch(repoDir string, dryRun bool) (InitResult, error) {
 		abs = real
 	}
 	rel, err := filepath.Rel(top, abs)
-	if err != nil || strings.HasPrefix(rel, "..") {
+	if err != nil || rel == ".." || strings.HasPrefix(rel, "../") {
 		return InitResult{}, fmt.Errorf("%s is outside the git work tree %s", abs, top)
 	}
 	rel = filepath.ToSlash(rel)
@@ -55,7 +55,11 @@ func InitScratch(repoDir string, dryRun bool) (InitResult, error) {
 		res.CreatedDir = true
 	}
 
-	if _, err := gitOut(abs, "check-ignore", "-q", "--", "openspec/changes"); err == nil {
+	ignored, err := gitCheckIgnored(abs, "openspec/changes")
+	if err != nil {
+		return InitResult{}, err
+	}
+	if ignored {
 		res.AlreadyIgnored = true
 	} else {
 		exclude, err := gitOut(abs, "rev-parse", "--git-path", "info/exclude")
@@ -103,6 +107,21 @@ func appendLine(path, line string) error {
 		text += "\n"
 	}
 	return os.WriteFile(path, []byte(text+line+"\n"), 0o644)
+}
+
+// gitCheckIgnored reports whether path is ignored. git exits 1 for "not
+// ignored"; any other failure is a real error and is returned.
+func gitCheckIgnored(dir, path string) (bool, error) {
+	cmd := exec.Command("git", "check-ignore", "-q", "--", path)
+	cmd.Dir = dir
+	err := cmd.Run()
+	if err == nil {
+		return true, nil
+	}
+	if ee, ok := err.(*exec.ExitError); ok && ee.ExitCode() == 1 {
+		return false, nil
+	}
+	return false, fmt.Errorf("git check-ignore: %w", err)
 }
 
 func gitOut(dir string, args ...string) (string, error) {

@@ -31,29 +31,35 @@ func resolveRoot(fs *flag.FlagSet, openspec, store *string) specsync.ResolvedRoo
 // repo-local spec root is missing it creates a scratch one (specsync init),
 // and only when initFlag is set. A dry run reports the plan and creates nothing.
 func resolveRootInit(fs *flag.FlagSet, openspec, store *string, initFlag, dryRun bool) specsync.ResolvedRoot {
-	root := resolveRootUnchecked(fs, openspec, store)
-	verr := root.Validate()
-	if verr == nil {
-		return root
+	if initFlag && !flagVisited(fs, "openspec") && *store == "" {
+		cwd, err := os.Getwd()
+		if err != nil {
+			fail(err)
+		}
+		if info, err := os.Stat(filepath.Join(cwd, "openspec")); err != nil || !info.IsDir() {
+			res, err := specsync.InitScratch(cwd, dryRun)
+			if err != nil {
+				fail(err)
+			}
+			printInit(res, dryRun, false)
+			return specsync.ResolvedRoot{Dir: res.Dir, Rule: specsync.RootRuleLocal}
+		}
 	}
-	if !initFlag || root.Rule != specsync.RootRuleLocal || filepath.Base(root.Dir) != "openspec" {
-		fail(verr)
-	}
-	res, err := specsync.InitScratch(filepath.Dir(root.Dir), dryRun)
-	if err != nil {
-		fail(err)
-	}
-	printInit(res, dryRun)
-	return root
+	return resolveRoot(fs, openspec, store)
+}
+
+func flagVisited(fs *flag.FlagSet, name string) bool {
+	seen := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == name {
+			seen = true
+		}
+	})
+	return seen
 }
 
 func resolveRootUnchecked(fs *flag.FlagSet, openspec, store *string) specsync.ResolvedRoot {
-	flagSet := false
-	fs.Visit(func(f *flag.Flag) {
-		if f.Name == "openspec" {
-			flagSet = true
-		}
-	})
+	flagSet := flagVisited(fs, "openspec")
 	cwd, err := os.Getwd()
 	if err != nil {
 		fail(err)

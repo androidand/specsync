@@ -30,9 +30,9 @@ last rule: nothing is created without an explicit `init` or `-init`.
 
 ### 1. `specsync init`: a scratch spec root that stays out of git
 
-Creates `./openspec/changes/` and appends `/openspec/` to the worktree-aware
-exclude file (`git rev-parse --git-path info/exclude`; works in linked
-worktrees, never edits a tracked `.gitignore`). Idempotent, prints what it did,
+Creates `./openspec/changes/` and appends `/openspec/` to the clone's
+exclude file (`git rev-parse --git-path info/exclude`, shared by the clone's
+linked worktrees; never edits a tracked `.gitignore`). Idempotent, prints what it did,
 refuses where `openspec/` is already tracked. The `-init` option on `pull`
 proposed in the other change calls this.
 

@@ -106,6 +106,14 @@ func TestCheckArgs(t *testing.T) {
 	}
 }
 
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if builtBinary != "" {
+		_ = os.RemoveAll(filepath.Dir(builtBinary))
+	}
+	os.Exit(code)
+}
+
 var buildOnce sync.Once
 var builtBinary string
 var buildErr error

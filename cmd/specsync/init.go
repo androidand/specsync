@@ -28,10 +28,10 @@ func runInit(args []string) {
 	if err != nil {
 		fail(err)
 	}
-	printInit(res, *dryRun)
+	printInit(res, *dryRun, true)
 }
 
-func printInit(res specsync.InitResult, dryRun bool) {
+func printInit(res specsync.InitResult, dryRun, hint bool) {
 	prefix, verb := "specsync: ", ""
 	if dryRun {
 		prefix, verb = "DRY RUN — ", "would "
@@ -55,7 +55,7 @@ func printInit(res specsync.InitResult, dryRun bool) {
 	case res.AlreadyIgnored:
 		fmt.Printf("%sopenspec/ is already ignored by git; nothing to add\n", prefix)
 	}
-	if res.CreatedDir && !dryRun {
+	if hint && res.CreatedDir && !dryRun {
 		fmt.Println("next: specsync pull -issue <n>, work, specsync -change <slug>. Never commit openspec/.")
 	}
 }

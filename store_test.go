@@ -240,3 +240,41 @@ func TestResolveSpecRootWithoutDefaultKeepsMissingLocalError(t *testing.T) {
 		}
 	}
 }
+
+func TestDefaultStoreIgnoresInlineCommentAndHonorsXDG(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv(DefaultStoreEnv, "")
+	xdg := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", xdg)
+	cfg := filepath.Join(xdg, "specsync", "config.yaml")
+	if err := os.MkdirAll(filepath.Dir(cfg), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cfg, []byte("default-store: team  # shared specs\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := DefaultStore(); got != "team" {
+		t.Fatalf("got %q, want team", got)
+	}
+}
+
+func TestResolveSpecRootFromSubdirectoryDoesNotUseDefaultStore(t *testing.T) {
+	fakeOpenspecStores(t, "team", t.TempDir())
+	t.Setenv(DefaultStoreEnv, "team")
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, "openspec", "changes"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sub := filepath.Join(repo, "pkg", "x")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	root, err := ResolveSpecRoot("openspec", false, "", sub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if root.Rule != RootRuleLocal {
+		t.Fatalf("a parent openspec/ must keep the default store out, got %+v", root)
+	}
+}

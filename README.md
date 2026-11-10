@@ -420,8 +420,8 @@ updates that same issue. A dry run reads the issue but writes nothing.
 
 A repo with no `openspec/` is normal. `specsync init` (or `pull -init`) creates a
 scratch `openspec/changes/` and adds `/openspec/` to the repo's local git exclude
-file (`git rev-parse --git-path info/exclude`, so it works in linked worktrees and
-never edits a tracked `.gitignore`). It is idempotent, refuses where `openspec/` is
+file (`git rev-parse --git-path info/exclude`, which a clone shares with its linked
+worktrees; it never edits a tracked `.gitignore`). It is idempotent, refuses where `openspec/` is
 tracked, and nothing creates the folder without it. To keep specs in a shared
 store instead, pass `-store <id>` or set `SPECSYNC_DEFAULT_STORE` (or
 `default-store:` in `~/.config/specsync/config.yaml`); the default store applies

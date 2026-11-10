@@ -133,3 +133,39 @@ func TestInitSubcommand(t *testing.T) {
 		t.Fatalf("init must reject stray arguments:\n%s", out)
 	}
 }
+
+func TestPullInitWithWorktreeIsRejectedBeforeAnythingIsCreated(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env := firstUseEnv(t)
+	out, err := runIn(t, bin, repo, env, "pull", "-issue", "7", "-init", "-worktree")
+	if err == nil || !strings.Contains(out, "cannot be combined with -worktree") {
+		t.Fatalf("want a rejection, got err=%v out=%s", err, out)
+	}
+	if _, statErr := os.Stat(filepath.Join(repo, "openspec")); statErr == nil {
+		t.Fatal("openspec/ must not be created when the flags conflict")
+	}
+}
+
+func TestPullInitOnExistingOpenspecWithoutChangesReportsTheRealProblem(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env := firstUseEnv(t)
+	if err := os.MkdirAll(filepath.Join(repo, "openspec"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	out, err := runIn(t, bin, repo, env, "pull", "-issue", "7", "-init")
+	if err == nil || !strings.Contains(out, "changes") || strings.Contains(out, "is tracked") {
+		t.Fatalf("want the missing changes/ error, got err=%v out=%s", err, out)
+	}
+}
+
+func TestPullInitDoesNotPrintTheInitHint(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env := firstUseEnv(t)
+	out, err := runIn(t, bin, repo, env, "pull", "-issue", "7", "-init")
+	if err != nil {
+		t.Fatalf("pull -init: %v\n%s", err, out)
+	}
+	if strings.Contains(out, "next: specsync pull") {
+		t.Fatalf("the init hint belongs to the standalone command only:\n%s", out)
+	}
+}
