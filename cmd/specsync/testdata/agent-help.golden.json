@@ -973,7 +973,7 @@
           "type": "string",
           "required": false,
           "default": "",
-          "description": "command that prints a JSON array of agent sessions (cwd, id, name, status, updatedAt, resume) to show how to resume each piece of work; default $SPECSYNC_SESSIONS_CMD; an empty value disables it for this run. Taken only from here or the environment, never from a repository file"
+          "description": "command that prints a JSON array of agent sessions (cwd, id, name, status, updatedAt, resume) to show how to resume each piece of work; default $SPECSYNC_SESSIONS_CMD; an empty value disables it for this run; it does not run with -state=off. Taken only from here or the environment, never from a repository file"
         },
         {
           "name": "sessions-timeout",
@@ -1620,7 +1620,7 @@
           "type": "string",
           "required": false,
           "default": "",
-          "description": "command that prints a JSON array of agent sessions (cwd, id, name, status, updatedAt, resume) to show how to resume each piece of work; default $SPECSYNC_SESSIONS_CMD; an empty value disables it for this run. Taken only from here or the environment, never from a repository file"
+          "description": "command that prints a JSON array of agent sessions (cwd, id, name, status, updatedAt, resume) to show how to resume each piece of work; default $SPECSYNC_SESSIONS_CMD; an empty value disables it for this run; it does not run with -state=off. Taken only from here or the environment, never from a repository file"
         },
         {
           "name": "sessions-timeout",

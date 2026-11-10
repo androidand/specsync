@@ -94,7 +94,12 @@ func CollectWorkRows(ctx context.Context, opts OverviewOptions) (*WorkRows, erro
 			out.RequestState = topo.RequestState
 		}
 	}
-	out.Status = append(out.Status, ApplySessions(ctx, out.Rows, opts.SessionsCmd, opts.SessionsTimeout)...)
+	sessionsCmd := opts.SessionsCmd
+	if opts.Topology.LocalOnly && strings.TrimSpace(sessionsCmd) != "" {
+		out.Status = append(out.Status, SessionsSkippedOffline)
+		sessionsCmd = ""
+	}
+	out.Status = append(out.Status, ApplySessions(ctx, out.Rows, sessionsCmd, opts.SessionsTimeout, true)...)
 	out.Status = append(out.Status, BuildWorkGraph(out.Rows).Unresolved...)
 	out.Status = uniqueStrings(out.Status)
 	return out, nil

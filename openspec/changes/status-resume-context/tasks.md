@@ -14,7 +14,7 @@ Depends on `status-pr-and-worktree-state`; benefits from `work-relations-and-ove
 - [x] 2.1 Join entries to rows by longest worktree path prefix; count unmatched entries in a status line
 - [x] 2.2 Add `sessions` and `resume` to rows; default `resume` to `cd <worktree>`
 - [x] 2.3 Read the last non-empty line of `discoveries.md` into `lastNote`
-- [x] 2.4 Show a compact `resume` column in `status`
+- [x] 2.4 Show the resume hint in `status`: a `↳ resume` line under a row that has a session (the table keeps its columns), and `resume` in `-json`
 
 ## 3. Tests
 

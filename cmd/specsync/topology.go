@@ -100,7 +100,12 @@ func (cm *statusCmd) run(args []string) {
 		fail(err)
 	}
 
-	topo.Status = append(topo.Status, specsync.ApplySessions(ctx, topo.Changes, cm.sessions.command(fs), *cm.sessions.timeout)...)
+	sessionsCmd := cm.sessions.command(fs)
+	if *state == "off" && strings.TrimSpace(sessionsCmd) != "" {
+		topo.Status = append(topo.Status, specsync.SessionsSkippedOffline)
+		sessionsCmd = ""
+	}
+	topo.Status = append(topo.Status, specsync.ApplySessions(ctx, topo.Changes, sessionsCmd, *cm.sessions.timeout, false)...)
 
 	var related *specsync.RelatedWork
 	if current && len(topo.Changes) == 1 && hasRelations(topo.Changes[0]) {
@@ -194,8 +199,8 @@ func printTopologyTable(topo specsync.Topology) {
 	if len(topo.Changes) == 0 {
 		fmt.Println("No changes resolved.")
 	} else {
-		fmt.Println("SLUG                            STAGE       REPO                       ISSUE       BRANCH                                    WORKTREE                                  RESUME")
-		fmt.Println("──────────────────────────────  ──────────  ─────────────────────────  ──────────  ────────────────────────────────────────  ────────────────────────────────────────  ──────")
+		fmt.Println("SLUG                            STAGE       REPO                       ISSUE       BRANCH                                    WORKTREE")
+		fmt.Println("──────────────────────────────  ──────────  ─────────────────────────  ──────────  ────────────────────────────────────────  ────────────────────────────────────────")
 		for _, c := range topo.Changes {
 			issue := "-"
 			if c.Issue != nil {
@@ -216,7 +221,10 @@ func printTopologyTable(topo specsync.Topology) {
 			if repo == "" {
 				repo = "-"
 			}
-			fmt.Printf("%-32s %-11s %-27s %-11s %-41s %-41s %s\n", c.Slug, c.Stage, repo, issue, branch, worktree, orDash(c.Resume))
+			fmt.Printf("%-32s %-11s %-27s %-11s %-41s %s\n", c.Slug, c.Stage, repo, issue, branch, worktree)
+			if len(c.Sessions) > 0 {
+				fmt.Printf("    ↳ resume: %s\n", c.Resume)
+			}
 			if c.LastNote != "" {
 				fmt.Printf("    ↳ note: %s\n", c.LastNote)
 			}

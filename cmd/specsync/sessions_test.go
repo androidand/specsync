@@ -66,7 +66,7 @@ type statusJSON struct {
 func runStatusJSON(t *testing.T, repo string, env []string, extra ...string) statusJSON {
 	t.Helper()
 	bin := buildSpecsyncBinary(t)
-	args := append([]string{"status", "-everything", "-state=off", "-json"}, extra...)
+	args := append([]string{"status", "-everything", "-json"}, extra...)
 	out, err := runIn(t, bin, repo, env, args...)
 	if err != nil {
 		t.Fatalf("status: %v\n%s", err, out)
@@ -120,8 +120,8 @@ func TestStatusJoinsProviderSessionsFromFlagAndEnvironment(t *testing.T) {
 func TestStatusReportsUnmatchedSessionsAndProviderFailureSoftly(t *testing.T) {
 	repo, env := resumeRepo(t)
 	got := runStatusJSON(t, repo, env, "-sessions-cmd", providerFor(t, repo))
-	if !strings.Contains(strings.Join(got.Status, "\n"), "1 session matched no work") {
-		t.Fatalf("status = %v", got.Status)
+	if strings.Contains(strings.Join(got.Status, "\n"), "matched no work") {
+		t.Fatalf("a view of one store cannot say a session matched no work: %v", got.Status)
 	}
 
 	got = runStatusJSON(t, repo, env, "-sessions-cmd", "exit 3")
@@ -175,15 +175,21 @@ func TestStatusWithAProviderWritesNothing(t *testing.T) {
 	}
 }
 
-func TestStatusTableShowsAResumeColumn(t *testing.T) {
+func TestStatusTableShowsTheResumeHintOnItsOwnLine(t *testing.T) {
 	repo, env := resumeRepo(t)
 	bin := buildSpecsyncBinary(t)
-	out, err := runIn(t, bin, repo, env, "status", "-everything", "-state=off", "-sessions-cmd", providerFor(t, repo))
+	out, err := runIn(t, bin, repo, env, "status", "-everything", "-sessions-cmd", providerFor(t, repo))
 	if err != nil {
 		t.Fatalf("status: %v\n%s", err, out)
 	}
-	if !strings.Contains(out, "RESUME") || !strings.Contains(out, "agent --resume s-9") {
-		t.Fatalf("table lacks the resume column:\n%s", out)
+	if strings.Contains(out, "RESUME") {
+		t.Fatalf("the table keeps its old columns:\n%s", out)
+	}
+	if !strings.Contains(out, "WORKTREE\n") {
+		t.Fatalf("the header must still end at WORKTREE:\n%s", out)
+	}
+	if !strings.Contains(out, "↳ resume: agent --resume s-9") {
+		t.Fatalf("table lacks the resume line:\n%s", out)
 	}
 	if !strings.Contains(out, "note: - left off at the parser") {
 		t.Fatalf("table lacks the last note:\n%s", out)
@@ -193,11 +199,12 @@ func TestStatusTableShowsAResumeColumn(t *testing.T) {
 func TestOverviewShowsResumeAndNoteFromTheProvider(t *testing.T) {
 	repo, env := resumeRepo(t)
 	bin := buildSpecsyncBinary(t)
-	out, err := runIn(t, bin, repo, env, "overview", "-root", filepath.Dir(repo), "-state=off", "-json", "-sessions-cmd", providerFor(t, repo))
+	out, err := runIn(t, bin, repo, env, "overview", "-root", filepath.Dir(repo), "-json", "-sessions-cmd", providerFor(t, repo))
 	if err != nil {
 		t.Fatalf("overview: %v\n%s", err, out)
 	}
 	var ov struct {
+		Status []string `json:"status"`
 		NoEpic []struct {
 			Slug     string `json:"slug"`
 			Resume   string `json:"resume"`
@@ -207,7 +214,33 @@ func TestOverviewShowsResumeAndNoteFromTheProvider(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &ov); err != nil {
 		t.Fatalf("not JSON: %v\n%s", err, out)
 	}
+	if !strings.Contains(strings.Join(ov.Status, "\n"), "1 session matched no work") {
+		t.Fatalf("an overview covers the workspace, so an unmatched session is reported: %v", ov.Status)
+	}
 	if len(ov.NoEpic) != 1 || ov.NoEpic[0].Resume != "agent --resume s-9" || ov.NoEpic[0].LastNote == "" {
 		t.Fatalf("overview rows = %+v\n%s", ov.NoEpic, out)
+	}
+}
+
+func TestStatusStateOffDoesNotRunTheProvider(t *testing.T) {
+	repo, env := resumeRepo(t)
+	marker := filepath.Join(t.TempDir(), "ran")
+	provider := filepath.Join(t.TempDir(), "provider.sh")
+	if err := os.WriteFile(provider, []byte("#!/bin/sh\ntouch "+marker+"\necho '[]'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	got := runStatusJSON(t, repo, env, "-state=off", "-sessions-cmd", provider)
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("-state=off is offline and must not run the session provider")
+	}
+	if !strings.Contains(strings.Join(got.Status, "\n"), "skipped with -state=off") {
+		t.Fatalf("status = %v", got.Status)
+	}
+	bin := buildSpecsyncBinary(t)
+	if out, err := runIn(t, bin, repo, env, "overview", "-root", filepath.Dir(repo), "-state=off", "-sessions-cmd", provider); err != nil {
+		t.Fatalf("overview: %v\n%s", err, out)
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("overview -state=off must not run the provider either")
 	}
 }

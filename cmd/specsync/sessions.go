@@ -16,7 +16,7 @@ type sessionFlags struct {
 
 func addSessionFlags(fs *flag.FlagSet) sessionFlags {
 	return sessionFlags{
-		cmd:     fs.String("sessions-cmd", "", "command that prints a JSON array of agent sessions (cwd, id, name, status, updatedAt, resume) to show how to resume each piece of work; default $SPECSYNC_SESSIONS_CMD; an empty value disables it for this run. Taken only from here or the environment, never from a repository file"),
+		cmd:     fs.String("sessions-cmd", "", "command that prints a JSON array of agent sessions (cwd, id, name, status, updatedAt, resume) to show how to resume each piece of work; default $SPECSYNC_SESSIONS_CMD; an empty value disables it for this run; it does not run with -state=off. Taken only from here or the environment, never from a repository file"),
 		timeout: fs.Duration("sessions-timeout", specsync.DefaultSessionsTimeout, "how long to wait for the session provider"),
 	}
 }
