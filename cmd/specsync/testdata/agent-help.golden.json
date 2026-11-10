@@ -21,11 +21,13 @@
     "next",
     "note",
     "overview",
+    "park",
     "pr-body",
     "pull",
     "relate",
     "release-plan",
     "review-map",
+    "save",
     "scan",
     "set-priority",
     "set-stage",
@@ -1374,6 +1376,108 @@
         "specsync overview -root ~/dev -unattached"
       ]
     },
+    "park": {
+      "command": "park",
+      "description": "Stop work so another session can resume: save, set the stage and leave a note.",
+      "mutates": true,
+      "workflow": {
+        "position": "implementation",
+        "related_before": [
+          "save"
+        ],
+        "related_after": [
+          "status"
+        ]
+      },
+      "flags": [
+        {
+          "name": "add",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "an untracked file to include (repeatable); untracked files are never included otherwise"
+        },
+        {
+          "name": "change",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "the change this work belongs to (default: found from the branch name)"
+        },
+        {
+          "name": "dry-run",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "show what would be committed and pushed and change nothing"
+        },
+        {
+          "name": "json",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "output as JSON"
+        },
+        {
+          "name": "m",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "commit message (required)"
+        },
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "push",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "push the branch after committing (never forces)"
+        },
+        {
+          "name": "push-to-request",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "allow pushing a branch that has an open pull request"
+        },
+        {
+          "name": "stage",
+          "type": "string",
+          "required": false,
+          "default": "backlog",
+          "description": "the stage to set on the change"
+        },
+        {
+          "name": "store",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "registered OpenSpec store id to operate on (default: openspec/config.yaml `store:`, else ./openspec)"
+        },
+        {
+          "name": "sync",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "after committing, sync the change to its tracker issue (specsync -change \u003cslug\u003e)"
+        }
+      ],
+      "safety_rules": [
+        "Runs the same guards as save before anything is written; nothing is discarded, reset or deleted",
+        "Sets the change's stage (default backlog) and appends a `parked:` line to its discoveries.md, then commits",
+        "Pushes only with -push, with the same rules as save"
+      ],
+      "examples": [
+        "specsync park -m 'waiting on the API change' -dry-run",
+        "specsync park -m 'waiting on the API change' -stage blocked"
+      ]
+    },
     "pr-body": {
       "command": "pr-body",
       "description": "Generate the correct PR body fragment for a change.",
@@ -1754,6 +1858,104 @@
         "specsync review-map origin/main..feat/42-thing -json",
         "specsync review-map -change my-change 123",
         "specsync review-map -equivalent feat/42-thing-old feat/42-thing"
+      ]
+    },
+    "save": {
+      "command": "save",
+      "description": "Commit your work safely: refuses secrets and forbidden trailers, pushes only when asked.",
+      "mutates": true,
+      "workflow": {
+        "position": "implementation",
+        "related_before": [
+          "next"
+        ],
+        "related_after": [
+          "gates",
+          "update"
+        ]
+      },
+      "flags": [
+        {
+          "name": "add",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "an untracked file to include (repeatable); untracked files are never included otherwise"
+        },
+        {
+          "name": "change",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "the change this work belongs to (default: found from the branch name)"
+        },
+        {
+          "name": "dry-run",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "show what would be committed and pushed and change nothing"
+        },
+        {
+          "name": "json",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "output as JSON"
+        },
+        {
+          "name": "m",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "commit message (required)"
+        },
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "push",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "push the branch after committing (never forces)"
+        },
+        {
+          "name": "push-to-request",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "allow pushing a branch that has an open pull request"
+        },
+        {
+          "name": "store",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "registered OpenSpec store id to operate on (default: openspec/config.yaml `store:`, else ./openspec)"
+        },
+        {
+          "name": "sync",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "after committing, sync the change to its tracker issue (specsync -change \u003cslug\u003e)"
+        }
+      ],
+      "safety_rules": [
+        "Commits tracked changes only; an untracked file is included only when named with -add",
+        "Refuses files that look like secrets (by name or content) and any save.forbid_files, and trailers listed in save.forbid_trailers",
+        "Pushes only with -push, never forces, and refuses a branch that has an open pull request unless -push-to-request is given",
+        "-dry-run lists what would be committed and changes nothing"
+      ],
+      "examples": [
+        "specsync save -m 'fix: handle empty input (#42)' -dry-run",
+        "specsync save -m 'fix: handle empty input (#42)'",
+        "specsync save -m 'add the new fixture' -add testdata/new.json -push"
       ]
     },
     "scan": {

@@ -26,10 +26,10 @@ Depends on `ways-of-working-and-next` slices 0 and 1 for config. Slice 4 also ne
 - contract: Save refuses unsafe commits and pushes. Park leaves the work resumable.
 - budget: files<=10, lines<=400
 
-- [ ] 3.1 `specsync save -m`: commit, guarded push, spec sync
-- [ ] 3.2 Guards: secret-looking files, forbidden trailers, open-request push
-- [ ] 3.3 `specsync park`: save, stage, note
-- [ ] 3.4 Tests for each guard
+- [x] 3.1 `specsync save -m`: commit, guarded push, spec sync
+- [x] 3.2 Guards: secret-looking files, forbidden trailers, open-request push
+- [x] 3.3 `specsync park`: save, stage, note
+- [x] 3.4 Tests for each guard
 
 ## Slice 4: Pull request
 - after: 1

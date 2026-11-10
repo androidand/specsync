@@ -102,7 +102,9 @@ specsync agent-help                # overview
 - `init` — Create a scratch openspec/ here and keep it out of git.
 - `link` — Cross-link two or more OpenSpec changes.
 - `note` — Append a discovery line to a change's discoveries.md.
+- `park` — Stop work so another session can resume: save, set the stage and leave a note.
 - `pull` — Pull an issue into a local OpenSpec change.
+- `save` — Commit your work safely: refuses secrets and forbidden trailers, pushes only when asked.
 - `set-priority` — Set or unset a change's numeric priority override.
 - `set-stage` — Set the workflow stage of a change.
 - `slice` — Start a slice: create its branch and worktree, stacked on the previous slice.
