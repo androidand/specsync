@@ -153,6 +153,7 @@ appear on someone else's repository.
 | `agent-help` | Show how to use any specsync command, for people and agents. |
 | `doctor` | Diagnose skill installation, environment, and context health. |
 | `install-skill` | Install the specsync skill for your coding agent. |
+| `trust` | Allow specsync to run the commands in this repo's specsync.yml. |
 | `version` | Print the specsync version. |
 <!-- specsync:commands:end -->
 

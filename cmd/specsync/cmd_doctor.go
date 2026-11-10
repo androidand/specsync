@@ -28,6 +28,7 @@ func (*doctorCmd) Spec() Spec {
 			"specsync doctor",
 			"specsync doctor install -json",
 			"specsync doctor context -json",
+			"specsync doctor config",
 		},
 	}
 }
@@ -73,9 +74,11 @@ func (cm *doctorCmd) run(args []string) {
 		doctorSkill(*jsonFlag)
 	case "store":
 		doctorStore(*jsonFlag)
+	case "config":
+		doctorConfig(*jsonFlag)
 	default:
 		fmt.Fprintf(os.Stderr, "specsync doctor: unknown subcommand %q\n", subcommand)
-		fmt.Fprintf(os.Stderr, "Available: claude, install, context, skill, store\n")
+		fmt.Fprintf(os.Stderr, "Available: claude, install, context, skill, store, config\n")
 		os.Exit(2)
 	}
 }

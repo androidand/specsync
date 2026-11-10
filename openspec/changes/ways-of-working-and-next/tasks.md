@@ -14,12 +14,12 @@
 - contract: A repo can declare its flow and gates, and `doctor` rejects a bad config.
 - budget: files<=10, lines<=400
 
-- [ ] 1.1 Define the `flow`, `gates`, `worktrees`, `text` and `cleanup` sections and a schema
-- [ ] 1.2 Parse `openspec/specsync.yml` with defaults; keep the existing board setting working
-- [ ] 1.3 `doctor` validates the schema: unknown keys, wrong types, missing gate commands, with line numbers
-- [ ] 1.4 Presets `minimal`, `pr-review`, `strict`
-- [ ] 1.5 `sync:` section: strategy, after_review, force; documented defaults
-- [ ] 1.6 `specsync trust`: record the config hash per user and repo; refuse repo-defined commands without it; tests for fresh clone and changed config
+- [x] 1.1 Define the `flow`, `gates`, `worktrees`, `text` and `cleanup` sections and a schema
+- [x] 1.2 Parse `openspec/specsync.yml` with defaults; keep the existing board setting working
+- [x] 1.3 `doctor` validates the schema: unknown keys, wrong types, missing gate commands, with line numbers
+- [x] 1.4 Presets `minimal`, `pr-review`, `strict`
+- [x] 1.5 `sync:` section: strategy, after_review, force; documented defaults
+- [x] 1.6 `specsync trust`: record the config hash per user and repo; refuse repo-defined commands without it; tests for fresh clone and changed config
 
 ## Slice 2: Next and flow
 - after: 1

@@ -27,6 +27,7 @@
     "status",
     "sync",
     "trace",
+    "trust",
     "validate",
     "verify",
     "version"
@@ -561,7 +562,8 @@
       "examples": [
         "specsync doctor",
         "specsync doctor install -json",
-        "specsync doctor context -json"
+        "specsync doctor context -json",
+        "specsync doctor config"
       ]
     },
     "epic": {
@@ -1852,6 +1854,49 @@
         "specsync trace",
         "specsync trace -change my-change",
         "specsync trace -json"
+      ]
+    },
+    "trust": {
+      "command": "trust",
+      "description": "Allow specsync to run the commands in this repo's specsync.yml.",
+      "mutates": true,
+      "workflow": {
+        "position": "setup",
+        "related_after": [
+          "doctor"
+        ]
+      },
+      "flags": [
+        {
+          "name": "dry-run",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "show the commands that would be trusted without recording trust"
+        },
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "revoke",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "remove the trust record for this repository"
+        }
+      ],
+      "safety_rules": [
+        "Writes only a per-user record (a hash of the config) outside the repo; read the printed commands first",
+        "A changed config needs trust again; specsync never runs repository-defined commands without it"
+      ],
+      "examples": [
+        "specsync trust -dry-run",
+        "specsync trust",
+        "specsync trust -revoke"
       ]
     },
     "validate": {

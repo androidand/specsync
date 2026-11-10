@@ -95,7 +95,7 @@ func ParseWays(data []byte) (Ways, []ConfigIssue) {
 		issues = append(issues, ConfigIssue{Line: line, Key: key, Msg: fmt.Sprintf(format, a...)})
 	}
 	for _, k := range root.Keys {
-		if !contains(topLevelKeys, k) {
+		if !hasString(topLevelKeys, k) {
 			add(root.KeyLine[k], k, "unknown key %q%s", k, didYouMean(k, topLevelKeys))
 		}
 	}
@@ -115,7 +115,7 @@ func ParseWays(data []byte) (Ways, []ConfigIssue) {
 			continue
 		}
 		for _, k := range n.Keys {
-			if !contains(sectionKeys[sec], k) {
+			if !hasString(sectionKeys[sec], k) {
 				add(n.KeyLine[k], sec+"."+k, "unknown key %q in %s%s", k, sec, didYouMean(k, sectionKeys[sec]))
 			}
 		}
@@ -139,7 +139,7 @@ func (w *Ways) readFlow(n *YNode, line int, add addIssue) {
 	case YList:
 		var steps []string
 		for _, s := range n.List {
-			if s.Kind != YScalar || !contains(flowSteps, s.Scalar) {
+			if s.Kind != YScalar || !hasString(flowSteps, s.Scalar) {
 				add(line, "flow", "unknown step %q: use steps from %s", s.Scalar, strings.Join(flowSteps, ", "))
 				return
 			}
@@ -162,7 +162,7 @@ func (w *Ways) readGates(n *YNode, line int, add addIssue) {
 			continue
 		}
 		for _, k := range g.Keys {
-			if !contains([]string{"name", "run", "optional"}, k) {
+			if !hasString([]string{"name", "run", "optional"}, k) {
 				add(g.KeyLine[k], "gates."+k, "unknown key %q in a gate%s", k, didYouMean(k, []string{"name", "run", "optional"}))
 			}
 		}
@@ -187,7 +187,7 @@ func (w *Ways) readGates(n *YNode, line int, add addIssue) {
 func (w *Ways) readSection(sec string, n *YNode, add addIssue) {
 	enum := func(key string, allowed ...string) string {
 		v := n.Str(key)
-		if v != "" && !contains(allowed, v) {
+		if v != "" && !hasString(allowed, v) {
 			add(n.KeyLine[key], sec+"."+key, "%s must be %s, got %q", key, strings.Join(allowed, " or "), v)
 			return ""
 		}
@@ -228,7 +228,7 @@ func (w Ways) GateCommands(includeOptional bool, only []string) []string {
 	for _, g := range w.Gates {
 		switch {
 		case len(only) > 0:
-			if !contains(only, g.Name) {
+			if !hasString(only, g.Name) {
 				continue
 			}
 		case g.Optional && !includeOptional:
