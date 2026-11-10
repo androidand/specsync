@@ -142,11 +142,11 @@ func summaryOf(body string) string {
 			}
 			continue
 		}
-		if bulletLine.MatchString(l) {
+		if listItemLine.MatchString(l) {
 			if len(para) > 0 {
 				break
 			}
-			t = bulletLine.ReplaceAllString(l, "")
+			t = listItemLine.ReplaceAllString(l, "")
 		}
 		para = append(para, t)
 	}
@@ -161,10 +161,10 @@ func bulletsOf(body, section string, budget int) string {
 	var out []string
 	used := 0
 	for _, l := range markdownSection(body, section) {
-		if !bulletLine.MatchString(l) || checkboxLine.MatchString(l) {
+		if !listItemLine.MatchString(l) || checkboxLine.MatchString(l) {
 			continue
 		}
-		text := strings.TrimSpace(bulletLine.ReplaceAllString(l, ""))
+		text := strings.TrimSpace(listItemLine.ReplaceAllString(l, ""))
 		n := len(strings.Fields(text))
 		if len(out) == 0 && n > budget {
 			text, n = truncateWords(text, budget), budget

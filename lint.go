@@ -21,7 +21,7 @@ var (
 	fileNameInTitle   = regexp.MustCompile(`[\w./-]+\.(go|md|yml|yaml|json|js|ts|sh|toml)\b`)
 	sliceTitle        = regexp.MustCompile(`^Slice \d+:`)
 	headingLine       = regexp.MustCompile(`^(#{2,6})\s+(.*?)\s*#*\s*$`)
-	bulletLine        = regexp.MustCompile(`^\s*([-*+]|\d+[.)])\s+`)
+	listItemLine      = regexp.MustCompile(`^\s*([-*+]|\d+[.)])\s+`)
 	checkboxLine      = regexp.MustCompile(`^\s*[-*+]\s+\[[ xX]\]`)
 	markdownLink      = regexp.MustCompile(`!?\[[^\]]*\]\([^)]*\)`)
 	bareURL           = regexp.MustCompile(`https?://\S+`)
@@ -189,9 +189,9 @@ func LintDocument(kind, text string, t TextConfig) []LintFinding {
 			flush()
 			continue
 		}
-		if bulletLine.MatchString(line) {
+		if listItemLine.MatchString(line) {
 			flush()
-			prose(no, bulletLine.ReplaceAllString(line, ""), t, fillerRe, &words, add)
+			prose(no, listItemLine.ReplaceAllString(line, ""), t, fillerRe, &words, add)
 			continue
 		}
 		para = append(para, visibleLine{no, trim})
