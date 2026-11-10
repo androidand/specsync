@@ -127,7 +127,7 @@ func AttachSessions(rows []ChangeTopology, entries []SessionEntry) (unmatched in
 		cwd := resolved(e.CWD)
 		var best *target
 		for _, t := range targets {
-			if cwd == t.path || strings.HasPrefix(cwd, t.path+string(filepath.Separator)) {
+			if insideOrSame(cwd, t.path) {
 				if best == nil || len(t.path) > len(best.path) {
 					best = t
 				}

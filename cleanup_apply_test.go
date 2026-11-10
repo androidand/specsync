@@ -126,8 +126,8 @@ func TestApplyCleanup_ArchivesWhenTheIssueIsClosed(t *testing.T) {
 	if !reflect.DeepEqual(archived, []string{"thing"}) {
 		t.Fatalf("archived = %v (%+v)", archived, it)
 	}
-	if last := it.Done[len(it.Done)-1]; last != "archived change" {
-		t.Fatalf("archive comes after the branch steps: %v", it.Done)
+	if it.Done[0] != "archived change" || !strings.HasPrefix(it.Done[1], "removed worktree") {
+		t.Fatalf("archive comes before the worktree is removed: %v", it.Done)
 	}
 }
 
@@ -159,7 +159,7 @@ func TestApplyCleanup_RunsHooksOnlyWhenTheConfigIsTrusted(t *testing.T) {
 	}
 }
 
-func TestApplyCleanup_RunsTheHookAfterTheOtherStepsWhenTrusted(t *testing.T) {
+func TestApplyCleanup_RunsTheHookBeforeTheOtherStepsWhenTrusted(t *testing.T) {
 	trustFile(t)
 	f := newCleanupFixture(t)
 	f.writeConfig("cleanup:\n  hooks:\n    - make stop\n")
@@ -170,11 +170,11 @@ func TestApplyCleanup_RunsTheHookAfterTheOtherStepsWhenTrusted(t *testing.T) {
 	opts := hookOpts(&ran)
 	items := mergedCandidate(t, f)
 	it := only(t, ApplyCleanup(context.Background(), items, opts))
-	if !reflect.DeepEqual(ran, []string{"make stop@app"}) {
+	if !reflect.DeepEqual(ran, []string{"make stop@wt"}) {
 		t.Fatalf("ran = %v", ran)
 	}
-	if !strings.HasPrefix(it.Done[len(it.Done)-1], "ran hook") {
-		t.Fatalf("hooks run last: %v", it.Done)
+	if !strings.HasPrefix(it.Done[0], "ran hook") {
+		t.Fatalf("hooks run first, while the worktree still exists: %v", it.Done)
 	}
 }
 
@@ -191,7 +191,7 @@ func TestApplyCleanup_EachRepoDecidesTrustForItsOwnHooks(t *testing.T) {
 	opts := hookOpts(&ran)
 	items := append(mergedCandidate(t, a), mergedCandidate(t, b)...)
 	ApplyCleanup(context.Background(), items, opts)
-	if len(ran) != 1 || ran[0] != "make stop@app" {
+	if len(ran) != 1 || ran[0] != "make stop@wt" {
 		t.Fatalf("only the trusted repo's hook runs: %v", ran)
 	}
 }

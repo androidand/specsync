@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -44,6 +45,9 @@ type CleanupOptions struct {
 	MinAgeDays func(store string) int
 	// ArchiveChange archives a change whose issue is closed. nil skips the step.
 	ArchiveChange func(ctx context.Context, row ChangeTopology) (string, error)
+	// IncludeIgnored lets a worktree with ignored files (other than common
+	// build output) be removed.
+	IncludeIgnored bool
 	// RunHook runs one configured hook in dir. nil uses the shell.
 	RunHook func(ctx context.Context, dir, command string, env []string) error
 }
@@ -53,6 +57,9 @@ type CleanupReport struct {
 	Apply  bool          `json:"apply"`
 	Items  []CleanupItem `json:"items"`
 	Status []string      `json:"status,omitempty"`
+	// SessionsNote is set when live sessions could not be checked, so no
+	// worktree was protected by them.
+	SessionsNote string `json:"sessionsNote,omitempty"`
 }
 
 // PlanCleanup decides, for every row with a linked worktree, whether its work
@@ -63,8 +70,12 @@ func PlanCleanup(ctx context.Context, rows []ChangeTopology, opts CleanupOptions
 	if opts.Now != nil {
 		now = opts.Now
 	}
+	shared := sessionsByWorktree(rows)
 	var items []CleanupItem
 	for _, row := range rows {
+		if row.Worktree != "" {
+			row.Sessions = shared[resolved(absPath(row.Worktree))]
+		}
 		if it, ok := classifyCleanup(ctx, row, opts, now()); ok {
 			items = append(items, it)
 		}
@@ -94,14 +105,12 @@ func classifyCleanup(ctx context.Context, row ChangeTopology, opts CleanupOption
 
 	mergedHead := pr != nil && pr.State == "merged" && pr.HeadSHA != "" && ls.Head == pr.HeadSHA
 	inBase := false
-	baseTip := ""
 	if ls.Base != "" {
 		if _, err := gitIn(ctx, row.Worktree, "merge-base", "--is-ancestor", ls.Head, ls.Base); err == nil {
 			inBase = true
 		}
-		baseTip, _ = gitIn(ctx, row.Worktree, "rev-parse", ls.Base)
 	}
-	ownCommits := inBase && (ls.Head != baseTip || branchHasHistory(ctx, row.Worktree, row.Branch))
+	ownCommits := inBase && branchHasCommits(ctx, row.Worktree, row.Branch)
 	unpushed := unpushedCommits(ctx, row.Worktree, ls, mergedHead)
 
 	closedUnmerged := pr != nil && pr.State == "closed"
@@ -115,7 +124,7 @@ func classifyCleanup(ctx context.Context, row ChangeTopology, opts CleanupOption
 	if mergedHead {
 		it.Reason = fmt.Sprintf("request #%d merged with this head", pr.Number)
 	}
-	if reason := blockingReason(row, opts); reason != "" {
+	if reason := blockingReason(ctx, row, opts); reason != "" {
 		it.Status, it.Reason = CleanupSkipped, reason
 		return it, true
 	}
@@ -196,15 +205,109 @@ func commitsAfter(ctx context.Context, dir, mergedHead string) []string {
 	return strings.Split(out, "\n")
 }
 
-func blockingReason(row ChangeTopology, opts CleanupOptions) string {
+func blockingReason(ctx context.Context, row ChangeTopology, opts CleanupOptions) string {
 	ls := row.Local
 	switch {
+	case protectedBranch(ctx, row) != "":
+		return protectedBranch(ctx, row)
 	case ls.Modified+ls.Untracked > 0:
 		return fmt.Sprintf("uncommitted changes: %d modified, %d untracked", ls.Modified, ls.Untracked)
-	case opts.Current != "" && (SameFolder(opts.Current, row.Worktree) || within(opts.Current, row.Worktree)):
+	case opts.Current != "" && insideOrSame(opts.Current, row.Worktree):
 		return "it is the current worktree"
 	case len(row.Sessions) > 0:
 		return "a live session is working in it: " + sessionName(row.Sessions[0])
+	}
+	if !opts.IncludeIgnored {
+		if names := ignoredFiles(ctx, row.Worktree); len(names) > 0 {
+			return "has ignored files: " + strings.Join(names, ", ") + " (they would be lost; -include-ignored overrides)"
+		}
+	}
+	return ""
+}
+
+var protectedNames = []string{"main", "master", "develop", "trunk"}
+
+// protectedBranch explains why a branch must never be removed: it is a
+// well-known trunk name, the base or default branch, or the one checked out in
+// the main checkout.
+func protectedBranch(ctx context.Context, row ChangeTopology) string {
+	b := row.Branch
+	protected := append([]string(nil), protectedNames...)
+	if base := row.Local.Base; base != "" {
+		protected = append(protected, strings.TrimPrefix(base, "origin/"))
+	}
+	if out, err := gitIn(ctx, row.Store, "symbolic-ref", "--short", "refs/remotes/origin/HEAD"); err == nil {
+		protected = append(protected, strings.TrimPrefix(out, "origin/"))
+	}
+	for _, p := range protected {
+		if p == b {
+			return "protected branch " + b + ": it is a base or default branch"
+		}
+	}
+	if out, err := gitIn(ctx, row.Store, "rev-parse", "--abbrev-ref", "HEAD"); err == nil && out == b {
+		return "protected branch " + b + ": it is checked out in the main checkout"
+	}
+	return ""
+}
+
+// defaultIgnored are build output folders whose loss costs only a rebuild.
+var defaultIgnored = []string{"node_modules", "dist", "build", "target", ".next", "vendor", "__pycache__"}
+
+// ignoredFiles lists ignored paths in the worktree other than common build
+// output, a few at most.
+func ignoredFiles(ctx context.Context, dir string) []string {
+	out, err := gitIn(ctx, dir, "--no-optional-locks", "status", "--porcelain=v1", "--ignored")
+	if err != nil {
+		return nil
+	}
+	var names []string
+	for _, line := range strings.Split(out, "\n") {
+		if !strings.HasPrefix(line, "!! ") {
+			continue
+		}
+		p := strings.TrimSuffix(strings.TrimPrefix(line, "!! "), "/")
+		skip := false
+		for _, part := range strings.Split(p, "/") {
+			if slices.Contains(defaultIgnored, part) {
+				skip = true
+			}
+		}
+		if !skip {
+			names = append(names, SanitizeText(p, 60))
+		}
+	}
+	if len(names) > 3 {
+		names = append(names[:3], fmt.Sprintf("and %d more", len(names)-3))
+	}
+	return names
+}
+
+// sessionsByWorktree gathers the sessions of every row that shares a worktree,
+// so each of those rows sees all of them.
+func sessionsByWorktree(rows []ChangeTopology) map[string][]SessionEntry {
+	out := map[string][]SessionEntry{}
+	for _, r := range rows {
+		if r.Worktree == "" || len(r.Sessions) == 0 {
+			continue
+		}
+		key := resolved(absPath(r.Worktree))
+		out[key] = append(out[key], r.Sessions...)
+	}
+	return out
+}
+
+// sessionsCheckNote says why live sessions were not checked, or "" when they were.
+func sessionsCheckNote(o OverviewOptions, status []string) string {
+	switch {
+	case o.Topology.LocalOnly:
+		return "live sessions not checked (-state off); a worktree in use by an agent is not protected by that check"
+	case strings.TrimSpace(o.SessionsCmd) == "":
+		return "live sessions not checked: no session provider configured (-sessions-cmd or SPECSYNC_SESSIONS_CMD); a worktree in use by an agent is not protected by that check"
+	}
+	for _, s := range status {
+		if strings.Contains(s, "session provider") {
+			return "live sessions not checked: " + s
+		}
 	}
 	return ""
 }
@@ -218,38 +321,16 @@ func sessionName(s SessionEntry) string {
 	return "session"
 }
 
-func within(child, parent string) bool {
-	c, p := realPath(child), realPath(parent)
-	rel, err := filepath.Rel(p, c)
-	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
-}
-
-func realPath(p string) string {
-	if abs, err := filepath.Abs(p); err == nil {
-		p = abs
-	}
-	rest := ""
-	for q := p; ; q = filepath.Dir(q) {
-		if r, err := filepath.EvalSymlinks(q); err == nil {
-			return filepath.Join(r, rest)
-		}
-		rest = filepath.Join(filepath.Base(q), rest)
-		if filepath.Dir(q) == q {
-			return p
-		}
-	}
-}
-
-// branchHasHistory reports whether the branch ever received a commit of its
-// own. A branch that points at the base tip and was only ever created there
-// is new work, not finished work.
-func branchHasHistory(ctx context.Context, dir, branch string) bool {
+// branchHasCommits reports whether the branch's reflog records a commit made
+// on it. A branch that points at the base tip because it was created, reset,
+// pulled or rebased there is new work, not finished work.
+func branchHasCommits(ctx context.Context, dir, branch string) bool {
 	out, err := gitIn(ctx, dir, "reflog", "show", "--format=%gs", "refs/heads/"+branch)
 	if err != nil {
 		return false
 	}
 	for _, line := range strings.Split(out, "\n") {
-		if line != "" && !strings.HasPrefix(line, "branch: Created") {
+		if strings.HasPrefix(line, "commit") {
 			return true
 		}
 	}
@@ -261,19 +342,20 @@ func branchHasHistory(ctx context.Context, dir, branch string) bool {
 // time by trust.
 func cleanupSteps(row ChangeTopology) []string {
 	cfg, _ := LoadWays(row.Store)
-	steps := []string{"remove worktree " + row.Worktree, "delete local branch " + row.Branch}
-	if cfg.Cleanup.RemoteBranch == "delete" && !row.Local.UpstreamGone {
-		steps = append(steps, "delete remote branch "+remoteOf(row)+"/"+row.Branch)
+	var steps []string
+	for _, h := range cfg.Cleanup.Hooks {
+		if IsTrusted(row.Store) {
+			steps = append(steps, "run hook in the worktree: "+h)
+		} else {
+			steps = append(steps, "hook not run, config not trusted (specsync trust): "+h)
+		}
 	}
 	if cfg.Cleanup.Archive && row.Slug != "" && row.Issue != nil && row.Issue.State == "closed" {
 		steps = append(steps, "archive change "+row.Slug)
 	}
-	for _, h := range cfg.Cleanup.Hooks {
-		if IsTrusted(row.Store) {
-			steps = append(steps, "run hook: "+h)
-		} else {
-			steps = append(steps, "hook not run, config not trusted (specsync trust): "+h)
-		}
+	steps = append(steps, "remove worktree "+row.Worktree, "delete local branch "+row.Branch)
+	if cfg.Cleanup.RemoteBranch == "delete" && !row.Local.UpstreamGone {
+		steps = append(steps, "delete remote branch "+remoteOf(row)+"/"+row.Branch+" if its tip is still this head")
 	}
 	return steps
 }
@@ -296,7 +378,7 @@ func RunCleanup(ctx context.Context, opts CleanupOptions) (*CleanupReport, error
 	if opts.Apply {
 		items = ApplyCleanup(ctx, items, opts)
 	}
-	return &CleanupReport{Apply: opts.Apply, Items: items, Status: rows.Status}, nil
+	return &CleanupReport{Apply: opts.Apply, Items: items, Status: rows.Status, SessionsNote: sessionsCheckNote(opts.Overview, rows.Status)}, nil
 }
 
 // ApplyCleanup carries out the candidates in items and returns every item with
@@ -313,82 +395,152 @@ func ApplyCleanup(ctx context.Context, items []CleanupItem, opts CleanupOptions)
 	return out
 }
 
+// applyOne does one candidate in a fixed order, stopping at the first failure:
+//  1. check it again from fresh facts (protected branch, ignored files, head,
+//     status, sessions, proof that its work is in the base);
+//  2. run the configured hooks in the worktree, only when the config is trusted;
+//  3. archive the change when configured and its issue is closed;
+//  4. remove the worktree and delete the local branch;
+//  5. delete the remote branch when configured and its tip is still ours.
+//
+// A failure in 1 to 3 leaves the worktree and branch untouched.
 func applyOne(ctx context.Context, it CleanupItem, opts CleanupOptions) CleanupItem {
-	row := it.row
 	fail := func(format string, a ...any) CleanupItem {
 		it.Error = fmt.Sprintf(format, a...)
 		return it
 	}
-	if SameFolder(row.Worktree, row.Store) {
-		return fail("refusing to remove the main checkout")
-	}
-	if opts.Current != "" && (SameFolder(opts.Current, row.Worktree) || within(opts.Current, row.Worktree)) {
-		return fail("refusing to remove the current worktree")
-	}
-	status, err := gitIn(ctx, row.Worktree, "--no-optional-locks", "status", "--porcelain=v1")
-	if err != nil {
-		return fail("%v", err)
-	}
-	if status != "" {
-		return fail("uncommitted changes appeared since planning; nothing removed")
-	}
-	head, err := gitIn(ctx, row.Worktree, "rev-parse", "HEAD")
-	if err != nil || head != row.Local.Head {
-		return fail("the branch moved since planning; nothing removed")
+	row, reason := recheck(ctx, it.row, opts)
+	if reason != "" {
+		return fail("%s; nothing removed", reason)
 	}
 	cfg, _ := LoadWays(row.Store)
 
-	if _, err := gitIn(ctx, row.Store, "worktree", "remove", row.Worktree); err != nil {
-		return fail("%v", err)
-	}
-	it.Done = append(it.Done, "removed worktree "+row.Worktree)
-
-	if _, err := gitIn(ctx, row.Store, "branch", "-D", row.Branch); err != nil {
-		return fail("%v", err)
-	}
-	it.Done = append(it.Done, "deleted local branch "+row.Branch)
-
-	if cfg.Cleanup.RemoteBranch == "delete" {
-		switch {
-		case row.Local.UpstreamGone:
-			it.Done = append(it.Done, "remote branch already gone")
-		default:
-			remote := remoteOf(row)
-			if _, err := gitIn(ctx, row.Store, "push", remote, "--delete", row.Branch); err != nil {
-				return fail("%v", err)
+	var hookNote string
+	if hooks := cfg.Cleanup.Hooks; len(hooks) > 0 {
+		if err := RequireTrust(row.Store, hooks); err != nil {
+			hookNote = "hooks not run: " + err.Error()
+		} else {
+			run := opts.RunHook
+			if run == nil {
+				run = runShellHook
 			}
-			it.Done = append(it.Done, "deleted remote branch "+remote+"/"+row.Branch)
+			env := []string{"SPECSYNC_WORKTREE=" + row.Worktree, "SPECSYNC_BRANCH=" + row.Branch, "SPECSYNC_CHANGE=" + row.Slug}
+			for _, h := range hooks {
+				if err := run(ctx, row.Worktree, h, env); err != nil {
+					return fail("hook %q: %v; the worktree and branch were left in place", h, err)
+				}
+				it.Done = append(it.Done, "ran hook: "+h)
+			}
 		}
 	}
 
 	if cfg.Cleanup.Archive && row.Slug != "" && row.Issue != nil && row.Issue.State == "closed" && opts.ArchiveChange != nil {
 		msg, err := opts.ArchiveChange(ctx, row)
 		if err != nil {
-			return fail("archive %s: %v", row.Slug, err)
+			return fail("archive %s: %v; the worktree and branch were left in place", row.Slug, err)
 		}
 		it.Done = append(it.Done, msg)
 	}
 
-	if len(cfg.Cleanup.Hooks) > 0 {
-		if !IsTrusted(row.Store) {
-			for _, h := range cfg.Cleanup.Hooks {
-				it.Done = append(it.Done, "hook not run, config not trusted (review it, then run specsync trust -yes): "+h)
-			}
-			return it
-		}
-		run := opts.RunHook
-		if run == nil {
-			run = runShellHook
-		}
-		env := []string{"SPECSYNC_WORKTREE=" + row.Worktree, "SPECSYNC_BRANCH=" + row.Branch, "SPECSYNC_CHANGE=" + row.Slug}
-		for _, h := range cfg.Cleanup.Hooks {
-			if err := run(ctx, row.Store, h, env); err != nil {
-				return fail("hook %q: %v", h, err)
-			}
-			it.Done = append(it.Done, "ran hook: "+h)
+	if _, err := gitIn(ctx, row.Store, "worktree", "remove", row.Worktree); err != nil {
+		return fail("%v", err)
+	}
+	it.Done = append(it.Done, "removed worktree "+row.Worktree)
+
+	if _, err := gitIn(ctx, row.Store, "branch", "-d", row.Branch); err != nil {
+		if _, err := gitIn(ctx, row.Store, "branch", "-D", row.Branch); err != nil {
+			return fail("%v", err)
 		}
 	}
+	it.Done = append(it.Done, "deleted local branch "+row.Branch)
+
+	if cfg.Cleanup.RemoteBranch == "delete" {
+		it.Done = append(it.Done, deleteRemoteBranch(ctx, row))
+	}
+	if hookNote != "" {
+		it.Done = append(it.Done, hookNote)
+	}
 	return it
+}
+
+// recheck re-runs the classification from fresh facts and returns the row as
+// it is now, or the reason it is no longer a candidate.
+func recheck(ctx context.Context, row ChangeTopology, opts CleanupOptions) (ChangeTopology, string) {
+	if row.Worktree == "" || row.Local == nil {
+		return row, "no worktree to check"
+	}
+	planned := row.Local.Head
+	ls, err := CollectLocalState(ctx, row.Worktree, LocalStateOptions{Base: row.Local.Base})
+	if err != nil {
+		return row, err.Error()
+	}
+	if ls.Head != planned {
+		return row, "the branch moved since planning"
+	}
+	row.Local = ls
+	if opts.Overview.SessionsCmd != "" && !opts.Overview.Topology.LocalOnly {
+		if entries, err := LoadSessions(ctx, opts.Overview.SessionsCmd, opts.Overview.SessionsTimeout); err == nil {
+			row.Sessions = nil
+			for _, e := range entries {
+				if filepath.IsAbs(e.CWD) && insideOrSame(e.CWD, row.Worktree) {
+					row.Sessions = append(row.Sessions, e)
+				}
+			}
+		}
+	}
+	it, ok := classifyCleanup(ctx, row, opts, time.Now())
+	if !ok {
+		return row, "it is no longer finished work"
+	}
+	if it.Status != CleanupCandidate {
+		return row, it.Reason
+	}
+	return row, ""
+}
+
+// deleteRemoteBranch deletes the branch on its remote only when the upstream
+// is the same remote and branch name and the remote tip, read now, is the head
+// being removed or the head the request merged with.
+func deleteRemoteBranch(ctx context.Context, row ChangeTopology) string {
+	ls := row.Local
+	keep := func(why string) string { return "kept remote branch: " + why }
+	if ls.UpstreamGone {
+		return "remote branch already gone"
+	}
+	remote := remoteOf(row)
+	if ls.Upstream != remote+"/"+row.Branch {
+		return keep("its upstream is " + orNone(ls.Upstream) + ", not a branch of the same name")
+	}
+	out, err := gitIn(ctx, row.Store, "ls-remote", remote, "refs/heads/"+row.Branch)
+	if err != nil {
+		return keep("could not read the remote tip: " + err.Error())
+	}
+	fields := strings.Fields(out)
+	if len(fields) == 0 {
+		return "remote branch already gone"
+	}
+	tip := fields[0]
+	if tip != ls.Head && (row.PR == nil || tip != row.PR.HeadSHA) {
+		return keep("the remote tip " + shortSHA(tip) + " is not the head being removed")
+	}
+	if _, err := gitIn(ctx, row.Store, "push", remote, "--delete", row.Branch); err != nil {
+		return keep(err.Error())
+	}
+	return "deleted remote branch " + remote + "/" + row.Branch
+}
+
+func orNone(s string) string {
+	if s == "" {
+		return "not set"
+	}
+	return s
+}
+
+func shortSHA(s string) string {
+	if len(s) > 8 {
+		return s[:8]
+	}
+	return s
 }
 
 func runShellHook(ctx context.Context, dir, command string, env []string) error {

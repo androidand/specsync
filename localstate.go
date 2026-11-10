@@ -280,6 +280,13 @@ func resolved(p string) string {
 	}
 }
 
+// insideOrSame reports whether child is parent or lies under it, after
+// resolving symlinks through the deepest existing ancestor of each.
+func insideOrSame(child, parent string) bool {
+	c, p := resolved(absPath(child)), resolved(absPath(parent))
+	return c == p || strings.HasPrefix(c, p+string(filepath.Separator))
+}
+
 // LocalAttention returns the attention flags that git facts alone decide.
 func LocalAttention(ls LocalState) []string { return RowAttention(&ls, nil) }
 

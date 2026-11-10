@@ -271,6 +271,13 @@ func (w *Ways) readSection(sec string, n *YNode, add addIssue) {
 	}
 }
 
+// TrustedCommands is every command the config can make specsync run: the
+// gates, including optional ones, then the cleanup hooks. Trusting a config
+// trusts all of them.
+func (w Ways) TrustedCommands() []string {
+	return append(w.GateCommands(true, nil), w.Cleanup.Hooks...)
+}
+
 // GateCommands returns the commands to run, in order. Optional gates are
 // included only when includeOptional is set or they are named in only.
 func (w Ways) GateCommands(includeOptional bool, only []string) []string {
