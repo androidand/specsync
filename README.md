@@ -137,6 +137,7 @@ appear on someone else's repository.
 | `spinoff` | Spin off emergent work from a discovery. |
 | `start` | Start or resume work on a change in its own worktree, the same way every time. |
 | `update` | Bring your branch up to date with its base or upstream: a plan first, then -apply. |
+| `workspace` | Workspace hooks: setup finds the change from the branch or Orca's linked issue and sets it active; archive sets it back to auto. |
 
 **Sync with the tracker.** Start with `specsync -dry-run -change <slug>`.
 
@@ -870,6 +871,34 @@ Retention policy resolves in order: `-retain` flag → `retain=` key in
 marker file, a `design.md`, or more than 5 tasks defaults to `move`;
 otherwise `prune`). Archiving refuses when tasks are unchecked unless
 `-force` is passed.
+
+### Working with Orca
+
+[Orca](https://www.onorca.dev) runs one agent per worktree and hands it the
+linked issue as its brief. With specsync that issue is the spec, so the two fit:
+Orca runs the workspaces, specsync keeps the plan and the issue in step. Add the
+hooks to your repo's `orca.yaml`:
+
+```yaml
+scripts:
+  setup: |
+    specsync workspace setup
+  archive: |
+    specsync workspace archive -sync
+```
+
+`workspace setup` finds the workspace's change from its branch, or from the
+issue Orca linked it to (`orca worktree current --json`). If that issue has no
+change yet, it pulls one, so a workspace started from the issue list becomes a
+change. It then sets the stage to `active`. `workspace archive` sets the stage
+back to `auto`, derived from the tasks, so an abandoned workspace doesn't leave
+the change stuck as active; it needs `-sync` to reach the tracker, because the
+stage is kept per checkout and Orca removes the worktree. A workspace that names
+no change is left alone and the hook exits 0. Both accept `-dry-run`.
+
+Let one tool move issue status. Orca's Linear status sync and specsync's stage
+projection (`-status-map` on a Projects board) both change it; turn on one, not
+both.
 
 ### `changelog` — a changelog generated from your specs, not your commits
 

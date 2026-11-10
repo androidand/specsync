@@ -38,6 +38,12 @@ specsync pull -issue N -worktree   # also creates/reuses a dedicated git worktre
 ```
 One issue, one branch, one worktree — don't stack unrelated changes on whatever branch is currently checked out. `-worktree` sets both up for the issue-first path; see `specsync agent-help` for the general convention (also applies spec-first, where you branch/worktree by hand: `git worktree add ../worktrees/<slug> -b feat/<n>-<slug>`).
 
+**Orca workspace hooks** (`orca.yaml` `scripts.setup` / `scripts.archive`):
+```bash
+specsync workspace setup            # change from branch or Orca's linked issue (pulled if new) → active
+specsync workspace archive -sync    # stage back to auto, projected to the tracker
+```
+
 **Bind an already-existing change to an already-existing issue:**
 ```bash
 specsync adopt -issue N [-change <slug>]
@@ -113,6 +119,7 @@ specsync agent-help                # overview
 - `spinoff` — Spin off emergent work from a discovery.
 - `start` — Start or resume work on a change in its own worktree, the same way every time.
 - `update` — Bring your branch up to date with its base or upstream: a plan first, then -apply.
+- `workspace` — Workspace hooks: setup finds the change from the branch or Orca's linked issue and sets it active; archive sets it back to auto.
 
 **Sync with the tracker** (start: `specsync -dry-run -change <slug>`)
 - `sync` — Synchronize an OpenSpec change with GitHub Issues.

@@ -72,3 +72,9 @@ var checkedOutBranchFn = func() string {
 	}
 	return strings.TrimSpace(out)
 }
+
+// CurrentBranches returns the checked-out branch ("" when detached) and the
+// remote default branch ("" when unknown).
+func CurrentBranches() (branch, defaultBranch string) {
+	return checkedOutBranchFn(), defaultBranchFn()
+}

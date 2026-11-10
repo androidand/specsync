@@ -44,7 +44,8 @@
     "update",
     "validate",
     "verify",
-    "version"
+    "version",
+    "workspace"
   ],
   "help": {
     "adopt": {
@@ -3272,6 +3273,74 @@
       ],
       "examples": [
         "specsync version"
+      ]
+    },
+    "workspace": {
+      "command": "workspace",
+      "description": "Workspace hooks: setup finds the change from the branch or Orca's linked issue and sets it active; archive sets it back to auto.",
+      "mutates": true,
+      "args": [
+        {
+          "name": "action",
+          "description": "setup or archive",
+          "required": true
+        }
+      ],
+      "workflow": {
+        "position": "implementation",
+        "related_before": [
+          "pull"
+        ],
+        "related_after": [
+          "sync"
+        ]
+      },
+      "flags": [
+        {
+          "name": "dry-run",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "report the change and what would be done without writing anything"
+        },
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "repo",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "repo as owner/name for reading the linked issue (default: auto-detect from git remote)"
+        },
+        {
+          "name": "store",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "registered OpenSpec store id to operate on (default: openspec/config.yaml `store:`, else ./openspec)"
+        },
+        {
+          "name": "sync",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "sync the change to the tracker after updating its stage"
+        }
+      ],
+      "safety_rules": [
+        "Meant for orca.yaml scripts.setup / scripts.archive; exits 0 and writes nothing when the workspace names no change",
+        "setup pulls the linked issue into a new change only when no local change is linked to it",
+        "Never syncs the tracker unless -sync is passed; use -sync on archive, since the stage is kept per checkout and Orca removes the worktree"
+      ],
+      "examples": [
+        "specsync workspace setup -dry-run",
+        "specsync workspace setup",
+        "specsync workspace archive -sync"
       ]
     }
   }
