@@ -147,6 +147,7 @@ func fakeOpenspecStores(t *testing.T, id, loc string) (home string) {
 func TestDefaultStoreFromEnvAndConfig(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv(DefaultStoreEnv, "")
 	if got := DefaultStore(); got != "" {
 		t.Fatalf("nothing configured, got %q", got)
