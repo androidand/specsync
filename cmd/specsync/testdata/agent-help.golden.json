@@ -969,6 +969,20 @@
           "description": "folders to look in, separated by the path list separator (default: $SPECSYNC_ROOTS, else the folder holding the current clone)"
         },
         {
+          "name": "sessions-cmd",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "command that prints a JSON array of agent sessions (cwd, id, name, status, updatedAt, resume) to show how to resume each piece of work; default $SPECSYNC_SESSIONS_CMD; an empty value disables it for this run. Taken only from here or the environment, never from a repository file"
+        },
+        {
+          "name": "sessions-timeout",
+          "type": "string",
+          "required": false,
+          "default": "5s",
+          "description": "how long to wait for the session provider"
+        },
+        {
           "name": "stage",
           "type": "string",
           "required": false,
@@ -1600,6 +1614,20 @@
           "required": false,
           "default": "openspec",
           "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "sessions-cmd",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "command that prints a JSON array of agent sessions (cwd, id, name, status, updatedAt, resume) to show how to resume each piece of work; default $SPECSYNC_SESSIONS_CMD; an empty value disables it for this run. Taken only from here or the environment, never from a repository file"
+        },
+        {
+          "name": "sessions-timeout",
+          "type": "string",
+          "required": false,
+          "default": "5s",
+          "description": "how long to wait for the session provider"
         },
         {
           "name": "state",
