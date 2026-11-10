@@ -2,9 +2,9 @@
 
 ## 1. Grammar and validation
 
-- [ ] 1.1 Parse `## Slice <n>: <title>` blocks and the `after`, `budget`, `contract` lines; attribute tasks to slices
-- [ ] 1.2 Keep tasks.md without slice headings byte-identical in behaviour
-- [ ] 1.3 Validate contiguity, `after` targets, acyclicity, orphan tasks and missing contracts in `validate` and `audit`
+- [x] 1.1 Parse `## Slice <n>: <title>` blocks and the `after`, `budget`, `contract` lines; attribute tasks to slices
+- [x] 1.2 Keep tasks.md without slice headings byte-identical in behaviour
+- [x] 1.3 Validate contiguity, `after` targets, acyclicity, orphan tasks and missing contracts in `validate` and `audit` (`validate`; `audit` compares archived changes with pull requests and has no structure checks to extend)
 
 ## 2. Commands
 
@@ -20,10 +20,10 @@
 
 ## 4. Tests
 
-- [ ] 4.1 Grammar fixtures: valid plan, missing contract, cycle, orphan task, no slices
+- [x] 4.1 Grammar fixtures: valid plan, missing contract, cycle, orphan task, no slices
 - [ ] 4.2 `slice start` in a fixture repo: stacked and unstacked, binding recorded
 - [ ] 4.3 Projection with a mocked provider, with and without hierarchy support
-- [ ] 4.4 Property: specsync never emits a slice that the author did not declare
+- [x] 4.4 Property: specsync never emits a slice that the author did not declare
 
 ## 5. Docs
 

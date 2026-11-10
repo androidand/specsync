@@ -78,6 +78,14 @@ func validateChange(dir, slug string, archived bool, result *ValidateResult) {
 		})
 	}
 
+	if !archived {
+		if md, err := os.ReadFile(tasksPath); err == nil {
+			for _, msg := range ParseSlices(string(md)).Validate() {
+				result.Issues = append(result.Issues, ValidateIssue{Slug: slug, Field: "tasks.md", Error: msg})
+			}
+		}
+	}
+
 	// Validate .specsync/metadata.json if present.
 	metaPath := filepath.Join(dir, ".specsync", "metadata.json")
 	data, err := os.ReadFile(metaPath)
