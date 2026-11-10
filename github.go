@@ -451,6 +451,9 @@ func (p *GitHubProvider) Push(ctx context.Context, item WorkItem, existing *Ref)
 		ref.BaseClosed = boolPtr(true)
 		return ref, p.close(ctx, num, item)
 
+	case item.Closed && currentlyClosed && (item.CloseComment != "" || (item.CloseReason != "" && item.CloseReason != CloseReasonCompleted)):
+		return ref, fmt.Errorf("issue #%s is already closed, so the close reason and comment cannot be recorded; reopen it (gh issue reopen %s) and archive again", num, num)
+
 	case !item.Closed && currentlyClosed:
 		// Three-way merge on open/closed state, mirroring the board's human-move
 		// detection. specsync may only undo a close it made itself: with a base of
@@ -635,17 +638,13 @@ func (p *GitHubProvider) ListRecentMergedPRs(ctx context.Context) ([]PRState, er
 // SupportsCloseReason reports that GitHub closes with a reason.
 func (p *GitHubProvider) SupportsCloseReason() bool { return true }
 
-// close posts the optional comment first, so a failed comment leaves the
-// issue open, then closes with the item's reason.
+// close closes the issue with the item's reason and optional comment in one
+// call, so a failure posts nothing and a retry cannot duplicate the comment.
 func (p *GitHubProvider) close(ctx context.Context, num string, item WorkItem) error {
-	if item.CloseComment != "" {
-		cargs := append([]string{"issue", "comment", num}, p.repoFlag()...)
-		cargs = append(cargs, "--body", item.CloseComment)
-		if _, err := p.run(ctx, cargs...); err != nil {
-			return fmt.Errorf("post closing comment: %w", err)
-		}
-	}
 	args := append([]string{"issue", "close", num}, p.repoFlag()...)
+	if item.CloseComment != "" {
+		args = append(args, "--comment", item.CloseComment)
+	}
 	switch item.CloseReason {
 	case CloseReasonNotPlanned:
 		args = append(args, "--reason", "not planned")

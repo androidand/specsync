@@ -29,11 +29,10 @@ func (r *reasonRunner) run(_ context.Context, args ...string) (string, error) {
 			state = "CLOSED"
 		}
 		return `{"number":7,"state":"` + state + `","labels":[]}`, nil
-	case args[0] == "issue" && args[1] == "comment":
-		if r.failComment {
-			return "", fmt.Errorf("gh: comment failed")
-		}
 	case args[0] == "issue" && args[1] == "close":
+		if r.failComment {
+			return "", fmt.Errorf("gh: close failed")
+		}
 		r.closed = true
 	}
 	return "", nil
@@ -77,7 +76,7 @@ func TestGitHubCloseMapsReasonToFlags(t *testing.T) {
 	}
 }
 
-func TestCloseCommentIsPostedBeforeTheClose(t *testing.T) {
+func TestCloseCommentIsPartOfTheCloseCall(t *testing.T) {
 	root := reasonChange(t, "idea", "- [x] done\n")
 	r := &reasonRunner{slug: "idea"}
 	_, err := Sync(context.Background(), Options{OpenSpecDir: root, Provider: NewGitHubProviderFuncWithRepo("acme/app", r.run), Slug: "idea",
@@ -85,20 +84,12 @@ func TestCloseCommentIsPostedBeforeTheClose(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ci, xi := -1, -1
-	for i, c := range r.calls {
-		if len(c) > 1 && c[0] == "issue" && c[1] == "comment" {
-			ci = i
-			if !strings.Contains(strings.Join(c, " "), "superseded by the registry work") {
-				t.Fatalf("comment call = %v", c)
-			}
-		}
-		if len(c) > 1 && c[0] == "issue" && c[1] == "close" {
-			xi = i
-		}
+	if findCall(r.calls, "issue", "comment") != nil {
+		t.Fatalf("the comment must not be a separate call, or a failed close would leave it behind: %v", r.calls)
 	}
-	if ci < 0 || xi < 0 || ci > xi {
-		t.Fatalf("comment must come before close; calls: %v", r.calls)
+	close := strings.Join(r.closeCall(), " ")
+	if !strings.Contains(close, "--comment superseded by the registry work") || !strings.Contains(close, "--reason not planned") {
+		t.Fatalf("close call = %q", close)
 	}
 }
 
@@ -107,14 +98,14 @@ func TestCloseCommentFailureLeavesTheIssueOpen(t *testing.T) {
 	r := &reasonRunner{slug: "idea", failComment: true}
 	_, err := Archive(context.Background(), ArchiveOptions{OpenSpecDir: root, Slug: "idea", Provider: NewGitHubProviderFuncWithRepo("acme/app", r.run),
 		Retain: RetentionPolicyMove, Reason: CloseReasonNotPlanned, Comment: "why"})
-	if err == nil || !strings.Contains(err.Error(), "closing comment") {
-		t.Fatalf("archive must report the failed comment, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "close failed") {
+		t.Fatalf("archive must report the failed close, got %v", err)
 	}
 	if _, statErr := os.Stat(filepath.Join(root, "changes", "idea")); statErr != nil {
 		t.Fatalf("the change must stay in place when the close failed: %v", statErr)
 	}
-	if r.closeCall() != nil || r.closed {
-		t.Fatalf("the issue must stay open when the comment cannot be posted; calls: %v", r.calls)
+	if r.closed {
+		t.Fatalf("the issue must stay open when the close fails; calls: %v", r.calls)
 	}
 }
 
@@ -167,7 +158,7 @@ func TestArchiveReasonValidationWritesNothing(t *testing.T) {
 		{"duplicate-of needs duplicate", ArchiveOptions{Reason: CloseReasonNotPlanned, DuplicateOf: "5"}, "-duplicate-of"},
 		{"duplicate-of with default reason", ArchiveOptions{DuplicateOf: "5"}, "-duplicate-of"},
 		{"unknown reason", ArchiveOptions{Reason: "wontfix"}, "wontfix"},
-		{"bad original", ArchiveOptions{Reason: CloseReasonDuplicate, DuplicateOf: "not a ref"}, "issue number or URL"},
+		{"bad original", ArchiveOptions{Reason: CloseReasonDuplicate, DuplicateOf: "not a ref"}, "issue number or an issue URL"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -210,5 +201,33 @@ func TestArchiveNotesWhenTheProviderHasNoCloseReasons(t *testing.T) {
 	}
 	if !strings.Contains(strings.Join(res.Plan, "\n"), "no close reasons") {
 		t.Fatalf("plan should note the provider closes as completed: %v", res.Plan)
+	}
+}
+
+func TestValidateCloseReasonNormalisesCaseAndSeparators(t *testing.T) {
+	for _, in := range []string{"Not Planned", "not_planned", " NOT-PLANNED "} {
+		got, _, err := ValidateCloseReason(in, "")
+		if err != nil || got != CloseReasonNotPlanned {
+			t.Fatalf("%q -> %q, %v", in, got, err)
+		}
+	}
+	if _, _, err := ValidateCloseReason(CloseReasonDuplicate, "https://example.com/docs"); err == nil {
+		t.Fatal("a URL that is not an issue must be rejected")
+	}
+	if _, d, err := ValidateCloseReason(CloseReasonDuplicate, "https://github.com/acme/app/issues/5"); err != nil || d == "" {
+		t.Fatalf("issue URL: %q %v", d, err)
+	}
+}
+
+func TestArchiveWithReasonRefusesAnAlreadyClosedIssue(t *testing.T) {
+	root := reasonChange(t, "idea", "- [ ] todo\n")
+	r := &reasonRunner{slug: "idea", closed: true}
+	_, err := Archive(context.Background(), ArchiveOptions{OpenSpecDir: root, Slug: "idea", Provider: NewGitHubProviderFuncWithRepo("acme/app", r.run),
+		Retain: RetentionPolicyMove, Reason: CloseReasonNotPlanned})
+	if err == nil || !strings.Contains(err.Error(), "already closed") {
+		t.Fatalf("a reason cannot be recorded on a closed issue silently, got %v", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(root, "changes", "idea")); statErr != nil {
+		t.Fatalf("the change must stay in place: %v", statErr)
 	}
 }

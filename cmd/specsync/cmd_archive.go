@@ -39,7 +39,7 @@ func (*archiveCmd) Spec() Spec {
 		Safety: []string{
 			"Use -dry-run to preview before archiving",
 			"Refuses unchecked-task changes unless -force is set, except with -reason not-planned or duplicate",
-			"-reason duplicate needs -duplicate-of; -comment is posted before the close and, if it fails, the issue stays open",
+			"-reason duplicate needs -duplicate-of; -comment is posted in the same call as the close, so if the close fails nothing is posted; a reason or comment cannot be recorded on an issue that is already closed",
 		},
 		Examples: []string{
 			"specsync archive -change my-change -dry-run",
@@ -59,7 +59,7 @@ func (cm *archiveCmd) Flags(fs *flag.FlagSet) {
 	cm.dryRun = fs.Bool("dry-run", false, "print the plan without making changes")
 	cm.reason = fs.String("reason", "completed", "why the issue closes: completed, not-planned or duplicate (the last two need no -force)")
 	cm.duplicateOf = fs.String("duplicate-of", "", "original issue number or URL, required with -reason duplicate")
-	cm.comment = fs.String("comment", "", "closing comment, posted before the close")
+	cm.comment = fs.String("comment", "", "closing comment, posted with the close")
 }
 
 func (cm *archiveCmd) Run(_ context.Context, args []string) error {

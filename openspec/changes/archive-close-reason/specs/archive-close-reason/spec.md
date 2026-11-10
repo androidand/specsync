@@ -27,3 +27,10 @@ close the issue with that reason through the provider.
 #### Scenario: Comment fails
 - **WHEN** the provider cannot post the comment
 - **THEN** the issue stays open and `archive` reports the error
+
+### Requirement: Closed issues are not silently skipped
+When the issue is already closed and a reason other than completed, or a comment, was given, the archive SHALL fail instead of reporting success.
+
+#### Scenario: Already closed
+- **WHEN** `archive -reason not-planned` runs against an issue that is already closed
+- **THEN** the archive fails, names the issue, and the change stays in place

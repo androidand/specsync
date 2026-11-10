@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -83,7 +84,7 @@ func Archive(ctx context.Context, opts ArchiveOptions) (*ArchiveResult, error) {
 		}
 		plan = append(plan, line)
 		if cr, ok := opts.Provider.(CloseReasoner); !ok || !cr.SupportsCloseReason() {
-			plan = append(plan, "  note: this provider has no close reasons; the issue closes as completed")
+			plan = append(plan, "  note: this provider has no close reasons or closing comments; the issue closes as completed and -comment is not posted")
 		}
 	}
 	if opts.DryRun {
@@ -326,6 +327,7 @@ func confirmClosedAndPrune(ctx context.Context, provider WorkProvider, ref Ref) 
 // defaults to completed, duplicate needs an original, and only duplicate may
 // name one. The original may be an issue number (with or without #) or a URL.
 func ValidateCloseReason(reason, duplicateOf string) (string, string, error) {
+	reason = strings.ReplaceAll(strings.ReplaceAll(strings.ToLower(strings.TrimSpace(reason)), " ", "-"), "_", "-")
 	if reason == "" {
 		reason = CloseReasonCompleted
 	}
@@ -345,11 +347,13 @@ func ValidateCloseReason(reason, duplicateOf string) (string, string, error) {
 		return "", "", fmt.Errorf("archive: -reason duplicate needs -duplicate-of <issue number or URL>")
 	}
 	duplicateOf = strings.TrimPrefix(duplicateOf, "#")
-	if !isIssueNumber(duplicateOf) && !strings.HasPrefix(duplicateOf, "https://") && !strings.HasPrefix(duplicateOf, "http://") {
-		return "", "", fmt.Errorf("archive: -duplicate-of %q must be an issue number or URL", duplicateOf)
+	if !isIssueNumber(duplicateOf) && !issueURL.MatchString(duplicateOf) {
+		return "", "", fmt.Errorf("archive: -duplicate-of %q must be an issue number or an issue URL (https://github.com/<owner>/<repo>/issues/<n>)", duplicateOf)
 	}
 	return reason, duplicateOf, nil
 }
+
+var issueURL = regexp.MustCompile(`^https?://[^/\s]+/[^/\s]+/[^/\s]+/issues/[0-9]+/?$`)
 
 func isIssueNumber(s string) bool {
 	if s == "" {
