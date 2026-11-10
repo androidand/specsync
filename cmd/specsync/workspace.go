@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strconv"
+	"strings"
 
 	"github.com/androidand/specsync"
 )
@@ -59,8 +60,17 @@ func (cm *workspaceCmd) Flags(fs *flag.FlagSet) {
 }
 
 func (cm *workspaceCmd) Run(_ context.Context, args []string) error {
-	if len(args) == 0 || (args[0] != "setup" && args[0] != "archive") {
-		return fmt.Errorf("usage: specsync workspace setup|archive [flags]")
+	usage := fmt.Errorf("usage: specsync workspace setup|archive [flags]")
+	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
+		// Flags before the action: let -h print the flag usage, then
+		// insist on the action.
+		if err := flagSetFor(cm).Parse(args); err != nil {
+			return err
+		}
+		return usage
+	}
+	if args[0] != "setup" && args[0] != "archive" {
+		return usage
 	}
 	action := args[0]
 	fs := flagSetFor(cm)
