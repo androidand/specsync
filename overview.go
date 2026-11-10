@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 // OverviewScope narrows an overview. Fields combine: a row must satisfy all.
@@ -48,6 +49,10 @@ type OverviewOptions struct {
 	Topology  TopologyOptions
 	Scope     OverviewScope
 
+	// SessionsCmd is the caller's session provider command line; empty means none.
+	SessionsCmd     string
+	SessionsTimeout time.Duration
+
 	viewer func(ctx context.Context) (string, error)
 }
 
@@ -89,6 +94,12 @@ func CollectWorkRows(ctx context.Context, opts OverviewOptions) (*WorkRows, erro
 			out.RequestState = topo.RequestState
 		}
 	}
+	sessionsCmd := opts.SessionsCmd
+	if opts.Topology.LocalOnly && strings.TrimSpace(sessionsCmd) != "" {
+		out.Status = append(out.Status, SessionsSkippedOffline)
+		sessionsCmd = ""
+	}
+	out.Status = append(out.Status, ApplySessions(ctx, out.Rows, sessionsCmd, opts.SessionsTimeout, true)...)
 	out.Status = append(out.Status, BuildWorkGraph(out.Rows).Unresolved...)
 	out.Status = uniqueStrings(out.Status)
 	return out, nil

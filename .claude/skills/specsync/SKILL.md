@@ -54,7 +54,7 @@ specsync status                # current worktree: PR, checks, review, unpushed/
 specsync status -json          # same facts for agents; read `attention` and `sync`
 specsync status -everything    # every change; -state=off for local git facts only
 ```
-`attention` lists what needs a person; `sync` is advice (commands as text) that status never runs.
+`attention` lists what needs a person; `sync` is advice (commands as text) that status never runs. `resume` says how to pick the work up again (`cd <worktree>`, or an agent session when `-sessions-cmd` / `SPECSYNC_SESSIONS_CMD` names a provider) and `lastNote` is the last `specsync note`.
 
 **Find related work:**
 ```bash

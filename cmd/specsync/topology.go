@@ -23,6 +23,7 @@ type statusCmd struct {
 	everything       *bool
 	budget           *string
 	exclude          stringSlice
+	sessions         sessionFlags
 }
 
 func init() { Register(&statusCmd{}) }
@@ -53,6 +54,7 @@ func (cm *statusCmd) Flags(fs *flag.FlagSet) {
 	cm.everything = fs.Bool("everything", false, "list every change instead of the current work")
 	cm.budget = fs.String("budget", "", "advisory size budget for the size flags, e.g. files=15,lines=400,commits=30 (default: the change's budget line, then $SPECSYNC_BUDGET, then built-in limits)")
 	fs.Var(&cm.exclude, "exclude", "glob of paths left out of the size counts (repeatable), e.g. go.sum")
+	cm.sessions = addSessionFlags(fs)
 	cm.state = fs.String("state", "on", "on (default) reuses pull request data for up to a minute; fresh refetches it; off skips the tracker and pull request lookups: local git facts only, offline")
 }
 
@@ -97,6 +99,13 @@ func (cm *statusCmd) run(args []string) {
 	if err != nil {
 		fail(err)
 	}
+
+	sessionsCmd := cm.sessions.command(fs)
+	if *state == "off" && strings.TrimSpace(sessionsCmd) != "" {
+		topo.Status = append(topo.Status, specsync.SessionsSkippedOffline)
+		sessionsCmd = ""
+	}
+	topo.Status = append(topo.Status, specsync.ApplySessions(ctx, topo.Changes, sessionsCmd, *cm.sessions.timeout, false)...)
 
 	var related *specsync.RelatedWork
 	if current && len(topo.Changes) == 1 && hasRelations(topo.Changes[0]) {
@@ -213,6 +222,12 @@ func printTopologyTable(topo specsync.Topology) {
 				repo = "-"
 			}
 			fmt.Printf("%-32s %-11s %-27s %-11s %-41s %s\n", c.Slug, c.Stage, repo, issue, branch, worktree)
+			if len(c.Sessions) > 0 {
+				fmt.Printf("    ↳ resume: %s\n", c.Resume)
+			}
+			if c.LastNote != "" {
+				fmt.Printf("    ↳ note: %s\n", c.LastNote)
+			}
 			if len(c.Attention) > 0 {
 				parts := make([]string, len(c.Attention))
 				for i, f := range c.Attention {
@@ -313,6 +328,31 @@ func printCurrentStatus(row specsync.ChangeTopology, requestsKnown bool) {
 		printFreshness(l, "         ")
 	}
 	printSync(row.Sync, "", "           ")
+	printResume(row, "")
+}
+
+// printResume prints how to pick the work up again: the resume hint, the
+// sessions the provider reported, and the last note on the change.
+func printResume(row specsync.ChangeTopology, lead string) {
+	if row.Resume != "" {
+		fmt.Printf("%sresume:  %s\n", lead, row.Resume)
+	}
+	for _, s := range row.Sessions {
+		line := orDash(s.Name)
+		if s.Name == "" {
+			line = orDash(s.ID)
+		}
+		if s.Status != "" {
+			line += " (" + s.Status + ")"
+		}
+		if s.UpdatedAt != "" {
+			line += " " + s.UpdatedAt
+		}
+		fmt.Printf("%ssession: %s\n", lead, line)
+	}
+	if row.LastNote != "" {
+		fmt.Printf("%snote:    %s\n", lead, row.LastNote)
+	}
 }
 
 // attentionDetail adds the count a flag stands for, when it has one.

@@ -501,6 +501,12 @@ specsync overview -repo api -epic #1     # scopes combine
 specsync overview -mine -json            # for agents
 ```
 
+Each row also says how to resume it: `resume` is `cd <worktree>`, or the agent
+session reported by an optional provider (`-sessions-cmd` or `SPECSYNC_SESSIONS_CMD`,
+a command that prints JSON; taken only from the flag or environment, never from a
+repository file; see [docs/sessions-provider.md](docs/sessions-provider.md)), and the
+last `specsync note` on the change is shown with it.
+
 Relations come only from what is asserted: an epic link confirmed by the tracker,
 `## Blocked by` / `## Blocks` in `links.md`, and the request that closes an issue,
 which also names a change's branch when its name follows no convention. Both

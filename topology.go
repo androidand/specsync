@@ -58,6 +58,12 @@ type ChangeTopology struct {
 	dir string
 	// PR is the change request on the row's branch, from the work provider.
 	PR *ChangeRequest `json:"pr,omitempty"`
+	// LastNote is the last line of the change's discoveries.md.
+	LastNote string `json:"lastNote,omitempty"`
+	// Sessions are the provider's sessions whose cwd is inside Worktree, most
+	// recent first. Resume is how to pick the work up again.
+	Sessions []SessionEntry `json:"sessions,omitempty"`
+	Resume   string         `json:"resume,omitempty"`
 }
 
 // TaskCount is how many checklist items are done of the total.
@@ -412,6 +418,7 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 			Store: l.store.path,
 			dir:   c.Dir,
 		}
+		row.LastNote = LastNote(c.Dir)
 		if total, done := CountCheckboxes(c.TasksMarkdown); total > 0 {
 			row.Tasks = &TaskCount{Done: done, Total: total}
 		}

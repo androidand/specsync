@@ -17,6 +17,7 @@ type overviewCmd struct {
 	mine, attention, unattached, asJSON *bool
 	budget                              *string
 	exclude                             stringSlice
+	sessions                            sessionFlags
 }
 
 func init() { Register(&overviewCmd{}) }
@@ -54,6 +55,7 @@ func (cm *overviewCmd) Flags(fs *flag.FlagSet) {
 	cm.asJSON = fs.Bool("json", false, "output as JSON")
 	cm.budget = fs.String("budget", "", "advisory size budget for the size flags, e.g. files=15,lines=400,commits=30 (default: each change's budget line, then $SPECSYNC_BUDGET, then built-in limits)")
 	fs.Var(&cm.exclude, "exclude", "glob of paths left out of the size counts (repeatable)")
+	cm.sessions = addSessionFlags(fs)
 }
 
 func (cm *overviewCmd) Run(_ context.Context, args []string) error {
@@ -83,6 +85,8 @@ func (cm *overviewCmd) Run(_ context.Context, args []string) error {
 			Budget:          *cm.budget,
 			Exclude:         cm.exclude,
 		},
+		SessionsCmd:     cm.sessions.command(fs),
+		SessionsTimeout: *cm.sessions.timeout,
 		Scope: specsync.OverviewScope{
 			Epic: *cm.epic, Repo: *cm.repo, Stage: *cm.stage,
 			Mine: *cm.mine, Attention: *cm.attention, Unattached: *cm.unattached,
@@ -179,5 +183,11 @@ func printWorkRow(r specsync.ChangeTopology, indent, mark string) {
 			parts[i] = attentionDetail(f, r)
 		}
 		fmt.Println(sub + "attention: " + strings.Join(parts, ", "))
+	}
+	if r.Resume != "" {
+		fmt.Println(sub + "resume: " + r.Resume)
+	}
+	if r.LastNote != "" {
+		fmt.Println(sub + "note: " + r.LastNote)
 	}
 }
