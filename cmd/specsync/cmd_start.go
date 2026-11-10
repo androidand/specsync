@@ -53,7 +53,23 @@ func (cm *startCmd) Flags(fs *flag.FlagSet) {
 	cm.sessions = addSessionFlags(fs)
 }
 
-var issueRefNumber = regexp.MustCompile(`(?:#|/issues/)?(\d+)$`)
+var issueRefForms = []*regexp.Regexp{
+	regexp.MustCompile(`^#?(\d+)$`),
+	regexp.MustCompile(`^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+#(\d+)$`),
+	regexp.MustCompile(`^https?://[^/\s]+/[^/\s]+/[^/\s]+/issues/(\d+)/?$`),
+}
+
+// issueNumberOf returns the issue number a ref names, or "" when it is not one
+// of the issue forms: a bare number, #N, owner/repo#N or an /issues/N URL. A
+// slug that merely ends in digits is not an issue.
+func issueNumberOf(ref string) string {
+	for _, re := range issueRefForms {
+		if m := re.FindStringSubmatch(ref); m != nil {
+			return m[1]
+		}
+	}
+	return ""
+}
 
 func (cm *startCmd) Run(ctx context.Context, args []string) error {
 	fs := flagSetFor(cm)
@@ -124,8 +140,8 @@ func resolveStartRef(changes []specsync.Change, ref string) (*specsync.Change, s
 			return &changes[i], issueOf(changes[i])
 		}
 	}
-	m := issueRefNumber.FindStringSubmatch(ref)
-	if m == nil {
+	number := issueNumberOf(ref)
+	if number == "" {
 		return nil, ""
 	}
 	for i := range changes {
@@ -134,8 +150,8 @@ func resolveStartRef(changes []specsync.Change, ref string) (*specsync.Change, s
 		}
 		if refs, err := specsync.LoadRefs(changes[i].Dir); err == nil {
 			for _, r := range refs {
-				if r.ID == m[1] {
-					return &changes[i], m[1]
+				if r.ID == number {
+					return &changes[i], number
 				}
 			}
 		}

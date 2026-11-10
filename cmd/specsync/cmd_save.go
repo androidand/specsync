@@ -23,7 +23,7 @@ type saveFlags struct {
 	dryRun, asJSON      *bool
 }
 
-func (sf *saveFlags) define(fs *flag.FlagSet) {
+func (sf *saveFlags) define(fs *flag.FlagSet, withSync bool) {
 	sf.openspec, sf.storeFlag = addRootFlags(fs)
 	sf.message = fs.String("m", "", "commit message (required)")
 	sf.change = fs.String("change", "", "the change this work belongs to (default: found from the branch name)")
@@ -31,8 +31,11 @@ func (sf *saveFlags) define(fs *flag.FlagSet) {
 	fs.Var(&sf.add, "add", "an untracked file to include (repeatable); untracked files are never included otherwise")
 	sf.push = fs.Bool("push", false, "push the branch after committing (never forces)")
 	sf.pushToRequest = fs.Bool("push-to-request", false, "allow pushing a branch that has an open pull request")
-	sf.syncSpec = fs.Bool("sync", false, "after committing, preview then sync the change to its tracker issue (specsync -change <slug>); a change with no issue yet gets one only with -yes")
-	sf.yes = fs.Bool("yes", false, "with -sync, allow creating a new tracker issue for a change that has none")
+	sf.syncSpec, sf.yes = new(bool), new(bool)
+	if withSync {
+		sf.syncSpec = fs.Bool("sync", false, "after committing, preview then sync the change to its tracker issue (specsync -change <slug>); a change with no issue yet gets one only with -yes")
+		sf.yes = fs.Bool("yes", false, "with -sync, allow creating a new tracker issue for a change that has none")
+	}
 	sf.dryRun = fs.Bool("dry-run", false, "show what would be committed and pushed and change nothing")
 	sf.asJSON = fs.Bool("json", false, "output as JSON")
 }
@@ -167,7 +170,7 @@ func (*saveCmd) Spec() Spec {
 	}
 }
 
-func (cm *saveCmd) Flags(fs *flag.FlagSet) { cm.define(fs) }
+func (cm *saveCmd) Flags(fs *flag.FlagSet) { cm.define(fs, true) }
 
 func (cm *saveCmd) Run(ctx context.Context, args []string) error {
 	fs := flagSetFor(cm)
@@ -281,7 +284,7 @@ func (*parkCmd) Spec() Spec {
 }
 
 func (cm *parkCmd) Flags(fs *flag.FlagSet) {
-	cm.define(fs)
+	cm.define(fs, false)
 	cm.stage = fs.String("stage", "backlog", "the stage to set on the change")
 }
 
@@ -311,6 +314,10 @@ func (cm *parkCmd) Run(ctx context.Context, args []string) error {
 	if change == nil {
 		return fmt.Errorf("park could not tell which change this branch belongs to; pass -change <slug>")
 	}
+	noteLine := "- parked: " + strings.TrimSpace(*cm.message) + "\n"
+	if specsync.ScanSecrets(noteLine) {
+		return fmt.Errorf("the message (and so the note) contains what looks like a key or token; nothing was written")
+	}
 	opts := specsync.SaveOptions{Dir: cwd, Message: "park: " + *cm.message, Ways: ways, Push: *cm.push,
 		PushToRequest: *cm.pushToRequest, OpenRequest: openRequestFor(""), DryRun: true, Add: cm.add, Allow: cm.allow}
 	if _, err := specsync.Save(ctx, opts); err != nil && !strings.Contains(err.Error(), "nothing to commit") {
@@ -320,41 +327,86 @@ func (cm *parkCmd) Run(ctx context.Context, args []string) error {
 		fmt.Printf("DRY RUN — would set %s to %s, note %q, then save\n", change.Slug, *cm.stage, *cm.message)
 		return nil
 	}
-	meta := changeMetadata(change)
-	s := specsync.Stage(*cm.stage)
-	meta.Stage = &s
-	if err := specsync.SaveChangeMetadata(change.Dir, meta); err != nil {
+	top, err := exec.CommandContext(ctx, "git", "-C", cwd, "rev-parse", "--show-toplevel").Output()
+	if err != nil {
 		return err
 	}
+	topDir := strings.TrimSpace(string(top))
+	metaPath := filepath.Join(change.Dir, ".specsync", "metadata.json")
 	notePath := filepath.Join(change.Dir, "discoveries.md")
+	restore := snapshotFiles(metaPath, notePath)
+
+	meta := changeMetadata(change)
+	st := specsync.Stage(*cm.stage)
+	meta.Stage = &st
 	existing, _ := os.ReadFile(notePath)
 	text := strings.TrimSpace(string(existing))
 	if text != "" {
 		text += "\n"
 	}
-	if err := os.WriteFile(notePath, []byte(text+"- parked: "+strings.TrimSpace(*cm.message)+"\n"), 0o644); err != nil {
+	if err := specsync.SaveChangeMetadata(change.Dir, meta); err != nil {
+		restore()
 		return err
 	}
-	fmt.Printf("specsync: %s set to %s, note recorded\n", change.Slug, *cm.stage)
-	for _, written := range []string{filepath.Join(change.Dir, ".specsync", "metadata.json"), notePath} {
-		rel, err := filepath.Rel(cwd, written)
+	if err := os.WriteFile(notePath, []byte(text+noteLine), 0o644); err != nil {
+		restore()
+		return err
+	}
+	for _, written := range []string{metaPath, notePath} {
+		rel, err := filepath.Rel(resolvedPath(topDir), resolvedPath(written))
 		if err != nil || strings.HasPrefix(rel, "..") {
 			continue
 		}
-		tracked := exec.Command("git", "-C", cwd, "ls-files", "--error-unmatch", "--", rel).Run() == nil
-		ignored := exec.Command("git", "-C", cwd, "check-ignore", "-q", "--", rel).Run() == nil
+		tracked := exec.Command("git", "-C", topDir, "ls-files", "--error-unmatch", "--", rel).Run() == nil
+		ignored := exec.Command("git", "-C", topDir, "check-ignore", "-q", "--", rel).Run() == nil
 		if !tracked && !ignored {
-			opts.Add = append(opts.Add, rel)
+			opts.AddFromTop = append(opts.AddFromTop, filepath.ToSlash(rel))
 		}
 	}
 	opts.DryRun = false
 	res, err := specsync.Save(ctx, opts)
-	if err != nil && strings.Contains(err.Error(), "nothing to commit") {
-		fmt.Println("specsync: nothing to commit (the spec folder is not tracked here)")
-		return nil
+	if err != nil && !res.Committed {
+		if strings.Contains(err.Error(), "nothing to commit") {
+			fmt.Printf("specsync: %s set to %s, note recorded (nothing to commit: the spec folder is not tracked here)\n", change.Slug, *cm.stage)
+			return nil
+		}
+		restore()
+		return err
 	}
+	fmt.Printf("specsync: %s set to %s, note recorded\n", change.Slug, *cm.stage)
 	if res.Committed {
 		printSave(res, false, false, *cm.push)
 	}
 	return err
+}
+
+// snapshotFiles records the current content of each file (or that it did not
+// exist) and returns a function that puts them back.
+func snapshotFiles(paths ...string) func() {
+	type snap struct {
+		path   string
+		data   []byte
+		exists bool
+	}
+	var snaps []snap
+	for _, p := range paths {
+		d, err := os.ReadFile(p)
+		snaps = append(snaps, snap{p, d, err == nil})
+	}
+	return func() {
+		for _, s := range snaps {
+			if s.exists {
+				_ = os.WriteFile(s.path, s.data, 0o644)
+			} else {
+				_ = os.Remove(s.path)
+			}
+		}
+	}
+}
+
+func resolvedPath(p string) string {
+	if r, err := filepath.EvalSymlinks(p); err == nil {
+		return r
+	}
+	return p
 }

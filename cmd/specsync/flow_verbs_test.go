@@ -640,7 +640,7 @@ func TestSaveSyncRunsADryRunFirstAndCreatesANewIssueOnlyWithYes(t *testing.T) {
 
 func TestSaveParkAndGatesFromASubdirectoryUseTheRepoConfig(t *testing.T) {
 	bin := buildSpecsyncBinary(t)
-	repo, env := waysRepo(t, "save:\n  forbid_trailers: [Co-Authored-By]\ngates:\n  - {name: g, run: \"touch ../gate-ran\"}\npr:\n  confirm: [tests-run]\n")
+	repo, env := waysRepo(t, "save:\n  forbid_trailers: [Co-Authored-By]\ngates:\n  - {name: g, run: \"touch gate-ran\"}\npr:\n  confirm: [tests-run]\n")
 	env = withIdentity(env)
 	os.MkdirAll(filepath.Join(repo, "sub"), 0o755)
 	commitAll(t, repo, "config")
@@ -675,7 +675,7 @@ func TestPrOpenFromASubdirectoryStillRequiresTheConfiguredConfirmations(t *testi
 	repo, env, ghLog := prRepo(t, "pr:\n  confirm: [tests-run]\n")
 	sub := filepath.Join(repo, "sub")
 	os.MkdirAll(sub, 0o755)
-	out, err := runIn(t, bin, sub, env, "pr", "open")
+	out, err := runIn(t, bin, sub, env, "pr", "open", "-confirm", "tasks")
 	if err == nil || !strings.Contains(out, "tests-run") {
 		t.Fatalf("err=%v\n%s", err, out)
 	}
@@ -830,4 +830,125 @@ func TestPrOpenBlocksWhenNoChangeCanBeFoundUnlessTasksIsAcknowledged(t *testing.
 		t.Fatalf("acknowledged: err=%v\n%s", err, out)
 	}
 	_ = ghLog
+}
+
+func TestPrBaseIsValidatedBeforeAnyGitCommandSeesIt(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env, ghLog := prRepo(t, "flow: minimal\n")
+	marker := filepath.Join(t.TempDir(), "pwned")
+	for _, base := range []string{"--upload-pack=touch " + marker, "bad name", "-x", "a..b"} {
+		out, err := runIn(t, bin, repo, env, "pr", "open", "-base="+base)
+		if err == nil || !strings.Contains(out, "base") {
+			t.Fatalf("%q must be rejected: err=%v\n%s", base, err, out)
+		}
+	}
+	if _, statErr := os.Stat(marker); statErr == nil {
+		t.Fatal("a base name must never reach git as an option")
+	}
+	if b, _ := os.ReadFile(ghLog); strings.Contains(string(b), "pr create") {
+		t.Fatal("nothing may be created")
+	}
+}
+
+func TestNewYesRefusesWhenTheDuplicateSearchFailedUnlessAnyway(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env := waysRepo(t, "flow: minimal\n")
+	failing := t.TempDir()
+	os.WriteFile(filepath.Join(failing, "gh"), []byte("#!/bin/sh\necho offline >&2\nexit 1\n"), 0o755)
+	env = append(env, "PATH="+failing+string(os.PathListSeparator)+os.Getenv("PATH"))
+	out, err := runIn(t, bin, repo, env, "new", "Brand new thing", "-yes")
+	if err == nil || !strings.Contains(out, "-anyway") || !strings.Contains(out, "duplicate") {
+		t.Fatalf("err=%v\n%s", err, out)
+	}
+	if _, statErr := os.Stat(filepath.Join(repo, "openspec", "changes", "brand-new-thing")); statErr == nil {
+		t.Fatal("a refused -yes must create nothing")
+	}
+	out, err = runIn(t, bin, repo, env, "new", "Brand new thing")
+	if err != nil || !strings.Contains(out, "created openspec/changes/brand-new-thing") {
+		t.Fatalf("without -yes the scaffold is fine: err=%v\n%s", err, out)
+	}
+}
+
+func TestStartIssueFormsAreExactAndASlugEndingInDigitsIsOnlyASlug(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env := startRepoCLI(t, "worktrees:\n  dir: ../wt\n")
+	other := filepath.Join(repo, "openspec", "changes", "add-retry-2")
+	os.MkdirAll(other, 0o755)
+	os.WriteFile(filepath.Join(other, "proposal.md"), []byte("# Add retry 2\n"), 0o644)
+	os.WriteFile(filepath.Join(other, "tasks.md"), []byte("- [ ] 1.1 a\n"), 0o644)
+	linked := filepath.Join(repo, "openspec", "changes", "add-x", ".specsync")
+	os.MkdirAll(linked, 0o755)
+	os.WriteFile(filepath.Join(linked, "refs.json"), []byte(`{"github":{"provider":"github","id":"2","url":"https://github.com/acme/app/issues/2"}}`), 0o644)
+	commitAll(t, repo, "more")
+	out, err := runIn(t, bin, repo, env, "start", "add-retry-2", "-dry-run")
+	if err != nil || !strings.Contains(out, "clone-add-retry-2") {
+		t.Fatalf("a slug ending in digits resolves as a slug: err=%v\n%s", err, out)
+	}
+	for _, ref := range []string{"2", "#2", "acme/app#2", "https://github.com/acme/app/issues/2"} {
+		out, err := runIn(t, bin, repo, env, "start", ref, "-dry-run")
+		if err != nil || !strings.Contains(out, "clone-add-x") {
+			t.Fatalf("%s should find the change linked to issue 2: err=%v\n%s", ref, err, out)
+		}
+	}
+	if out, err := runIn(t, bin, repo, env, "start", "some-slug-2", "-dry-run"); err == nil || !strings.Contains(out, "no change matches") {
+		t.Fatalf("a non-existent slug ending in digits must not be read as an issue: err=%v\n%s", err, out)
+	}
+}
+
+func TestParkWorksFromASubdirectoryAndCommitsItsFiles(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env, _ := parkRepo(t)
+	sub := filepath.Join(repo, "pkg")
+	os.MkdirAll(sub, 0o755)
+	out, err := runIn(t, bin, sub, env, "park", "-m", "from a subdirectory", "-change", "add-x", "-openspec", filepath.Join(repo, "openspec"))
+	if err != nil {
+		t.Fatalf("err=%v\n%s", err, out)
+	}
+	if st := gitStatus(t, repo); st != "?? pkg/" && st != "" {
+		t.Fatalf("park must commit the stage and note it wrote even from a subdirectory: %q", st)
+	}
+	show := exec.Command("git", "show", "--name-only", "--format=", "HEAD")
+	show.Dir = repo
+	b, _ := show.Output()
+	if !strings.Contains(string(b), "openspec/changes/add-x/discoveries.md") {
+		t.Fatalf("the note must be in the park commit:\n%s", b)
+	}
+}
+
+func TestParkRestoresBothFilesWhenTheFinalSaveFails(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env, change := parkRepo(t)
+	note := filepath.Join(change, "discoveries.md")
+	os.WriteFile(note, []byte("- earlier note\n"), 0o644)
+	commitAll(t, repo, "notes")
+	hook := filepath.Join(repo, ".git", "hooks", "pre-commit")
+	os.MkdirAll(filepath.Dir(hook), 0o755)
+	os.WriteFile(hook, []byte("#!/bin/sh\nexit 1\n"), 0o755)
+	out, err := runIn(t, bin, repo, env, "park", "-m", "pausing")
+	if err == nil {
+		t.Fatalf("the failing hook must fail park:\n%s", out)
+	}
+	if got := readFile(t, note); got != "- earlier note\n" {
+		t.Fatalf("the previous note must be restored, got %q", got)
+	}
+	if _, statErr := os.Stat(filepath.Join(change, ".specsync", "metadata.json")); statErr == nil {
+		t.Fatal("the stage file that did not exist before must be removed again")
+	}
+	if st := gitStatus(t, repo); st != "" {
+		t.Fatalf("park must leave the tree as it found it: %q", st)
+	}
+}
+
+func TestParkRejectsSyncAndYesInsteadOfIgnoringThem(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env, change := parkRepo(t)
+	for _, flag := range []string{"-sync", "-yes"} {
+		out, err := runIn(t, bin, repo, env, "park", "-m", "x", flag)
+		if err == nil || !strings.Contains(out, "not defined") {
+			t.Fatalf("%s: err=%v\n%s", flag, err, out)
+		}
+	}
+	if _, statErr := os.Stat(filepath.Join(change, "discoveries.md")); statErr == nil {
+		t.Fatal("nothing may be written on a bad flag")
+	}
 }

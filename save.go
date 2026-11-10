@@ -18,6 +18,9 @@ type SaveOptions struct {
 	// otherwise.
 	Add  []string
 	Ways Ways
+	// AddFromTop names untracked files relative to the repository root, for
+	// callers that wrote them themselves; like Add they must exist as files.
+	AddFromTop []string
 	// Allow names files, relative to Dir, whose scan result a reviewer has
 	// overridden. Each one is reported in SaveResult.Allowed.
 	Allow []string
@@ -262,6 +265,21 @@ func Save(ctx context.Context, o SaveOptions) (SaveResult, error) {
 		clean, err := checkAddPath(o.Dir, top, a)
 		if err != nil {
 			return res, err
+		}
+		adds = append(adds, clean)
+		if !seen[clean] {
+			seen[clean] = true
+			files = append(files, clean)
+		}
+	}
+	for _, a := range o.AddFromTop {
+		clean := filepath.ToSlash(filepath.Clean(a))
+		if filepath.IsAbs(a) || clean == ".." || strings.HasPrefix(clean, "../") {
+			return res, fmt.Errorf("%s is outside the repository", a)
+		}
+		info, err := os.Lstat(filepath.Join(top, filepath.FromSlash(clean)))
+		if err != nil || info.IsDir() {
+			return res, fmt.Errorf("%s is not a file in the repository", a)
 		}
 		adds = append(adds, clean)
 		if !seen[clean] {

@@ -80,6 +80,9 @@ func (cm *newCmd) Run(ctx context.Context, args []string) error {
 	dups := specsync.FindDuplicates(title, cands)
 	if searchErr != nil {
 		fmt.Fprintf(os.Stderr, "specsync: could not search open issues (%v); only local changes were compared\n", searchErr)
+		if *cm.yes && !*cm.anyway {
+			return fmt.Errorf("nothing created: the duplicate search failed, so -yes cannot tell whether this issue already exists; fix gh or pass -anyway to create it regardless")
+		}
 	}
 	if len(dups) > 0 {
 		fmt.Println("Likely duplicates:")

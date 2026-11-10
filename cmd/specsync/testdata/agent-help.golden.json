@@ -1544,20 +1544,6 @@
           "required": false,
           "default": "",
           "description": "registered OpenSpec store id to operate on (default: openspec/config.yaml `store:`, else ./openspec)"
-        },
-        {
-          "name": "sync",
-          "type": "boolean",
-          "required": false,
-          "default": false,
-          "description": "after committing, preview then sync the change to its tracker issue (specsync -change \u003cslug\u003e); a change with no issue yet gets one only with -yes"
-        },
-        {
-          "name": "yes",
-          "type": "boolean",
-          "required": false,
-          "default": false,
-          "description": "with -sync, allow creating a new tracker issue for a change that has none"
         }
       ],
       "safety_rules": [

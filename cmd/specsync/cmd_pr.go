@@ -79,10 +79,15 @@ func (cm *prCmd) Run(ctx context.Context, args []string) error {
 		return err
 	}
 	ways := loadWaysOrFail(configRoot(ctx, fs, cwd))
-	baseName := *cm.base
+	baseName := strings.TrimPrefix(*cm.base, "origin/")
 	if baseName == "" {
 		if b, err := specsync.DefaultBase(ctx, cwd); err == nil {
 			baseName = strings.TrimPrefix(b, "origin/")
+		}
+	}
+	if baseName != "" {
+		if err := validateBaseName(ctx, cwd, baseName); err != nil {
+			return err
 		}
 	}
 	baseRef := ""
@@ -90,7 +95,7 @@ func (cm *prCmd) Run(ctx context.Context, args []string) error {
 		baseRef = "origin/" + baseName
 	}
 	if verb == "open" && !*cm.dryRun && baseName != "" {
-		if out, err := exec.CommandContext(ctx, "git", "-C", cwd, "fetch", "--quiet", "origin", baseName).CombinedOutput(); err != nil {
+		if out, err := exec.CommandContext(ctx, "git", "-C", cwd, "fetch", "--quiet", "origin", "refs/heads/"+baseName+":refs/remotes/origin/"+baseName).CombinedOutput(); err != nil {
 			return fmt.Errorf("could not fetch origin/%s, so freshness and size cannot be trusted: %v: %s", baseName, err, strings.TrimSpace(string(out)))
 		}
 	}
@@ -240,4 +245,16 @@ func (cm *prCmd) titleAndBody(ctx context.Context, change *specsync.Change) (tit
 		return title, specsync.RenderPRBody(specsync.PRBodyInput{Change: *change, Template: tpl, Size: branchSizeLine(ctx, repoTop(repoRoot)), Text: ways.Text}), nil
 	}
 	return title, out.String(), nil
+}
+
+// validateBaseName refuses a base that is not a plain branch name, so it can
+// never be read as an option by git or gh.
+func validateBaseName(ctx context.Context, cwd, name string) error {
+	if name == "" || strings.HasPrefix(name, "-") {
+		return fmt.Errorf("the base %q is not a branch name", name)
+	}
+	if out, err := exec.CommandContext(ctx, "git", "-C", cwd, "check-ref-format", "--branch", name).CombinedOutput(); err != nil {
+		return fmt.Errorf("the base %q is not a valid branch name: %s", name, strings.TrimSpace(string(out)))
+	}
+	return nil
 }
