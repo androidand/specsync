@@ -468,6 +468,20 @@
       },
       "flags": [
         {
+          "name": "drift",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "list only changes whose issue state disagrees with the change (implies -issues) and exit 1 when there are any"
+        },
+        {
+          "name": "issues",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "show each change's issue and its state (one batched provider call) and flag drift: closed-unarchived, complete-open"
+        },
+        {
           "name": "json",
           "type": "boolean",
           "required": false,
@@ -504,12 +518,14 @@
         }
       ],
       "safety_rules": [
-        "Read-only operation"
+        "Read-only operation; only -issues (and -drift) call the provider"
       ],
       "examples": [
         "specsync changes",
         "specsync changes --stage backlog",
-        "specsync changes -json"
+        "specsync changes -json",
+        "specsync changes -issues",
+        "specsync changes -drift"
       ]
     },
     "doctor": {

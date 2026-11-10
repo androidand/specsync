@@ -739,9 +739,14 @@ func truncate(s string, maxLen int) string {
 	return s[:maxLen-1] + "…"
 }
 
-func printChangeTable(changes []specsync.Change) {
-	fmt.Println("STAGE          PRIORITY  TASKS       SLUG                          PROGRESS        TITLE")
-	fmt.Println("─────────────  ────────  ─────────  ────────────────────────────  ──────────────  ────────────────────────────────────────────────────────────")
+func printChangeTable(changes []specsync.Change, issues map[string]issueInfo) {
+	if issues == nil {
+		fmt.Println("STAGE          PRIORITY  TASKS       SLUG                          PROGRESS        TITLE")
+		fmt.Println("─────────────  ────────  ─────────  ────────────────────────────  ──────────────  ────────────────────────────────────────────────────────────")
+	} else {
+		fmt.Println("STAGE          PRIORITY  TASKS       SLUG                          PROGRESS        ISSUE   ISSUE STATE           DRIFT              TITLE")
+		fmt.Println("─────────────  ────────  ─────────  ────────────────────────────  ──────────────  ──────  ────────────────────  ─────────────────  ────────────────────────────────────────────────────────────")
+	}
 
 	prevStage := ""
 	for _, c := range changes {
@@ -764,7 +769,12 @@ func printChangeTable(changes []specsync.Change) {
 		}
 
 		title := truncate(c.Title, 60)
-		fmt.Printf("%-13s %-9s %-11s %-30s %-15s %s\n", c.Stage, priority, tasks, c.Slug, c.Progress, title)
+		if issues == nil {
+			fmt.Printf("%-13s %-9s %-11s %-30s %-15s %s\n", c.Stage, priority, tasks, c.Slug, c.Progress, title)
+			continue
+		}
+		info := issues[c.Slug]
+		fmt.Printf("%-13s %-9s %-11s %-30s %-15s %-7s %-21s %-18s %s\n", c.Stage, priority, tasks, c.Slug, c.Progress, info.number(), info.stateText(), info.Drift, title)
 	}
 }
 

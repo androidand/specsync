@@ -84,6 +84,11 @@ changelog entry as a real bug in this project, same severity as a failing test.
   (`links.md` locally, "## Related" in both issues). Use it instead of
   hand-editing issue bodies with `gh`.
 
+- Clean-up after issues were closed elsewhere: `specsync changes -drift` lists
+  changes whose issue is closed but not archived, or whose tasks are all checked
+  while the issue is open (it needs the local ref cache, so run it where the
+  changes were synced). Archive or close each by hand; nothing is automatic.
+
 ## Completion Rule
 
 - When work is complete, ensure tasks are checked, sync once more, and archive
