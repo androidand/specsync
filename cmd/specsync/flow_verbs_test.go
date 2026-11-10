@@ -445,3 +445,97 @@ func TestNewDryRunAndNoOpenspecCreateNothing(t *testing.T) {
 		t.Fatal("new must not create openspec/")
 	}
 }
+
+func parkRepo(t *testing.T) (repo string, env []string, change string) {
+	t.Helper()
+	repo, env = waysRepo(t, "flow: minimal\n")
+	env = withIdentity(env)
+	change = filepath.Join(repo, "openspec", "changes", "add-x")
+	os.MkdirAll(change, 0o755)
+	os.WriteFile(filepath.Join(change, "proposal.md"), []byte("# Add x\n"), 0o644)
+	os.WriteFile(filepath.Join(change, "tasks.md"), []byte("- [ ] 1.1 a\n"), 0o644)
+	gitIn(t, repo, "checkout", "-q", "-b", "feat/add-x")
+	commitAll(t, repo, "spec")
+	return repo, env, change
+}
+
+func TestParkNeverCommitsStrayUntrackedFilesInTheChangeFolder(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env, change := parkRepo(t)
+	os.WriteFile(filepath.Join(change, "notes.env"), []byte("TOKEN=abc\n"), 0o644)
+	out, err := runIn(t, bin, repo, env, "park", "-m", "pausing")
+	if err != nil {
+		t.Fatalf("err=%v\n%s", err, out)
+	}
+	if st := gitStatus(t, repo); st != "?? openspec/changes/add-x/notes.env" {
+		t.Fatalf("only the stray file may remain, untracked: %q", st)
+	}
+	show := exec.Command("git", "show", "--name-only", "--format=", "HEAD")
+	show.Dir = repo
+	b, _ := show.Output()
+	if strings.Contains(string(b), "notes.env") || !strings.Contains(string(b), "discoveries.md") {
+		t.Fatalf("park may commit only what it wrote:\n%s", b)
+	}
+}
+
+func TestParkRefusalChangesNothingOnDisk(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env, change := parkRepo(t)
+	os.WriteFile(filepath.Join(repo, ".env.local"), []byte("A=1\n"), 0o644)
+	out, err := runIn(t, bin, repo, env, "park", "-m", "pausing", "-add", ".env.local")
+	if err == nil || !strings.Contains(out, ".env.local") {
+		t.Fatalf("err=%v\n%s", err, out)
+	}
+	if _, statErr := os.Stat(filepath.Join(change, "discoveries.md")); statErr == nil {
+		t.Fatal("a refused park must not write the note")
+	}
+	if _, statErr := os.Stat(filepath.Join(change, ".specsync", "metadata.json")); statErr == nil {
+		t.Fatal("a refused park must not write the stage")
+	}
+}
+
+func TestPrOpenOversizedIsWaivedOnlyForARealOverBudgetResult(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env, ghLog := prRepo(t, "flow: minimal\n")
+	os.WriteFile(filepath.Join(repo, "y.txt"), []byte("y\n"), 0o644)
+	commitAll(t, repo, "more")
+	gitIn(t, repo, "push", "-q")
+	out, err := runIn(t, bin, repo, env, "pr", "open", "-budget", "commits=1")
+	if err == nil || !strings.Contains(out, "over budget") {
+		t.Fatalf("err=%v\n%s", err, out)
+	}
+	out, err = runIn(t, bin, repo, env, "pr", "open", "-budget", "commits=abc", "-confirm", "oversized")
+	if err == nil || !strings.Contains(out, "size") {
+		t.Fatalf("a budget error must not be waived: err=%v\n%s", err, out)
+	}
+	if b, _ := os.ReadFile(ghLog); strings.Contains(string(b), "pr create") {
+		t.Fatal("nothing may be created yet")
+	}
+	out, err = runIn(t, bin, repo, env, "pr", "open", "-budget", "commits=1", "-confirm", "oversized")
+	if err != nil || !strings.Contains(out, "pull/9") {
+		t.Fatalf("a real oversized result is waived by -confirm oversized: err=%v\n%s", err, out)
+	}
+}
+
+func TestPrFlagsWorkInAnyPosition(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env, ghLog := prRepo(t, "pr:\n  confirm: [tests-run]\n")
+	out, err := runIn(t, bin, repo, env, "pr", "-dry-run", "-confirm", "tests-run", "open")
+	if err != nil || !strings.Contains(out, "DRY RUN") {
+		t.Fatalf("flags before the verb: err=%v\n%s", err, out)
+	}
+	out, err = runIn(t, bin, repo, env, "pr", "open", "-confirm", "tests-run", "-dry-run")
+	if err != nil || !strings.Contains(out, "DRY RUN") {
+		t.Fatalf("flags after the verb: err=%v\n%s", err, out)
+	}
+	out, err = runIn(t, bin, repo, env, "pr", "prep", "-json")
+	if err != nil || !strings.Contains(out, `"passed"`) {
+		t.Fatalf("prep -json: err=%v\n%s", err, out)
+	}
+	if b, _ := os.ReadFile(ghLog); strings.Contains(string(b), "pr create") {
+		t.Fatal("dry runs create nothing")
+	}
+	if out, err := runIn(t, bin, repo, env, "pr", "open", "prep"); err == nil || !strings.Contains(out, "prep or open") {
+		t.Fatalf("two verbs are an error: err=%v\n%s", err, out)
+	}
+}

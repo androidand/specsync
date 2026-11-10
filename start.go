@@ -18,11 +18,14 @@ const (
 // StartOptions describes one `specsync start`.
 type StartOptions struct {
 	RepoDir string // any directory of the repository
-	Ways    Ways
-	Slug    string
-	Issue   string // issue number, "" when unknown
-	Type    string // branch type, default feat
-	Base    string // start point for a new branch, default origin/HEAD, else HEAD
+	// ConfigRoot is the directory whose openspec/specsync.yml Ways was read from;
+	// trust is checked against that file, not against another checkout's copy.
+	ConfigRoot string
+	Ways       Ways
+	Slug       string
+	Issue      string // issue number, "" when unknown
+	Type       string // branch type, default feat
+	Base       string // start point for a new branch, default origin/HEAD, else HEAD
 	// Sessions is what the session provider reported. SessionsChecked is false
 	// when no provider is configured; a provider that failed sets SessionsErr.
 	Sessions        []SessionEntry
@@ -115,7 +118,11 @@ func StartWork(ctx context.Context, o StartOptions) (StartResult, error) {
 	}
 
 	hooks := o.Ways.Worktrees.Hooks
-	if err := RequireTrust(root, hooks); err != nil {
+	configRoot := o.ConfigRoot
+	if configRoot == "" {
+		configRoot = root
+	}
+	if err := RequireTrust(configRoot, hooks); err != nil {
 		return res, err
 	}
 	if o.DryRun {

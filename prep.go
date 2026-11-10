@@ -17,6 +17,8 @@ type PrepOptions struct {
 	// line; ResolveBudget layers them with SPECSYNC_BUDGET.
 	BudgetFlag, BudgetLine string
 	Exclude                []string
+	// analyze measures the branch; nil means AnalyzeBranch.
+	analyze func(ctx context.Context, dir, base, head string, exclude []string) (*BranchSize, []string, error)
 }
 
 // PrepCheck is one readiness check. Status is pass, fail or skipped.
@@ -24,6 +26,9 @@ type PrepCheck struct {
 	Name   string `json:"name"`
 	Status string `json:"status"`
 	Detail string `json:"detail"`
+	// Waivable is true only for a real over-budget result, which the caller may
+	// acknowledge; analysis and configuration errors are never waivable.
+	Waivable bool `json:"waivable,omitempty"`
 }
 
 // PrepReport is the outcome of the checks. Passed is true when none failed.
@@ -45,6 +50,10 @@ func PreparePR(ctx context.Context, o PrepOptions) (PrepReport, error) {
 	rep.Head = head
 	add := func(name, status, detail string) {
 		rep.Checks = append(rep.Checks, PrepCheck{Name: name, Status: status, Detail: detail})
+	}
+	analyze := o.analyze
+	if analyze == nil {
+		analyze = AnalyzeBranch
 	}
 
 	if st, err := gitIn(ctx, o.Dir, "status", "--porcelain", "--untracked-files=normal"); err != nil {
@@ -71,6 +80,7 @@ func PreparePR(ctx context.Context, o PrepOptions) (PrepReport, error) {
 	}
 
 	var size *BranchSize
+	var sizeErr error
 	ls, err := CollectLocalState(ctx, o.Dir, LocalStateOptions{})
 	switch {
 	case err != nil:
@@ -95,17 +105,20 @@ func PreparePR(ctx context.Context, o PrepOptions) (PrepReport, error) {
 	}
 
 	if ls != nil && ls.Base != "" {
-		size, _, _ = AnalyzeBranch(ctx, o.Dir, ls.Base, "HEAD", o.Exclude)
+		size, _, sizeErr = analyze(ctx, o.Dir, ls.Base, "HEAD", o.Exclude)
 	}
 	budget, berr := ResolveBudget(o.BudgetFlag, o.BudgetLine, os.Getenv(BudgetEnv))
 	switch {
 	case berr != nil:
 		add("size", "fail", berr.Error())
+	case sizeErr != nil:
+		add("size", "fail", "could not measure: "+sizeErr.Error())
 	case size == nil:
 		add("size", "skipped", "no base branch to measure against")
 	default:
 		if over := budget.Exceeded(size); len(over) > 0 {
 			add("size", "fail", "over budget ("+strings.Join(over, ", ")+"): split it, see specsync slices")
+			rep.Checks[len(rep.Checks)-1].Waivable = true
 		} else {
 			add("size", "pass", fmt.Sprintf("%d files, +%d -%d, %d commits", size.Files, size.Additions, size.Deletions, size.Commits))
 		}

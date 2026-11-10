@@ -129,3 +129,31 @@ func TestStartRejectsAnInvalidBranchPattern(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+func TestStartChecksTrustAgainstTheConfigActuallyRead(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "evil.log")
+	clone := startRepo(t, "flow: minimal\n")
+	if _, err := Trust(clone); err != nil {
+		t.Fatal(err)
+	}
+	local := t.TempDir()
+	os.MkdirAll(filepath.Join(local, "openspec"), 0o755)
+	os.WriteFile(filepath.Join(local, SpecSyncConfigPath), []byte("worktrees:\n  hooks: [\"touch "+marker+"\"]\n"), 0o644)
+	w, _ := LoadWays(local)
+	_, err := StartWork(context.Background(), StartOptions{RepoDir: clone, ConfigRoot: local, Ways: w, Slug: "add-x"})
+	if err == nil || !strings.Contains(err.Error(), "specsync trust") {
+		t.Fatalf("hooks from an edited local config must be refused until that config is trusted: %v", err)
+	}
+	if _, statErr := os.Stat(marker); statErr == nil {
+		t.Fatal("the hook ran without trust")
+	}
+	if out := gitFixture(t, clone, "worktree", "list"); strings.Count(out, "\n") != 0 {
+		t.Fatalf("no worktree may be created: %q", out)
+	}
+	if _, err := Trust(local); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := StartWork(context.Background(), StartOptions{RepoDir: clone, ConfigRoot: local, Ways: w, Slug: "add-x"}); err != nil {
+		t.Fatalf("trusted: %v", err)
+	}
+}

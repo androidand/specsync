@@ -66,20 +66,14 @@ func (cm *prCmd) Flags(fs *flag.FlagSet) {
 }
 
 func (cm *prCmd) Run(ctx context.Context, args []string) error {
-	if len(args) > 0 && strings.HasPrefix(args[0], "-") {
-		if err := flagSetFor(cm).Parse(args); err != nil {
-			return err
-		}
-	}
-	if len(args) == 0 || (args[0] != "prep" && args[0] != "open") {
-		return fmt.Errorf("usage: specsync pr prep or open (prep or open)")
-	}
-	verb := args[0]
 	fs := flagSetFor(cm)
-	if err := fs.Parse(args[1:]); err != nil {
+	if err := fs.Parse(reorderKnownFlags(fs, args)); err != nil {
 		return err
 	}
-	checkArgs(fs, args[1:], 0)
+	if fs.NArg() != 1 || (fs.Arg(0) != "prep" && fs.Arg(0) != "open") {
+		return fmt.Errorf("usage: specsync pr prep or open (prep or open)")
+	}
+	verb := fs.Arg(0)
 	cwd, err := os.Getwd()
 	if err != nil {
 		return err
@@ -133,7 +127,7 @@ func (cm *prCmd) open(ctx context.Context, cwd string, ways specsync.Ways, chang
 		if c.Status != "fail" {
 			continue
 		}
-		if c.Name == "size" && slices.Contains(cm.confirm, "oversized") {
+		if c.Waivable && slices.Contains(cm.confirm, "oversized") {
 			continue
 		}
 		blocked = append(blocked, c.Name+": "+c.Detail)

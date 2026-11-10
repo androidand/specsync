@@ -2,6 +2,7 @@ package specsync
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -99,5 +100,32 @@ func TestPrepSizeOverBudgetFailsAndNoGatesOrChangeAreSkipped(t *testing.T) {
 	}
 	if checkOf(rep, "gates").Status != "skipped" || checkOf(rep, "tasks").Status != "skipped" {
 		t.Fatalf("no gates and no change are skipped, not failed: %+v", rep)
+	}
+}
+
+func TestPrepAFailedSizeAnalysisIsAFailedCheckNotASkip(t *testing.T) {
+	clone, _ := repoWithOrigin(t)
+	commitFile(t, clone, "x.txt", "x")
+	rep := prepFor(t, clone, PrepOptions{analyze: func(context.Context, string, string, string, []string) (*BranchSize, []string, error) {
+		return nil, nil, errors.New("git exploded")
+	}})
+	c := checkOf(rep, "size")
+	if c.Status != "fail" || !strings.Contains(c.Detail, "could not measure") || !strings.Contains(c.Detail, "git exploded") || c.Waivable {
+		t.Fatalf("%+v", c)
+	}
+	if rep.Passed {
+		t.Fatal("an unmeasurable branch is not ready")
+	}
+}
+
+func TestPrepOnlyARealOverBudgetResultIsWaivable(t *testing.T) {
+	clone, _ := repoWithOrigin(t)
+	commitFile(t, clone, "1.txt", "1")
+	commitFile(t, clone, "2.txt", "2")
+	if c := checkOf(prepFor(t, clone, PrepOptions{BudgetFlag: "commits=1"}), "size"); c.Status != "fail" || !c.Waivable {
+		t.Fatalf("over budget is waivable: %+v", c)
+	}
+	if c := checkOf(prepFor(t, clone, PrepOptions{BudgetFlag: "commits=abc"}), "size"); c.Status != "fail" || c.Waivable {
+		t.Fatalf("a budget that does not parse is never waivable: %+v", c)
 	}
 }

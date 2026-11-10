@@ -247,12 +247,15 @@ func (cm *parkCmd) Run(ctx context.Context, args []string) error {
 		return err
 	}
 	fmt.Printf("specsync: %s set to %s, note recorded\n", change.Slug, *cm.stage)
-	if rel, err := filepath.Rel(cwd, change.Dir); err == nil && !strings.HasPrefix(rel, "..") {
-		out, _ := exec.Command("git", "-C", cwd, "ls-files", "--others", "--exclude-standard", "-z", "--", rel).Output()
-		for _, f := range strings.Split(string(out), "\x00") {
-			if f != "" {
-				opts.Add = append(opts.Add, f)
-			}
+	for _, written := range []string{filepath.Join(change.Dir, ".specsync", "metadata.json"), notePath} {
+		rel, err := filepath.Rel(cwd, written)
+		if err != nil || strings.HasPrefix(rel, "..") {
+			continue
+		}
+		tracked := exec.Command("git", "-C", cwd, "ls-files", "--error-unmatch", "--", rel).Run() == nil
+		ignored := exec.Command("git", "-C", cwd, "check-ignore", "-q", "--", rel).Run() == nil
+		if !tracked && !ignored {
+			opts.Add = append(opts.Add, rel)
 		}
 	}
 	opts.DryRun = false

@@ -78,7 +78,7 @@ func (cm *startCmd) Run(ctx context.Context, args []string) error {
 	repoRoot := textRepoRoot(&root)
 	ways := loadWaysOrFail(repoRoot)
 	cwd, _ := os.Getwd()
-	opts := specsync.StartOptions{RepoDir: cwd, Ways: ways, Slug: change.Slug, Issue: issue, Type: *cm.typ, Base: *cm.base, DryRun: *cm.dryRun}
+	opts := specsync.StartOptions{RepoDir: cwd, ConfigRoot: repoRoot, Ways: ways, Slug: change.Slug, Issue: issue, Type: *cm.typ, Base: *cm.base, DryRun: *cm.dryRun}
 	if cmdline := cm.sessions.command(fs); cmdline != "" {
 		opts.SessionsChecked = true
 		opts.Sessions, opts.SessionsErr = specsync.LoadSessions(ctx, cmdline, *cm.sessions.timeout)
