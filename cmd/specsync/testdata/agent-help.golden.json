@@ -18,6 +18,7 @@
     "install-skill",
     "link",
     "lint",
+    "new",
     "next",
     "note",
     "overview",
@@ -35,6 +36,7 @@
     "slice",
     "slices",
     "spinoff",
+    "start",
     "status",
     "sync",
     "trace",
@@ -1165,6 +1167,79 @@
         "specsync lint -title 'fix(sync): keep links out of sections' -fail",
         "specsync lint -pr 42 -fail",
         "specsync lint -body-file body.md"
+      ]
+    },
+    "new": {
+      "command": "new",
+      "description": "Create a change from a short template, after showing likely duplicates; the issue is created only on -yes.",
+      "mutates": true,
+      "args": [
+        {
+          "name": "title",
+          "description": "what the change delivers, as one short sentence",
+          "required": true
+        }
+      ],
+      "workflow": {
+        "position": "issue-first-start",
+        "related_after": [
+          "start",
+          "pull"
+        ]
+      },
+      "flags": [
+        {
+          "name": "anyway",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "create the change even though likely duplicates were found"
+        },
+        {
+          "name": "dry-run",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "show the duplicates and the text and create nothing"
+        },
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "repo",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "repository to search for duplicate issues as owner/name (default: the current repository)"
+        },
+        {
+          "name": "store",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "registered OpenSpec store id to operate on (default: openspec/config.yaml `store:`, else ./openspec)"
+        },
+        {
+          "name": "yes",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "after showing the text, create the tracker issue (specsync -change \u003cslug\u003e)"
+        }
+      ],
+      "safety_rules": [
+        "Searches local changes and open issues for the title's key words first and stops when it finds likely duplicates, unless -anyway is given",
+        "Writes only openspec/changes/\u003cslug\u003e/ (proposal and tasks); it never creates the openspec folder: run specsync init first in a repo with none",
+        "Creates nothing in the tracker until you have seen the text and pass -yes; -dry-run creates nothing at all"
+      ],
+      "examples": [
+        "specsync new 'Show a clean summary in status' -dry-run",
+        "specsync new 'Show a clean summary in status'",
+        "specsync new 'Show a clean summary in status' -yes"
       ]
     },
     "next": {
@@ -2461,6 +2536,98 @@
       "examples": [
         "specsync spinoff -from my-change -task 3",
         "specsync spinoff -from my-change -text 'Found edge case in X'"
+      ]
+    },
+    "start": {
+      "command": "start",
+      "description": "Start or resume work on a change in its own worktree, the same way every time.",
+      "mutates": true,
+      "args": [
+        {
+          "name": "ref",
+          "description": "a change slug, or the number or URL of an issue the change is linked to",
+          "required": true
+        }
+      ],
+      "workflow": {
+        "position": "issue-first-start",
+        "related_before": [
+          "pull",
+          "new"
+        ],
+        "related_after": [
+          "next",
+          "save"
+        ]
+      },
+      "flags": [
+        {
+          "name": "base",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "start point for a new branch (default: the repository's default branch)"
+        },
+        {
+          "name": "dry-run",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "show the worktree and branch and create nothing"
+        },
+        {
+          "name": "json",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "output as JSON"
+        },
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "sessions-cmd",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "command that prints a JSON array of agent sessions (cwd, id, name, status, updatedAt, resume) to show how to resume each piece of work; default $SPECSYNC_SESSIONS_CMD; an empty value disables it for this run; it does not run with -state=off. Taken only from here or the environment, never from a repository file"
+        },
+        {
+          "name": "sessions-timeout",
+          "type": "string",
+          "required": false,
+          "default": "5s",
+          "description": "how long to wait for the session provider"
+        },
+        {
+          "name": "store",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "registered OpenSpec store id to operate on (default: openspec/config.yaml `store:`, else ./openspec)"
+        },
+        {
+          "name": "type",
+          "type": "string",
+          "required": false,
+          "default": "feat",
+          "description": "branch type for the {type} placeholder"
+        }
+      ],
+      "safety_rules": [
+        "Reuses the change's worktree when it exists and creates nothing; otherwise creates one from the worktrees: directory and branch pattern in openspec/specsync.yml",
+        "Start hooks run only in a newly created worktree, and only after `specsync trust -yes`",
+        "Refuses when the session provider reports a live session in the worktree, or cannot be asked while one is configured",
+        "Records the branch-to-change link in the repository's git config; -dry-run changes nothing"
+      ],
+      "examples": [
+        "specsync start add-retry -dry-run",
+        "specsync start add-retry",
+        "specsync start 42"
       ]
     },
     "status": {

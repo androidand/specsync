@@ -101,6 +101,7 @@ specsync agent-help                # overview
 - `idea` — Capture a free-text idea as a stage:intake issue.
 - `init` — Create a scratch openspec/ here and keep it out of git.
 - `link` — Cross-link two or more OpenSpec changes.
+- `new` — Create a change from a short template, after showing likely duplicates; the issue is created only on -yes.
 - `note` — Append a discovery line to a change's discoveries.md.
 - `park` — Stop work so another session can resume: save, set the stage and leave a note.
 - `pull` — Pull an issue into a local OpenSpec change.
@@ -110,6 +111,7 @@ specsync agent-help                # overview
 - `slice` — Start a slice: create its branch and worktree, stacked on the previous slice.
 - `slices` — List a change's slices with progress, order, budget and state.
 - `spinoff` — Spin off emergent work from a discovery.
+- `start` — Start or resume work on a change in its own worktree, the same way every time.
 - `update` — Bring your branch up to date with its base or upstream: a plan first, then -apply.
 
 **Sync with the tracker** (start: `specsync -dry-run -change <slug>`)

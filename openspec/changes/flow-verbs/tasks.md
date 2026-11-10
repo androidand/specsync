@@ -15,11 +15,11 @@ Depends on `ways-of-working-and-next` slices 0 and 1 for config. Slice 4 also ne
 - contract: Start creates or resumes the same worktree the same way every time. New never creates without confirmation.
 - budget: files<=15, lines<=500
 
-- [ ] 2.1 `specsync start <ref>`: resolve, resume or create from config, run hooks, record the branch link
-- [ ] 2.2 Refuse when a session provider reports a live session
-- [ ] 2.3 `specsync new <title>` with the short template and a duplicate check
-- [ ] 2.4 Build on `pull -worktree` instead of duplicating it
-- [ ] 2.5 Tests: existing worktree, new worktree, hooks, refusal, duplicate shown
+- [x] 2.1 `specsync start <ref>`: resolve, resume or create from config, run hooks, record the branch link (a ref must resolve to a local change; pulling an unknown issue stays with `pull`)
+- [x] 2.2 Refuse when a session provider reports a live session
+- [x] 2.3 `specsync new <title>` with the short template and a duplicate check
+- [ ] 2.4 Build on `pull -worktree` instead of duplicating it (start shares its worktree listing and base helpers; `pull -worktree` keeps its own fixed layout and is not yet config-driven)
+- [x] 2.5 Tests: existing worktree, new worktree, hooks, refusal, duplicate shown
 
 ## Slice 3: Save and park
 - after: 1
@@ -54,6 +54,6 @@ Depends on `ways-of-working-and-next` slices 0 and 1 for config. Slice 4 also ne
 - after: 2, 3, 4, 5
 - contract: Every verb is declared once and documented from that declaration.
 
-- [ ] 6.1 Declare each verb as a `Command` type; docs are generated
-- [ ] 6.2 Short migration guide for people moving from a personal script
-- [ ] 6.3 Update `site/features.json`; run `specsync changelog -fail-on-unlinked-commits`
+- [x] 6.1 Declare each verb as a `Command` type; docs are generated
+- [x] 6.2 Short migration guide for people moving from a personal script
+- [x] 6.3 Update `site/features.json`; run `specsync changelog -fail-on-unlinked-commits`

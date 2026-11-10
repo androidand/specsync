@@ -66,6 +66,11 @@ func (cm *prCmd) Flags(fs *flag.FlagSet) {
 }
 
 func (cm *prCmd) Run(ctx context.Context, args []string) error {
+	if len(args) > 0 && strings.HasPrefix(args[0], "-") {
+		if err := flagSetFor(cm).Parse(args); err != nil {
+			return err
+		}
+	}
 	if len(args) == 0 || (args[0] != "prep" && args[0] != "open") {
 		return fmt.Errorf("usage: specsync pr prep or open (prep or open)")
 	}

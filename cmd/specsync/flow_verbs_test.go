@@ -339,3 +339,109 @@ func TestPrNeedsAKnownVerb(t *testing.T) {
 		t.Fatalf("err=%v\n%s", err, out)
 	}
 }
+
+func startRepoCLI(t *testing.T, cfg string) (repo string, env []string) {
+	t.Helper()
+	root := t.TempDir()
+	origin := filepath.Join(root, "origin.git")
+	gitIn(t, root, "init", "-q", "--bare", "-b", "main", origin)
+	repo = filepath.Join(root, "clone")
+	gitIn(t, root, "clone", "-q", origin, repo)
+	_, env = firstUseEnv(t)
+	env = withIdentity(env)
+	env = append(env, "SPECSYNC_TRUST_FILE="+filepath.Join(t.TempDir(), "trust.json"))
+	gitIn(t, repo, "checkout", "-q", "-b", "main")
+	os.MkdirAll(filepath.Join(repo, "openspec", "changes", "add-x"), 0o755)
+	os.WriteFile(filepath.Join(repo, "openspec", "specsync.yml"), []byte(cfg), 0o644)
+	os.WriteFile(filepath.Join(repo, "openspec", "changes", "add-x", "proposal.md"), []byte("# Add x\n"), 0o644)
+	os.WriteFile(filepath.Join(repo, "openspec", "changes", "add-x", "tasks.md"), []byte("- [ ] 1.1 a\n"), 0o644)
+	commitAll(t, repo, "base")
+	gitIn(t, repo, "push", "-q", "-u", "origin", "main")
+	gitIn(t, repo, "remote", "set-head", "origin", "main")
+	return repo, env
+}
+
+func TestStartCreatesThenReusesAndDryRunCreatesNothing(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env := startRepoCLI(t, "worktrees:\n  dir: ../wt\n")
+	out, err := runIn(t, bin, repo, env, "start", "add-x", "-dry-run")
+	if err != nil || !strings.Contains(out, "DRY RUN") {
+		t.Fatalf("err=%v\n%s", err, out)
+	}
+	if _, statErr := os.Stat(filepath.Join(filepath.Dir(repo), "wt")); statErr == nil {
+		t.Fatal("a dry run must create nothing")
+	}
+	out, err = runIn(t, bin, repo, env, "start", "add-x")
+	if err != nil || !strings.Contains(out, "created") || !strings.Contains(out, "feat/add-x") {
+		t.Fatalf("err=%v\n%s", err, out)
+	}
+	out, err = runIn(t, bin, repo, env, "start", "add-x")
+	if err != nil || !strings.Contains(out, "already has a worktree") {
+		t.Fatalf("err=%v\n%s", err, out)
+	}
+	if out, err := runIn(t, bin, repo, env, "start", "nope"); err == nil || !strings.Contains(out, "no change matches") {
+		t.Fatalf("err=%v\n%s", err, out)
+	}
+}
+
+func TestStartRefusesALiveSessionFromTheProvider(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env := startRepoCLI(t, "worktrees:\n  dir: ../wt\n")
+	if out, err := runIn(t, bin, repo, env, "start", "add-x"); err != nil {
+		t.Fatalf("start: %v\n%s", err, out)
+	}
+	wt := filepath.Join(filepath.Dir(repo), "wt", "clone-add-x")
+	env = append(env, `SPECSYNC_SESSIONS_CMD=printf '[{"cwd":"`+wt+`","id":"s-9","name":"mid-task"}]'`)
+	out, err := runIn(t, bin, repo, env, "start", "add-x")
+	if err == nil || !strings.Contains(out, "s-9") {
+		t.Fatalf("err=%v\n%s", err, out)
+	}
+}
+
+func newEnv(t *testing.T, issues string) (repo string, env []string) {
+	t.Helper()
+	repo, env = waysRepo(t, "flow: minimal\n")
+	bin := t.TempDir()
+	stub := "#!/bin/sh\ncase \"$1 $2\" in\n  \"issue list\") echo '" + issues + "' ;;\n  *) echo '[]' ;;\nesac\n"
+	os.WriteFile(filepath.Join(bin, "gh"), []byte(stub), 0o755)
+	return repo, append(env, "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+func TestNewShowsDuplicatesFirstAndCreatesNothingUnlessAnyway(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env := newEnv(t, `[{"number":12,"title":"Retry the sync of issues","url":"https://github.com/acme/app/issues/12"}]`)
+	out, err := runIn(t, bin, repo, env, "new", "Add a retry to the sync of issues")
+	if err == nil || !strings.Contains(out, "#12") || !strings.Contains(out, "nothing created") {
+		t.Fatalf("err=%v\n%s", err, out)
+	}
+	if _, statErr := os.Stat(filepath.Join(repo, "openspec", "changes", "add-a-retry-to-the-sync-of-issues")); statErr == nil {
+		t.Fatal("nothing may be created when duplicates are shown")
+	}
+	out, err = runIn(t, bin, repo, env, "new", "Add a retry to the sync of issues", "-anyway")
+	if err != nil || !strings.Contains(out, "issue was not created") || !strings.Contains(out, "## Why") {
+		t.Fatalf("err=%v\n%s", err, out)
+	}
+	if _, statErr := os.Stat(filepath.Join(repo, "openspec", "changes", "add-a-retry-to-the-sync-of-issues", "proposal.md")); statErr != nil {
+		t.Fatal("the change must exist locally")
+	}
+}
+
+func TestNewDryRunAndNoOpenspecCreateNothing(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env := newEnv(t, `[]`)
+	out, err := runIn(t, bin, repo, env, "new", "Brand new thing", "-dry-run")
+	if err != nil || !strings.Contains(out, "DRY RUN") {
+		t.Fatalf("err=%v\n%s", err, out)
+	}
+	if _, statErr := os.Stat(filepath.Join(repo, "openspec", "changes", "brand-new-thing")); statErr == nil {
+		t.Fatal("dry run created a change")
+	}
+	bare, benv := firstUseEnv(t)
+	out, err = runIn(t, bin, bare, benv, "new", "Brand new thing")
+	if err == nil || !strings.Contains(out, "specsync init") {
+		t.Fatalf("a repo with no openspec/ must be pointed at init: err=%v\n%s", err, out)
+	}
+	if _, statErr := os.Stat(filepath.Join(bare, "openspec")); statErr == nil {
+		t.Fatal("new must not create openspec/")
+	}
+}
