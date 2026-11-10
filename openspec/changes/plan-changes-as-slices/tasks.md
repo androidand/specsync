@@ -10,7 +10,7 @@
 
 - [x] 2.1 `specsync slices [-change] [-json]` with progress, order, budget and derived state via the status join
 - [x] 2.2 `specsync slice start <n>`: branch and worktree, stacked on the previous slice when `after` is set; record the binding
-- [ ] 2.3 Show a branch's slice in `status`, and use the slice budget as the threshold in the size advisory
+- [x] 2.3 Show a branch's slice in `status`, and use the slice budget as the threshold in the size advisory
 
 ## 3. Projection
 

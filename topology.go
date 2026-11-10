@@ -54,6 +54,8 @@ type ChangeTopology struct {
 	NoChange bool `json:"noChange,omitempty"`
 	// Tasks counts the change's checklist items.
 	Tasks *TaskCount `json:"tasks,omitempty"`
+	// Slice is the slice a `slice start` bound this row's branch to.
+	Slice *SliceRef `json:"slice,omitempty"`
 	// dir is the change folder, used to read its slice declarations.
 	dir string
 	// PR is the change request on the row's branch, from the work provider.
@@ -64,6 +66,37 @@ type ChangeTopology struct {
 	// recent first. Resume is how to pick the work up again.
 	Sessions []SessionEntry `json:"sessions,omitempty"`
 	Resume   string         `json:"resume,omitempty"`
+}
+
+// SliceRef names a slice of a change.
+type SliceRef struct {
+	N     int    `json:"n"`
+	Title string `json:"title"`
+}
+
+// sliceForBranch returns the slice whose recorded binding names branch. Only a
+// recorded binding counts; a branch name is never read for a slice number.
+func sliceForBranch(changeDir, branch string) *Slice {
+	if changeDir == "" || branch == "" {
+		return nil
+	}
+	bindings, err := LoadSliceBindings(changeDir)
+	if err != nil || len(bindings) == 0 {
+		return nil
+	}
+	md, err := os.ReadFile(filepath.Join(changeDir, "tasks.md"))
+	if err != nil {
+		return nil
+	}
+	plan := ParseSlices(string(md))
+	for n, b := range bindings {
+		if b.Branch == branch {
+			if s, ok := plan.Get(n); ok {
+				return &s
+			}
+		}
+	}
+	return nil
 }
 
 // TaskCount is how many checklist items are done of the total.
@@ -366,9 +399,16 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 		if cr != nil && cr.State == "open" && cr.Base != "" {
 			base = "origin/" + cr.Base
 		}
+		sliceLine := SliceBudgetLine(row.dir)
+		if s := sliceForBranch(row.dir, row.Branch); s != nil {
+			row.Slice = &SliceRef{N: s.N, Title: s.Title}
+			if s.Budget != "" {
+				sliceLine = s.Budget
+			}
+		}
 		var ls *LocalState
 		if row.Worktree != "" {
-			budget, err := ResolveBudget(opts.Budget, SliceBudgetLine(row.dir), os.Getenv(BudgetEnv))
+			budget, err := ResolveBudget(opts.Budget, sliceLine, os.Getenv(BudgetEnv))
 			if err != nil {
 				if !warnedBudget {
 					warnedBudget = true
