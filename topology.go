@@ -140,6 +140,9 @@ type storeEntry struct {
 // are recorded in Topology.Status instead. The CLI decides what a fully
 // empty result means (see cmd/specsync topology.go).
 func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error) {
+	if _, err := ResolveBudget(opts.Budget, "", os.Getenv(BudgetEnv)); err != nil {
+		return nil, fmt.Errorf("size budget: %w", err)
+	}
 	if opts.readCoordination == nil {
 		opts.readCoordination = ReadCoordination
 	}
@@ -338,6 +341,7 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 
 	// enrich adds everything that needs the row's branch and worktree: the
 	// request, local git state, attention flags and the sync suggestion.
+	warnedBudget := false
 	enrich := func(row *ChangeTopology) {
 		var cr *ChangeRequest
 		if row.Branch != "" {
@@ -356,8 +360,11 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 		if row.Worktree != "" {
 			budget, err := ResolveBudget(opts.Budget, SliceBudgetLine(row.dir), os.Getenv(BudgetEnv))
 			if err != nil {
-				addStatus("size budget ignored: %v", err)
-				budget = DefaultBudget
+				if !warnedBudget {
+					warnedBudget = true
+					addStatus("budget line of change %s ignored: %v", row.Slug, err)
+				}
+				budget, _ = ResolveBudget(opts.Budget, "", os.Getenv(BudgetEnv))
 			}
 			if got, err := opts.localState(ctx, row.Worktree, LocalStateOptions{Base: base, Budget: budget, Exclude: opts.Exclude}); err != nil {
 				addStatus("local state unavailable for %s: %v", rowLabel(*row), err)

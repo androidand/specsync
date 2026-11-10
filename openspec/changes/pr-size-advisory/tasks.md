@@ -6,7 +6,7 @@ Depends on `status-pr-and-worktree-state` for `local.size` and for the attention
 
 - [x] 1.1 Count files, changed lines and commits against the merge base, with `-exclude <glob>`
 - [x] 1.2 Parse conventional-commit scopes from commit subjects; collect distinct scopes
-- [x] 1.3 Resolve the budget: flag, slice line, `SPECSYNC_BUDGET`, defaults
+- [x] 1.3 Resolve the budget: flag, slice line, `SPECSYNC_BUDGET`, defaults; zero means no limit, malformed values are errors
 
 ## 2. Surface
 

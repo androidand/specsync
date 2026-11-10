@@ -23,6 +23,11 @@ func TestParseBudget(t *testing.T) {
 		{"files=x", Budget{}, true},
 		{"words=3", Budget{}, true},
 		{"files", Budget{}, true},
+		{"files<5", Budget{}, true},
+		{"files:5", Budget{}, true},
+		{"files<=", Budget{}, true},
+		{"files=1,files=2", Budget{}, true},
+		{"files=0", Budget{}, false},
 	}
 	for _, c := range cases {
 		got, err := ParseBudget(c.in)
@@ -40,6 +45,10 @@ func TestResolveBudgetPrecedence(t *testing.T) {
 	want := Budget{Files: 1, Lines: 20, Commits: 300}
 	if got != want {
 		t.Fatalf("flag, then slice, then env per key: got %+v, want %+v", got, want)
+	}
+	unlimited, err := ResolveBudget("files=0", "files<=2", "files=3")
+	if err != nil || unlimited.Files != 0 || unlimited.Lines != DefaultBudget.Lines {
+		t.Fatalf("0 must mean no limit and override lower layers: %+v, %v", unlimited, err)
 	}
 	def, err := ResolveBudget("", "", "")
 	if err != nil || def != DefaultBudget {
@@ -107,23 +116,44 @@ func TestAnalyzeBranchCountsAgainstTheBaseAndHonoursExclude(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if size.Files < 3 || size.Commits < 2 || size.Additions < 54 {
+	if *size != (BranchSize{Files: 3, Additions: 54, Commits: 2}) {
 		t.Fatalf("size = %+v", size)
 	}
 	if !reflect.DeepEqual(scopes, []string{"billing", "onboarding"}) {
 		t.Fatalf("scopes = %v", scopes)
 	}
+	for _, c := range []struct {
+		name    string
+		exclude []string
+		want    BranchSize
+	}{
+		{"file name", []string{"go.sum"}, BranchSize{Files: 2, Additions: 4, Commits: 2}},
+		{"glob", []string{"src/*.go"}, BranchSize{Files: 1, Additions: 50, Commits: 2}},
+		{"double star", []string{"**/a.go"}, BranchSize{Files: 2, Additions: 51, Commits: 2}},
+		{"trailing dir", []string{"src/"}, BranchSize{Files: 1, Additions: 50, Commits: 2}},
+		{"two globs", []string{"go.sum", "src/"}, BranchSize{Commits: 2}},
+	} {
+		got, _, err := AnalyzeBranch(context.Background(), clone, "origin/main", "HEAD", c.exclude)
+		if err != nil || *got != c.want {
+			t.Errorf("%s: got %+v, %v; want %+v", c.name, got, err, c.want)
+		}
+	}
+}
 
-	excluded, _, err := AnalyzeBranch(context.Background(), clone, "origin/main", "HEAD", []string{"go.sum"})
+func TestAnalyzeBranchMatchesRenamedAndNonASCIIPaths(t *testing.T) {
+	clone, _ := repoWithOrigin(t)
+	commitFiles(t, clone, "feat: seed", map[string]string{"old/name.txt": strings.Repeat("l\n", 12), "docs/é ü.md": "x\n"})
+	if err := os.MkdirAll(filepath.Join(clone, "new"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	gitFixture(t, clone, "mv", "old/name.txt", "new/name.txt")
+	gitFixture(t, clone, "commit", "-q", "-m", "refactor: move")
+	got, _, err := AnalyzeBranch(context.Background(), clone, "origin/main", "HEAD", []string{"new/", "docs/*.md"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if excluded.Files != size.Files-1 || excluded.Additions != size.Additions-50 {
-		t.Fatalf("exclude go.sum: %+v vs %+v", excluded, size)
-	}
-	globbed, _, _ := AnalyzeBranch(context.Background(), clone, "origin/main", "HEAD", []string{"src/*.go"})
-	if globbed.Files != size.Files-2 {
-		t.Fatalf("exclude src/*.go: %+v vs %+v", globbed, size)
+	if got.Files != 0 || got.Additions != 0 {
+		t.Fatalf("renamed and non-ASCII paths must match -exclude: %+v", got)
 	}
 }
 
@@ -243,4 +273,21 @@ func listDir(t *testing.T, dir string) []string {
 		names = append(names, e.Name())
 	}
 	return names
+}
+
+func TestSizeFlagsOnlyForUnfinishedRequests(t *testing.T) {
+	ls := &LocalState{Upstream: "origin/x", Exceeded: []string{"lines 5 > 1"}, Scopes: []string{"a", "b"}, NoSlicePlan: true}
+	want := []string{"oversized", "mixed-scopes", "no-slice-plan"}
+	for _, cr := range []*ChangeRequest{nil, {State: "open"}} {
+		if got := RowAttention(ls, cr); !reflect.DeepEqual(got, want) {
+			t.Fatalf("request %+v: got %v, want %v", cr, got, want)
+		}
+	}
+	for _, state := range []string{"merged", "closed"} {
+		for _, f := range RowAttention(ls, &ChangeRequest{State: state}) {
+			if f == "oversized" || f == "mixed-scopes" || f == "no-slice-plan" {
+				t.Fatalf("%s request must not carry %s", state, f)
+			}
+		}
+	}
 }

@@ -2,8 +2,11 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
+	"os/exec"
+	"regexp"
 	"strings"
 
 	"github.com/androidand/specsync"
@@ -11,7 +14,7 @@ import (
 
 // runVerifySize prints the size findings for one branch. It is advisory: it
 // exits 0 unless failOnOversized is set and a limit is exceeded.
-func runVerifySize(branch, base, budgetFlag string, exclude []string, failOnOversized bool) {
+func runVerifySize(fs *flag.FlagSet, openspec, store *string, branch, base, budgetFlag string, exclude []string, failOnOversized bool) {
 	ctx := context.Background()
 	dir, err := os.Getwd()
 	if err != nil {
@@ -27,15 +30,23 @@ func runVerifySize(branch, base, budgetFlag string, exclude []string, failOnOver
 			fail(fmt.Errorf("no base to measure against: %w; pass -base <ref>", err))
 		}
 	}
-	budget, err := specsync.ResolveBudget(budgetFlag, "", os.Getenv(specsync.BudgetEnv))
+	sliceLine, from := changeBudgetLine(ctx, fs, openspec, store, dir, head)
+	budget, err := specsync.ResolveBudget(budgetFlag, sliceLine, os.Getenv(specsync.BudgetEnv))
+	if err != nil && sliceLine != "" {
+		fmt.Fprintf(os.Stderr, "specsync: budget line of change %s ignored: %v\n", from, err)
+		budget, err = specsync.ResolveBudget(budgetFlag, "", os.Getenv(specsync.BudgetEnv))
+	}
 	if err != nil {
-		fail(err)
+		fail(fmt.Errorf("size budget: %w", err))
 	}
 	size, scopes, err := specsync.AnalyzeBranch(ctx, dir, base, head, exclude)
 	if err != nil {
 		fail(fmt.Errorf("measure %s against %s: %w", head, base, err))
 	}
 	exceeded := budget.Exceeded(size)
+	if sliceLine != "" {
+		fmt.Printf("budget: from the budget line of change %s unless -budget overrides it\n", from)
+	}
 
 	fmt.Printf("size: %d files, +%d -%d (%d lines), %d commits, %s against %s\n",
 		size.Files, size.Additions, size.Deletions, size.Additions+size.Deletions, size.Commits, head, base)
@@ -51,4 +62,53 @@ func runVerifySize(branch, base, budgetFlag string, exclude []string, failOnOver
 	if failOnOversized && len(exceeded) > 0 {
 		os.Exit(1)
 	}
+}
+
+var branchIssue = regexp.MustCompile(`^(?:[^/]+/)?(\d+)-`)
+
+// changeBudgetLine finds the one change the branch belongs to, by slug or by
+// issue number in its name, as status does, and returns its budget line. With
+// no specs, or no single match, it returns "".
+func changeBudgetLine(ctx context.Context, fs *flag.FlagSet, openspec, store *string, dir, head string) (line, slug string) {
+	root := resolveRootUnchecked(fs, openspec, store)
+	if root.Validate() != nil {
+		return "", ""
+	}
+	changes, err := specsync.LoadChanges(root.Dir)
+	if err != nil {
+		return "", ""
+	}
+	name := head
+	if name == "HEAD" {
+		out, err := exec.CommandContext(ctx, "git", "-C", dir, "rev-parse", "--abbrev-ref", "HEAD").Output()
+		if err != nil {
+			return "", ""
+		}
+		name = strings.TrimSpace(string(out))
+	}
+	issue := ""
+	if m := branchIssue.FindStringSubmatch(name); m != nil {
+		issue = m[1]
+	}
+	var matches []specsync.Change
+	for _, c := range changes {
+		if c.Archived {
+			continue
+		}
+		hit := branchMatchesChange(name, c.Slug)
+		if !hit && issue != "" {
+			if refs, err := specsync.LoadRefs(c.Dir); err == nil {
+				for _, r := range refs {
+					hit = hit || r.ID == issue
+				}
+			}
+		}
+		if hit {
+			matches = append(matches, c)
+		}
+	}
+	if len(matches) != 1 {
+		return "", ""
+	}
+	return specsync.SliceBudgetLine(matches[0].Dir), matches[0].Slug
 }

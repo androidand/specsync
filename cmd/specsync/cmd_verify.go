@@ -93,7 +93,10 @@ func (cm *verifyCmd) run(args []string) {
 		if *change != "" || *checklist {
 			fail(fmt.Errorf("-size measures a branch and cannot be combined with -change or -checklist"))
 		}
-		runVerifySize(*cm.branch, *cm.base, *cm.budget, cm.exclude, *cm.failOnOversized)
+		if *asJSON {
+			fail(fmt.Errorf("-size does not support -json: it prints text"))
+		}
+		runVerifySize(fs, openspec, store, *cm.branch, *cm.base, *cm.budget, cm.exclude, *cm.failOnOversized)
 		return
 	}
 	if *cm.failOnOversized || *cm.branch != "" || *cm.base != "" || *cm.budget != "" || len(cm.exclude) > 0 {

@@ -92,3 +92,37 @@ func TestVerifySizeFlagsNeedSize(t *testing.T) {
 		t.Fatalf("got err=%v\n%s", err, out)
 	}
 }
+
+func TestVerifySizeRejectsJSON(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo := sizeRepo(t)
+	_, env := firstUseEnv(t)
+	out, err := runIn(t, bin, repo, env, "verify", "-size", "-json")
+	if err == nil || !strings.Contains(out, "-json") {
+		t.Fatalf("-size -json must fail clearly, got err=%v\n%s", err, out)
+	}
+}
+
+func TestVerifySizeUsesTheChangeBudgetLikeStatus(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo := sizeRepo(t)
+	_, env := firstUseEnv(t)
+	cdir := filepath.Join(repo, "openspec", "changes", "x")
+	if err := os.MkdirAll(cdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cdir, "tasks.md"), []byte("# Tasks\n\nbudget: lines<=10\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cdir, "proposal.md"), []byte("# X\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, err := runIn(t, bin, repo, env, "verify", "-size", "-fail-on-oversized")
+	if err == nil || !strings.Contains(out, "lines 41 > 10") || !strings.Contains(out, "change x") {
+		t.Fatalf("the branch feat/x maps to change x, whose budget line must apply: err=%v\n%s", err, out)
+	}
+	out, err = runIn(t, bin, repo, env, "verify", "-size", "-fail-on-oversized", "-budget", "lines=500")
+	if err != nil {
+		t.Fatalf("the flag beats the change's line: %v\n%s", err, out)
+	}
+}

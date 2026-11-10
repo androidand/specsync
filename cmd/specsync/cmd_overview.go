@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -14,6 +15,8 @@ import (
 type overviewCmd struct {
 	root, epic, repo, stage, state      *string
 	mine, attention, unattached, asJSON *bool
+	budget                              *string
+	exclude                             stringSlice
 }
 
 func init() { Register(&overviewCmd{}) }
@@ -49,6 +52,8 @@ func (cm *overviewCmd) Flags(fs *flag.FlagSet) {
 	cm.attention = fs.Bool("attention", false, "only work that needs attention")
 	cm.unattached = fs.Bool("unattached", false, "only work under no epic")
 	cm.asJSON = fs.Bool("json", false, "output as JSON")
+	cm.budget = fs.String("budget", "", "advisory size budget for the size flags, e.g. files=15,lines=400,commits=30 (default: each change's budget line, then $SPECSYNC_BUDGET, then built-in limits)")
+	fs.Var(&cm.exclude, "exclude", "glob of paths left out of the size counts (repeatable)")
 }
 
 func (cm *overviewCmd) Run(_ context.Context, args []string) error {
@@ -59,6 +64,9 @@ func (cm *overviewCmd) Run(_ context.Context, args []string) error {
 	checkArgs(fs, args, 0)
 	if !validState(*cm.state) {
 		return fmt.Errorf("-state must be on, fresh or off, got %q", *cm.state)
+	}
+	if _, err := specsync.ResolveBudget(*cm.budget, "", os.Getenv(specsync.BudgetEnv)); err != nil {
+		return fmt.Errorf("size budget: %w", err)
 	}
 	var roots []string
 	for _, r := range filepath.SplitList(*cm.root) {
@@ -72,6 +80,8 @@ func (cm *overviewCmd) Run(_ context.Context, args []string) error {
 			LocalOnly:       *cm.state == "off",
 			Cache:           requestCache(),
 			RefreshRequests: *cm.state == "fresh",
+			Budget:          *cm.budget,
+			Exclude:         cm.exclude,
 		},
 		Scope: specsync.OverviewScope{
 			Epic: *cm.epic, Repo: *cm.repo, Stage: *cm.stage,

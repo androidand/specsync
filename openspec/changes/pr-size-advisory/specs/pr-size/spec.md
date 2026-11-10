@@ -26,6 +26,13 @@ any action.
 
 ## ADDED Requirements
 
+### Requirement: Size advice is for unfinished work
+The size flags SHALL be added only when the branch has no change request or its request is open.
+
+#### Scenario: Merged request
+- **WHEN** a branch's request is merged
+- **THEN** none of `oversized`, `mixed-scopes` or `no-slice-plan` is added
+
 ### Requirement: Flag oversized branches
 specsync SHALL add `oversized` to a row's attention when the branch's size against its
 base, computed from git, exceeds the budget on files, changed lines or commits, and
@@ -56,6 +63,15 @@ commits carry no scope, and SHALL NOT infer concerns from file paths or content.
 specsync SHALL resolve the budget in this order: the `-budget` flag, the slice's `budget`
 line, the `SPECSYNC_BUDGET` environment variable, then documented defaults. It SHALL
 accept `-exclude <glob>` to leave matching paths out of the count.
+
+A measure given as 0 SHALL mean no limit for that measure and SHALL override lower sources. A
+malformed `-budget` or `SPECSYNC_BUDGET` SHALL be an error; a malformed slice line SHALL be
+reported once and ignored for that change. `-exclude` globs SHALL support `**`, and a trailing
+`/` SHALL mean everything under that directory.
+
+#### Scenario: Zero removes a limit
+- **WHEN** `-budget files=0` is given
+- **THEN** no files limit applies, even if a slice line or the environment sets one
 
 #### Scenario: Slice budget wins over the default
 - **WHEN** a branch belongs to a slice declaring `budget: files<=5`

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -26,56 +25,84 @@ const BudgetEnv = "SPECSYNC_BUDGET"
 // DefaultBudget is conservative policy, not a claim about the right size.
 var DefaultBudget = Budget{Files: 30, Lines: 1000, Commits: 30}
 
-// ParseBudget reads "files=15,lines=400,commits=30"; "<=" and ":" work as "=".
-func ParseBudget(s string) (Budget, error) {
-	var b Budget
+type budgetLayer struct{ files, lines, commits *int }
+
+func parseBudgetLayer(s string) (budgetLayer, error) {
+	var l budgetLayer
 	for _, part := range strings.Split(s, ",") {
 		part = strings.TrimSpace(part)
 		if part == "" {
 			continue
 		}
-		i := strings.IndexAny(part, "=<:")
+		sep := "<="
+		i := strings.Index(part, sep)
 		if i < 0 {
-			return Budget{}, fmt.Errorf("budget %q: want key=number, for example files=15", part)
+			sep = "="
+			i = strings.Index(part, sep)
+		}
+		if i < 0 {
+			return l, fmt.Errorf("budget %q: want key=number or key<=number, for example files=15", part)
 		}
 		key := strings.TrimSpace(part[:i])
-		val := strings.TrimSpace(strings.TrimLeft(part[i:], "=<:"))
+		val := strings.TrimSpace(part[i+len(sep):])
 		n, err := strconv.Atoi(val)
 		if err != nil || n < 0 {
-			return Budget{}, fmt.Errorf("budget %q: %q is not a number", part, val)
+			return l, fmt.Errorf("budget %q: %q is not a whole number", part, val)
 		}
+		var slot **int
 		switch key {
 		case "files":
-			b.Files = n
+			slot = &l.files
 		case "lines":
-			b.Lines = n
+			slot = &l.lines
 		case "commits":
-			b.Commits = n
+			slot = &l.commits
 		default:
-			return Budget{}, fmt.Errorf("budget %q: unknown measure %q (use files, lines or commits)", part, key)
+			return l, fmt.Errorf("budget %q: unknown measure %q (use files, lines or commits)", part, key)
 		}
+		if *slot != nil {
+			return l, fmt.Errorf("budget %q: %s is given twice", s, key)
+		}
+		*slot = &n
 	}
+	return l, nil
+}
+
+// ParseBudget reads "files=15,lines=400,commits=30" or "files<=15". A measure
+// that is not named stays 0, which also means no limit.
+func ParseBudget(s string) (Budget, error) {
+	l, err := parseBudgetLayer(s)
+	if err != nil {
+		return Budget{}, err
+	}
+	var b Budget
+	apply(&b, l)
 	return b, nil
 }
 
+func apply(b *Budget, l budgetLayer) {
+	if l.files != nil {
+		b.Files = *l.files
+	}
+	if l.lines != nil {
+		b.Lines = *l.lines
+	}
+	if l.commits != nil {
+		b.Commits = *l.commits
+	}
+}
+
 // ResolveBudget layers the sources per measure: the flag, then the slice's
-// budget line, then SPECSYNC_BUDGET, then DefaultBudget.
+// budget line, then SPECSYNC_BUDGET, then DefaultBudget. A measure given as 0
+// means no limit and overrides the layers below it.
 func ResolveBudget(flagValue, sliceLine, env string) (Budget, error) {
 	out := DefaultBudget
 	for _, src := range []string{env, sliceLine, flagValue} {
-		b, err := ParseBudget(src)
+		l, err := parseBudgetLayer(src)
 		if err != nil {
 			return Budget{}, err
 		}
-		if b.Files > 0 {
-			out.Files = b.Files
-		}
-		if b.Lines > 0 {
-			out.Lines = b.Lines
-		}
-		if b.Commits > 0 {
-			out.Commits = b.Commits
-		}
+		apply(&out, l)
 	}
 	return out, nil
 }
@@ -115,12 +142,46 @@ func CommitScopes(subjects []string) []string {
 	return out
 }
 
-func excluded(file string, globs []string) bool {
-	for _, g := range globs {
-		if ok, _ := path.Match(g, file); ok {
-			return true
+// globRegexp turns an exclude glob into a regexp over slash paths: "*" stays
+// within one directory, "**" crosses directories, and a trailing "/" means
+// everything under that directory. A glob without a slash also matches the
+// file name at any depth.
+func globRegexp(g string) *regexp.Regexp {
+	if strings.HasSuffix(g, "/") {
+		g += "**"
+	}
+	if !strings.Contains(g, "/") {
+		g = "**/" + g
+	}
+	var b strings.Builder
+	b.WriteString("^")
+	for i := 0; i < len(g); i++ {
+		switch {
+		case strings.HasPrefix(g[i:], "**/"):
+			b.WriteString("(?:.*/)?")
+			i += 2
+		case strings.HasPrefix(g[i:], "**"):
+			b.WriteString(".*")
+			i++
+		case g[i] == '*':
+			b.WriteString("[^/]*")
+		case g[i] == '?':
+			b.WriteString("[^/]")
+		default:
+			b.WriteString(regexp.QuoteMeta(string(g[i])))
 		}
-		if ok, _ := path.Match(g, path.Base(file)); ok {
+	}
+	b.WriteString("$")
+	re, err := regexp.Compile(b.String())
+	if err != nil {
+		return nil
+	}
+	return re
+}
+
+func excluded(file string, res []*regexp.Regexp) bool {
+	for _, re := range res {
+		if re != nil && re.MatchString(file) {
 			return true
 		}
 	}
@@ -137,13 +198,17 @@ func AnalyzeBranch(ctx context.Context, dir, base, head string, exclude []string
 	}
 	size := &BranchSize{}
 	size.Commits, _ = strconv.Atoi(strings.TrimSpace(out))
-	diff, err := gitIn(ctx, dir, "diff", "--numstat", base+"..."+head)
+	diff, err := gitIn(ctx, dir, "diff", "--numstat", "-z", "--no-renames", base+"..."+head)
 	if err != nil {
 		return nil, nil, err
 	}
-	for _, line := range strings.Split(diff, "\n") {
+	var globs []*regexp.Regexp
+	for _, g := range exclude {
+		globs = append(globs, globRegexp(g))
+	}
+	for _, line := range strings.Split(diff, "\x00") {
 		f := strings.SplitN(line, "\t", 3)
-		if len(f) < 3 || excluded(f[2], exclude) {
+		if len(f) < 3 || excluded(f[2], globs) {
 			continue
 		}
 		size.Files++

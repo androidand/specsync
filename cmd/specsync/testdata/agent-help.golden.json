@@ -920,11 +920,25 @@
           "description": "only work that needs attention"
         },
         {
+          "name": "budget",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "advisory size budget for the size flags, e.g. files=15,lines=400,commits=30 (default: each change's budget line, then $SPECSYNC_BUDGET, then built-in limits)"
+        },
+        {
           "name": "epic",
           "type": "string",
           "required": false,
           "default": "",
           "description": "only work under this epic: an issue URL, owner/repo#N or #N"
+        },
+        {
+          "name": "exclude",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "glob of paths left out of the size counts (repeatable)"
         },
         {
           "name": "json",

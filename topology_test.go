@@ -965,3 +965,45 @@ func TestBuildTopology_SizeBudgetPrecedenceAndSliceFlag(t *testing.T) {
 		t.Fatalf("a change with slices must not get no-slice-plan: %v", topo.Changes[0].Attention)
 	}
 }
+
+func TestBuildTopology_BadBudgetFlagOrEnvAbortsBadSliceLineFallsBack(t *testing.T) {
+	opts, _ := localStateFixture(t)
+	opts.localState = func(_ context.Context, _ string, _ LocalStateOptions) (*LocalState, error) {
+		return &LocalState{Upstream: "origin/x"}, nil
+	}
+	bad := opts
+	bad.Budget = "files<5"
+	if _, err := BuildTopology(context.Background(), bad); err == nil || !strings.Contains(err.Error(), "budget") {
+		t.Fatalf("a bad -budget must abort, got %v", err)
+	}
+	t.Setenv(BudgetEnv, "nonsense")
+	if _, err := BuildTopology(context.Background(), opts); err == nil {
+		t.Fatal("a bad SPECSYNC_BUDGET must abort")
+	}
+	t.Setenv(BudgetEnv, "")
+
+	cdir := filepath.Join(opts.OpenSpecDir, "changes", "add-field-forms")
+	mustWrite(t, filepath.Join(cdir, "tasks.md"), "# Tasks\n\nbudget: lines<5\n")
+	var got LocalStateOptions
+	opts.Budget = "files=9"
+	opts.localState = func(_ context.Context, _ string, lo LocalStateOptions) (*LocalState, error) {
+		got = lo
+		return &LocalState{Upstream: "origin/x"}, nil
+	}
+	topo, err := BuildTopology(context.Background(), opts)
+	if err != nil {
+		t.Fatalf("a bad slice line must not abort: %v", err)
+	}
+	if got.Budget.Files != 9 || got.Budget.Lines != DefaultBudget.Lines {
+		t.Fatalf("valid higher layers must survive a bad slice line: %+v", got.Budget)
+	}
+	warned := 0
+	for _, s := range topo.Status {
+		if strings.Contains(s, "budget") {
+			warned++
+		}
+	}
+	if warned != 1 {
+		t.Fatalf("want one warning, got %d in %v", warned, topo.Status)
+	}
+}

@@ -125,10 +125,14 @@ var attentionRules = []struct {
 		}
 		return cr.HeadSHA == "" || ls.Head == "" || cr.HeadSHA == ls.Head
 	}},
-	{"oversized", func(ls *LocalState, _ *ChangeRequest) bool { return ls != nil && len(ls.Exceeded) > 0 }},
-	{"mixed-scopes", func(ls *LocalState, _ *ChangeRequest) bool { return ls != nil && len(ls.Scopes) > 1 }},
-	{"no-slice-plan", func(ls *LocalState, _ *ChangeRequest) bool {
-		return ls != nil && len(ls.Exceeded) > 0 && ls.NoSlicePlan
+	{"oversized", func(ls *LocalState, cr *ChangeRequest) bool {
+		return ls != nil && sizeAdvisable(cr) && len(ls.Exceeded) > 0
+	}},
+	{"mixed-scopes", func(ls *LocalState, cr *ChangeRequest) bool {
+		return ls != nil && sizeAdvisable(cr) && len(ls.Scopes) > 1
+	}},
+	{"no-slice-plan", func(ls *LocalState, cr *ChangeRequest) bool {
+		return ls != nil && sizeAdvisable(cr) && len(ls.Exceeded) > 0 && ls.NoSlicePlan
 	}},
 	{"ready-to-merge", func(_ *LocalState, cr *ChangeRequest) bool {
 		return isOpen(cr) && !cr.Draft && cr.ReviewDecision == "approved" && cr.Checks.Fail == 0 &&
@@ -136,6 +140,10 @@ var attentionRules = []struct {
 			cr.UnresolvedThreads != nil && *cr.UnresolvedThreads == 0
 	}},
 }
+
+// sizeAdvisable: size advice is for work still heading to review, so it is
+// withheld once the request is merged or closed.
+func sizeAdvisable(cr *ChangeRequest) bool { return cr == nil || cr.State == "open" }
 
 func isOpen(cr *ChangeRequest) bool { return cr != nil && cr.State == "open" }
 
