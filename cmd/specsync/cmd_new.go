@@ -34,7 +34,8 @@ func (*newCmd) Spec() Spec {
 		Safety: []string{
 			"Searches local changes and open issues for the title's key words first and stops when it finds likely duplicates, unless -anyway is given",
 			"Writes only openspec/changes/<slug>/ (proposal and tasks); it never creates the openspec folder: run specsync init first in a repo with none",
-			"Creates nothing in the tracker until you have seen the text and pass -yes; -dry-run creates nothing at all",
+			"Without -yes it scaffolds the change and prints the text; the tracker issue is created only with -yes, and only from text you have edited: -yes refuses while the template placeholders remain",
+			"-dry-run creates nothing at all",
 		},
 		Examples: []string{
 			"specsync new 'Show a clean summary in status' -dry-run",
@@ -48,7 +49,7 @@ func (cm *newCmd) Flags(fs *flag.FlagSet) {
 	cm.openspec, cm.storeFlag = addRootFlags(fs)
 	cm.repo = fs.String("repo", "", "repository to search for duplicate issues as owner/name (default: the current repository)")
 	cm.anyway = fs.Bool("anyway", false, "create the change even though likely duplicates were found")
-	cm.yes = fs.Bool("yes", false, "after showing the text, create the tracker issue (specsync -change <slug>)")
+	cm.yes = fs.Bool("yes", false, "create the tracker issue (specsync -change <slug>) from the edited proposal; refused while placeholders remain")
 	cm.dryRun = fs.Bool("dry-run", false, "show the duplicates and the text and create nothing")
 }
 
@@ -70,7 +71,7 @@ func (cm *newCmd) Run(ctx context.Context, args []string) error {
 	}
 	var cands []specsync.DuplicateCandidate
 	for _, c := range changes {
-		if !c.Archived {
+		if !c.Archived && c.Slug != specsync.Slugify(title) {
 			cands = append(cands, specsync.DuplicateCandidate{Kind: "change", Ref: c.Slug, Title: c.Title})
 		}
 	}
@@ -90,20 +91,34 @@ func (cm *newCmd) Run(ctx context.Context, args []string) error {
 		}
 	}
 	slug := specsync.Slugify(title)
+	proposalPath := filepath.Join(root.Dir, "changes", slug, "proposal.md")
+	_, statErr := os.Stat(proposalPath)
+	exists := statErr == nil
 	if *cm.dryRun {
 		fmt.Printf("DRY RUN — would create openspec/changes/%s/ (proposal.md, tasks.md)\n", slug)
 		return nil
 	}
-	slug, err = specsync.ScaffoldChange(root.Dir, title)
-	if err != nil {
-		return err
+	switch {
+	case exists && !*cm.yes:
+		return fmt.Errorf("change %s already exists", slug)
+	case !exists:
+		slug, err = specsync.ScaffoldChange(root.Dir, title)
+		if err != nil {
+			return err
+		}
+		proposalPath = filepath.Join(root.Dir, "changes", slug, "proposal.md")
+		fmt.Printf("specsync: created openspec/changes/%s/\n", slug)
 	}
-	fmt.Printf("specsync: created openspec/changes/%s/\n", slug)
-	proposal, _ := os.ReadFile(filepath.Join(root.Dir, "changes", slug, "proposal.md"))
-	fmt.Printf("--- issue text (from proposal.md) ---\n%s---\n", proposal)
+	proposal, _ := os.ReadFile(proposalPath)
+	if !exists {
+		fmt.Printf("--- issue text (from proposal.md) ---\n%s---\n", proposal)
+	}
 	if !*cm.yes {
 		fmt.Printf("The tracker issue was not created. Fill in the text, then: specsync -dry-run -change %s, and specsync -change %s (or run this again with -yes once the text is right)\n", slug, slug)
 		return nil
+	}
+	if specsync.HasScaffoldPlaceholders(string(proposal)) {
+		return fmt.Errorf("the proposal still has the template placeholders: edit openspec/changes/%s/proposal.md, then run this again with -yes (nothing was created in the tracker)", slug)
 	}
 	exe, err := os.Executable()
 	if err != nil {

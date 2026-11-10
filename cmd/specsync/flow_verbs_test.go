@@ -539,3 +539,97 @@ func TestPrFlagsWorkInAnyPosition(t *testing.T) {
 		t.Fatalf("two verbs are an error: err=%v\n%s", err, out)
 	}
 }
+
+func TestNewYesRefusesWhileThePlaceholdersRemainAndNeverCreatesTheIssueFromThem(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env := newEnv(t, `[]`)
+	ghLog := filepath.Join(t.TempDir(), "gh.log")
+	stub := "#!/bin/sh\necho \"$@\" >> " + ghLog + "\necho '[]'\n"
+	bindir := t.TempDir()
+	os.WriteFile(filepath.Join(bindir, "gh"), []byte(stub), 0o755)
+	env = append(env, "PATH="+bindir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	out, err := runIn(t, bin, repo, env, "new", "Brand new thing", "-yes")
+	if err == nil || !strings.Contains(out, "placeholder") {
+		t.Fatalf("err=%v\n%s", err, out)
+	}
+	if b, _ := os.ReadFile(ghLog); strings.Contains(string(b), "issue create") {
+		t.Fatal("no issue may be created from the template text")
+	}
+	if _, statErr := os.Stat(filepath.Join(repo, "openspec", "changes", "brand-new-thing", "proposal.md")); statErr != nil {
+		t.Fatal("the change is scaffolded so it can be edited")
+	}
+	out, err = runIn(t, bin, repo, env, "new", "Brand new thing", "-yes")
+	if err == nil || !strings.Contains(out, "placeholder") {
+		t.Fatalf("a second -yes on the unedited change is still refused: err=%v\n%s", err, out)
+	}
+	p := filepath.Join(repo, "openspec", "changes", "brand-new-thing", "proposal.md")
+	os.WriteFile(p, []byte("# Brand new thing\n\n## Why\n\nIt is missing.\n\n## What\n\n- Add it.\n\n## Out of scope\n\n- More.\n"), 0o644)
+	out, _ = runIn(t, bin, repo, env, "new", "Brand new thing", "-yes")
+	if strings.Contains(out, "placeholder") {
+		t.Fatalf("an edited proposal passes the check:\n%s", out)
+	}
+}
+
+func TestUpdateTreatsAnUnknownRequestStateAsUnderReview(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	clone, env, advance := updateRepo(t)
+	advance()
+	failing := t.TempDir()
+	os.WriteFile(filepath.Join(failing, "gh"), []byte("#!/bin/sh\necho gh unavailable >&2\nexit 1\n"), 0o755)
+	env = append(env, "PATH="+failing+string(os.PathListSeparator)+os.Getenv("PATH"))
+	out, err := runIn(t, bin, clone, env, "update", "-fetch")
+	if err != nil || !strings.Contains(out, "git merge") || strings.Contains(out, "git rebase") {
+		t.Fatalf("an unknown request state means merge, never a rewrite: err=%v\n%s", err, out)
+	}
+	out, err = runIn(t, bin, clone, env, "update", "-apply", "-push")
+	if err == nil || !strings.Contains(out, "-push-to-request") {
+		t.Fatalf("a push with an unknown request state needs explicit confirmation: err=%v\n%s", err, out)
+	}
+	head := exec.Command("git", "rev-list", "--count", "--merges", "origin/main..HEAD")
+	head.Dir = clone
+	if b, _ := head.Output(); strings.TrimSpace(string(b)) != "0" {
+		t.Fatal("the refused push must not have applied the update first")
+	}
+}
+
+func TestSaveDryRunPrintsOnlyTheRefusalWhenAGuardFails(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env := waysRepo(t, "flow: minimal\n")
+	env = withIdentity(env)
+	commitAll(t, repo, "config")
+	os.WriteFile(filepath.Join(repo, ".env.local"), []byte("A=1\n"), 0o644)
+	out, err := runIn(t, bin, repo, env, "save", "-m", "x", "-add", ".env.local", "-dry-run")
+	if err == nil || strings.Contains(out, "would commit") || !strings.Contains(out, "refusing") {
+		t.Fatalf("a refused dry run shows the refusal alone: err=%v\n%s", err, out)
+	}
+	out, err = runIn(t, bin, repo, env, "save", "-m", "x", "-add", ".env.local", "-dry-run", "-json")
+	if err == nil || strings.Contains(out, `"files"`) || !strings.Contains(out, `"error"`) {
+		t.Fatalf("json carries an error object and no plan: err=%v\n%s", err, out)
+	}
+}
+
+func TestSaveSyncRunsADryRunFirstAndCreatesANewIssueOnlyWithYes(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env, _ := parkRepo(t)
+	ghLog := filepath.Join(t.TempDir(), "gh.log")
+	bindir := t.TempDir()
+	stub := "#!/bin/sh\necho \"$@\" >> " + ghLog + "\ncase \"$1 $2\" in\n  \"issue create\") echo https://github.com/acme/app/issues/31 ;;\n  \"repo view\") echo acme/app ;;\n  \"issue list\") echo '[]' ;;\n  *) echo '[]' ;;\nesac\n"
+	os.WriteFile(filepath.Join(bindir, "gh"), []byte(stub), 0o755)
+	env = append(env, "PATH="+bindir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	os.WriteFile(filepath.Join(repo, "z.txt"), []byte("z\n"), 0o644)
+	out, err := runIn(t, bin, repo, env, "save", "-m", "work", "-add", "z.txt", "-sync", "-openspec", filepath.Join(repo, "openspec"))
+	if err != nil || !strings.Contains(out, "DRY RUN") || !strings.Contains(out, "-yes") {
+		t.Fatalf("the sync must be previewed and a new issue held back: err=%v\n%s", err, out)
+	}
+	if b, _ := os.ReadFile(ghLog); strings.Contains(string(b), "issue create") {
+		t.Fatalf("a new issue must not be created without -yes:\n%s", b)
+	}
+	os.WriteFile(filepath.Join(repo, "w.txt"), []byte("w\n"), 0o644)
+	out, err = runIn(t, bin, repo, env, "save", "-m", "work 2", "-add", "w.txt", "-sync", "-yes", "-openspec", filepath.Join(repo, "openspec"))
+	if err != nil {
+		t.Fatalf("err=%v\n%s", err, out)
+	}
+	if b, _ := os.ReadFile(ghLog); !strings.Contains(string(b), "issue create") {
+		t.Fatalf("-sync -yes creates the issue:\n%s\n%s", b, out)
+	}
+}

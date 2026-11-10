@@ -18,7 +18,7 @@ type saveFlags struct {
 	message, change     *string
 	add                 stringSlice
 	push, pushToRequest *bool
-	syncSpec            *bool
+	syncSpec, yes       *bool
 	dryRun, asJSON      *bool
 }
 
@@ -29,7 +29,8 @@ func (sf *saveFlags) define(fs *flag.FlagSet) {
 	fs.Var(&sf.add, "add", "an untracked file to include (repeatable); untracked files are never included otherwise")
 	sf.push = fs.Bool("push", false, "push the branch after committing (never forces)")
 	sf.pushToRequest = fs.Bool("push-to-request", false, "allow pushing a branch that has an open pull request")
-	sf.syncSpec = fs.Bool("sync", false, "after committing, sync the change to its tracker issue (specsync -change <slug>)")
+	sf.syncSpec = fs.Bool("sync", false, "after committing, preview then sync the change to its tracker issue (specsync -change <slug>); a change with no issue yet gets one only with -yes")
+	sf.yes = fs.Bool("yes", false, "with -sync, allow creating a new tracker issue for a change that has none")
 	sf.dryRun = fs.Bool("dry-run", false, "show what would be committed and pushed and change nothing")
 	sf.asJSON = fs.Bool("json", false, "output as JSON")
 }
@@ -131,6 +132,7 @@ func (cm *saveCmd) Run(ctx context.Context, args []string) error {
 	abs, _ := filepath.Abs(*cm.openspec)
 	ways := loadWaysOrFail(filepath.Dir(abs))
 	slug := ""
+	var syncChange *specsync.Change
 	if *cm.syncSpec {
 		c := matchedChange(ctx, fs, cm.openspec, cm.storeFlag, cwd, "HEAD")
 		if *cm.change != "" {
@@ -139,15 +141,22 @@ func (cm *saveCmd) Run(ctx context.Context, args []string) error {
 		if c == nil {
 			return fmt.Errorf("-sync could not tell which change this branch belongs to; pass -change <slug>")
 		}
-		slug = c.Slug
+		slug, syncChange = c.Slug, c
 	}
 	res, err := specsync.Save(ctx, specsync.SaveOptions{
 		Dir: cwd, Message: *cm.message, Add: cm.add, Ways: ways,
 		Push: *cm.push, PushToRequest: *cm.pushToRequest, OpenRequest: openRequestFor(""), DryRun: *cm.dryRun,
 	})
-	if res.Committed || *cm.dryRun {
-		printSave(res, *cm.dryRun, *cm.asJSON, *cm.push)
+	if err != nil && !res.Committed {
+		if *cm.asJSON {
+			enc := json.NewEncoder(os.Stdout)
+			enc.SetIndent("", "  ")
+			_ = enc.Encode(map[string]string{"error": err.Error()})
+			os.Exit(1)
+		}
+		return err
 	}
+	printSave(res, *cm.dryRun, *cm.asJSON, *cm.push)
 	if err != nil || slug == "" || *cm.dryRun {
 		if slug != "" && *cm.dryRun {
 			fmt.Printf("DRY RUN — would then sync %s to its issue\n", slug)
@@ -158,9 +167,38 @@ func (cm *saveCmd) Run(ctx context.Context, args []string) error {
 	if exeErr != nil {
 		return exeErr
 	}
-	sync := exec.CommandContext(ctx, exe, "-change", slug, "-openspec", *cm.openspec)
+	syncArgs := []string{"-change", slug, "-openspec", *cm.openspec}
+	if *cm.storeFlag != "" {
+		syncArgs = append(syncArgs, "-store", *cm.storeFlag)
+	}
+	preview := exec.CommandContext(ctx, exe, append(syncArgs, "-dry-run")...)
+	preview.Stdout, preview.Stderr = os.Stdout, os.Stderr
+	if err := preview.Run(); err != nil {
+		return fmt.Errorf("the sync preview failed, so nothing was synced: %w", err)
+	}
+	if !changeHasIssue(syncChange) && !*cm.yes {
+		fmt.Printf("specsync: not synced: %s has no tracker issue yet, so syncing would create one; review the preview above and run again with -sync -yes\n", slug)
+		return nil
+	}
+	sync := exec.CommandContext(ctx, exe, syncArgs...)
 	sync.Stdout, sync.Stderr = os.Stdout, os.Stderr
 	return sync.Run()
+}
+
+func changeHasIssue(c *specsync.Change) bool {
+	if c == nil {
+		return false
+	}
+	refs, err := specsync.LoadRefs(c.Dir)
+	if err != nil {
+		return false
+	}
+	for _, r := range refs {
+		if r.ID != "" {
+			return true
+		}
+	}
+	return false
 }
 
 type parkCmd struct {

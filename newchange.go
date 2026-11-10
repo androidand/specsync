@@ -115,3 +115,20 @@ func FindDuplicates(title string, cands []DuplicateCandidate) []DuplicateCandida
 	}
 	return out
 }
+
+var scaffoldPlaceholders = []string{
+	"(Say what is wrong today, in two sentences.)",
+	"(The change, one bullet per behaviour.)",
+	"(What this does not do.)",
+}
+
+// HasScaffoldPlaceholders reports whether any template placeholder is still in
+// the proposal text.
+func HasScaffoldPlaceholders(text string) bool {
+	for _, p := range scaffoldPlaceholders {
+		if strings.Contains(text, p) {
+			return true
+		}
+	}
+	return false
+}

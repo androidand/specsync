@@ -54,3 +54,21 @@ func TestKeyWordsDropFillerAndDuplicatesAreFoundByOverlap(t *testing.T) {
 		t.Fatalf("one key word is not a match: %+v", got)
 	}
 }
+
+func TestScaffoldPlaceholdersAreDetectedUntilEdited(t *testing.T) {
+	root := t.TempDir()
+	slug, _ := ScaffoldChange(root, "Add a retry")
+	path := filepath.Join(root, "changes", slug, "proposal.md")
+	text, _ := os.ReadFile(path)
+	if !HasScaffoldPlaceholders(string(text)) {
+		t.Fatal("a fresh scaffold has placeholders")
+	}
+	edited := strings.NewReplacer("(Say what is wrong today, in two sentences.)", "Syncs fail on one flaky call.").Replace(string(text))
+	if !HasScaffoldPlaceholders(edited) {
+		t.Fatal("one edited placeholder is not enough: every one must go")
+	}
+	edited = strings.NewReplacer("(The change, one bullet per behaviour.)", "Retry once.", "(What this does not do.)", "No backoff.").Replace(edited)
+	if HasScaffoldPlaceholders(edited) {
+		t.Fatalf("an edited proposal has none:\n%s", edited)
+	}
+}

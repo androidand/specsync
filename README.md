@@ -736,15 +736,16 @@ config above, never from code. All of them print a plan with `-dry-run` (or with
 change nothing then. See `docs/flow-verbs.md` for moving a personal script onto them.
 
 - `specsync new <title>` creates a change from a short template after showing likely duplicate
-  changes and open issues; the tracker issue is created only with `-yes`.
+  changes and open issues; the tracker issue is created only with `-yes`, and only once the template placeholders have been edited away.
 - `specsync start <slug|issue>` reuses the change's worktree or creates one from `worktrees:`,
   runs the start hooks there (after trust) and refuses when the session provider reports a live session.
 - `specsync save -m <msg>` commits tracked changes (untracked files only with `-add`), refuses
-  secret-looking files and forbidden trailers, pushes only with `-push`, and not onto a branch with
-  an open pull request without `-push-to-request`. `specsync park -m <note>` saves, sets the stage and leaves a note.
+  secret-looking files and forbidden trailers, pushes only with `-push` (by explicit refspec to the
+  branch's own name), and not onto a branch with an open pull request without `-push-to-request`.
+  `-sync` previews the tracker sync first and creates a new issue only with `-yes`. `specsync park -m <note>` saves, sets the stage and leaves a note.
 - `specsync gates` runs the configured gates after trust and stamps the commit when a full run passes on a clean tree.
 - `specsync update` plans how to bring the branch current (the `sync:` strategy); `-apply` runs it,
-  stops at a conflict, and `-push` pushes with a lease; shared branches are merged, never rewritten.
+  stops at a conflict, and `-push` pushes with a lease on the sha it saw; shared branches, and branches whose pull request state is open or unknown, are merged, never rewritten.
 - `specsync pr prep` checks tasks, freshness, the gate stamp and the size budget; `specsync pr open`
   creates the pull request with the generated short body once prep passes and every `pr.confirm` entry is given with `-confirm`.
 

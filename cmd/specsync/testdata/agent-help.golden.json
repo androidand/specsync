@@ -1228,13 +1228,14 @@
           "type": "boolean",
           "required": false,
           "default": false,
-          "description": "after showing the text, create the tracker issue (specsync -change \u003cslug\u003e)"
+          "description": "create the tracker issue (specsync -change \u003cslug\u003e) from the edited proposal; refused while placeholders remain"
         }
       ],
       "safety_rules": [
         "Searches local changes and open issues for the title's key words first and stops when it finds likely duplicates, unless -anyway is given",
         "Writes only openspec/changes/\u003cslug\u003e/ (proposal and tasks); it never creates the openspec folder: run specsync init first in a repo with none",
-        "Creates nothing in the tracker until you have seen the text and pass -yes; -dry-run creates nothing at all"
+        "Without -yes it scaffolds the change and prints the text; the tracker issue is created only with -yes, and only from text you have edited: -yes refuses while the template placeholders remain",
+        "-dry-run creates nothing at all"
       ],
       "examples": [
         "specsync new 'Show a clean summary in status' -dry-run",
@@ -1542,7 +1543,14 @@
           "type": "boolean",
           "required": false,
           "default": false,
-          "description": "after committing, sync the change to its tracker issue (specsync -change \u003cslug\u003e)"
+          "description": "after committing, preview then sync the change to its tracker issue (specsync -change \u003cslug\u003e); a change with no issue yet gets one only with -yes"
+        },
+        {
+          "name": "yes",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "with -sync, allow creating a new tracker issue for a change that has none"
         }
       ],
       "safety_rules": [
@@ -2139,7 +2147,14 @@
           "type": "boolean",
           "required": false,
           "default": false,
-          "description": "after committing, sync the change to its tracker issue (specsync -change \u003cslug\u003e)"
+          "description": "after committing, preview then sync the change to its tracker issue (specsync -change \u003cslug\u003e); a change with no issue yet gets one only with -yes"
+        },
+        {
+          "name": "yes",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "with -sync, allow creating a new tracker issue for a change that has none"
         }
       ],
       "safety_rules": [
@@ -3037,12 +3052,20 @@
           "required": false,
           "default": false,
           "description": "with -apply, push afterwards (with a lease after a rebase)"
+        },
+        {
+          "name": "push-to-request",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "with -push, allow pushing when the branch has an open pull request or that could not be checked"
         }
       ],
       "safety_rules": [
         "Without -apply it prints the plan and changes nothing",
         "Refuses a dirty working tree; never force-pushes a shared branch (those are merged)",
-        "Pushes only with -push, and after a rebase of a pushed branch only with --force-with-lease",
+        "Pushes only with -push, by explicit refspec to the branch's own name, and after a rebase of a pushed branch only with an explicit lease on the sha it saw",
+        "An unknown or open pull request state counts as under review: the plan merges, and -push then needs -push-to-request",
         "Stops at a conflict, names the files and leaves git's own merge or rebase state for you to resolve or abort",
         "The plan uses the sync: strategy from openspec/specsync.yml; run with -fetch to refresh remote branches first"
       ],
