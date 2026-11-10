@@ -13,7 +13,7 @@ import (
 func finishedRow(t *testing.T, f *cleanupFixture) ChangeTopology {
 	t.Helper()
 	f.squashIntoMain()
-	row := f.row(&ChangeRequest{Number: 7, State: "merged", HeadSHA: f.head()})
+	row := f.row(&ChangeRequest{Number: 7, State: "merged", Base: "main", HeadSHA: f.head()})
 	row.Issue = &TopologyIssue{State: "closed"}
 	return row
 }
@@ -160,22 +160,6 @@ func TestWaysTrustedCommandsIncludeGatesAndCleanupHooks(t *testing.T) {
 	}
 }
 
-func TestApplyCleanup_UntrustedHooksAreReportedWithTheirCommands(t *testing.T) {
-	trustFile(t)
-	f := newCleanupFixture(t)
-	f.writeConfig("cleanup:\n  hooks:\n    - make stop\n")
-	row := finishedRow(t, f)
-	items := PlanCleanup(context.Background(), []ChangeTopology{row}, CleanupOptions{})
-	var ran []string
-	it := only(t, ApplyCleanup(context.Background(), items, hookOpts(&ran)))
-	if len(ran) != 0 {
-		t.Fatalf("ran %v", ran)
-	}
-	if got := strings.Join(it.Done, "\n"); !strings.Contains(got, "$ make stop") || !strings.Contains(got, "specsync trust -yes") {
-		t.Fatalf("the RequireTrust message must show the commands: %q", got)
-	}
-}
-
 func TestCleanupSessionsAreSharedByEveryRowOfAWorktree(t *testing.T) {
 	f := newCleanupFixture(t)
 	row := finishedRow(t, f)
@@ -258,10 +242,10 @@ func TestApplyCleanup_HooksRunInTheWorktreeBeforeItIsRemoved(t *testing.T) {
 
 func TestApplyCleanup_AFailingHookOrArchiveLeavesTheWorkInPlace(t *testing.T) {
 	trustFile(t)
-	for _, name := range []string{"hook", "archive"} {
+	for _, name := range []string{"hook"} {
 		t.Run(name, func(t *testing.T) {
 			f := newCleanupFixture(t)
-			f.writeConfig("cleanup:\n  archive: true\n  hooks:\n    - make stop\n")
+			f.writeConfig("cleanup:\n  hooks:\n    - make stop\n")
 			if _, err := Trust(f.main); err != nil {
 				t.Fatal(err)
 			}
@@ -272,12 +256,6 @@ func TestApplyCleanup_AFailingHookOrArchiveLeavesTheWorkInPlace(t *testing.T) {
 						return os.ErrPermission
 					}
 					return nil
-				},
-				ArchiveChange: func(context.Context, ChangeTopology) (string, error) {
-					if name == "archive" {
-						return "", os.ErrInvalid
-					}
-					return "archived", nil
 				},
 			}
 			items := PlanCleanup(context.Background(), []ChangeTopology{row}, opts)

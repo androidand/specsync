@@ -24,6 +24,7 @@ type CleanupConfig struct {
 	Archive      bool
 	MinAgeDays   int
 	Hooks        []string
+	Protect      []string
 }
 
 // Ways is the repository's declared way of working, read from
@@ -66,7 +67,7 @@ var topLevelKeys = []string{"board", "ideas_repo", "flow", "gates", "worktrees",
 var sectionKeys = map[string][]string{
 	"worktrees": {"dir", "branch"},
 	"text":      append([]string{"profile", "headers", "filler", "template"}, textIntKeys...),
-	"cleanup":   {"remote_branch", "archive", "min_age_days", "hooks"},
+	"cleanup":   {"remote_branch", "archive", "min_age_days", "hooks", "protect"},
 	"sync":      {"strategy", "after_review", "force"},
 }
 
@@ -246,18 +247,26 @@ func (w *Ways) readSection(sec string, n *YNode, add addIssue) {
 				w.Cleanup.MinAgeDays = days
 			}
 		}
-		if h := n.Get("hooks"); h != nil {
-			if h.Kind != YList {
-				add(n.KeyLine["hooks"], "cleanup.hooks", "hooks must be a list of commands")
+		list := func(key, what string) []string {
+			h := n.Get(key)
+			if h == nil {
+				return nil
 			}
+			if h.Kind != YList {
+				add(n.KeyLine[key], "cleanup."+key, "%s must be a list", key)
+			}
+			var out []string
 			for _, item := range h.List {
 				if item.Kind != YScalar || strings.TrimSpace(item.Scalar) == "" {
-					add(item.Line, "cleanup.hooks", "each hook must be a command")
+					add(item.Line, "cleanup."+key, "each entry of %s must be %s", key, what)
 					continue
 				}
-				w.Cleanup.Hooks = append(w.Cleanup.Hooks, item.Scalar)
+				out = append(out, item.Scalar)
 			}
+			return out
 		}
+		w.Cleanup.Hooks = list("hooks", "a command")
+		w.Cleanup.Protect = list("protect", "a branch glob")
 	case "sync":
 		if v := enum("strategy", "rebase", "merge"); v != "" {
 			w.Sync.Strategy = v

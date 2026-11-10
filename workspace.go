@@ -188,5 +188,10 @@ func SameFolder(a, b string) bool {
 	if errA != nil || errB != nil {
 		return a == b
 	}
-	return resolved(aa) == resolved(bb)
+	if resolved(aa) == resolved(bb) {
+		return true
+	}
+	sa, errA := os.Stat(aa)
+	sb, errB := os.Stat(bb)
+	return errA == nil && errB == nil && os.SameFile(sa, sb)
 }

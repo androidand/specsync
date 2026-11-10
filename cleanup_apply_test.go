@@ -45,7 +45,7 @@ func trustFile(t *testing.T) {
 func mergedCandidate(t *testing.T, f *cleanupFixture) []CleanupItem {
 	t.Helper()
 	f.squashIntoMain()
-	row := f.row(&ChangeRequest{Number: 7, State: "merged", HeadSHA: f.head()})
+	row := f.row(&ChangeRequest{Number: 7, State: "merged", Base: "main", HeadSHA: f.head()})
 	row.Issue = &TopologyIssue{State: "closed"}
 	return PlanCleanup(context.Background(), []ChangeTopology{row}, CleanupOptions{})
 }
@@ -88,49 +88,6 @@ func TestApplyCleanup_DeletesTheRemoteBranchWhenConfigured(t *testing.T) {
 	}
 }
 
-func TestApplyCleanup_ArchivesTheChangeOnlyWhenItsIssueIsClosed(t *testing.T) {
-	trustFile(t)
-	f := newCleanupFixture(t)
-	f.writeConfig("cleanup:\n  archive: true\n")
-	f.squashIntoMain()
-	var archived []string
-	opts := CleanupOptions{ArchiveChange: func(_ context.Context, row ChangeTopology) (string, error) {
-		archived = append(archived, row.Slug)
-		return "archived", nil
-	}}
-	open := f.row(&ChangeRequest{Number: 7, State: "merged", HeadSHA: f.head()})
-	open.Issue = &TopologyIssue{State: "open"}
-	items := PlanCleanup(context.Background(), []ChangeTopology{open}, opts)
-	if it := only(t, ApplyCleanup(context.Background(), items, opts)); it.Error != "" {
-		t.Fatal(it.Error)
-	}
-	if len(archived) != 0 {
-		t.Fatalf("an open issue must not be archived: %v", archived)
-	}
-}
-
-func TestApplyCleanup_ArchivesWhenTheIssueIsClosed(t *testing.T) {
-	trustFile(t)
-	f := newCleanupFixture(t)
-	f.writeConfig("cleanup:\n  archive: true\n")
-	f.squashIntoMain()
-	var archived []string
-	opts := CleanupOptions{ArchiveChange: func(_ context.Context, row ChangeTopology) (string, error) {
-		archived = append(archived, row.Slug)
-		return "archived change", nil
-	}}
-	row := f.row(&ChangeRequest{Number: 7, State: "merged", HeadSHA: f.head()})
-	row.Issue = &TopologyIssue{State: "closed"}
-	items := PlanCleanup(context.Background(), []ChangeTopology{row}, opts)
-	it := only(t, ApplyCleanup(context.Background(), items, opts))
-	if !reflect.DeepEqual(archived, []string{"thing"}) {
-		t.Fatalf("archived = %v (%+v)", archived, it)
-	}
-	if it.Done[0] != "archived change" || !strings.HasPrefix(it.Done[1], "removed worktree") {
-		t.Fatalf("archive comes before the worktree is removed: %v", it.Done)
-	}
-}
-
 func hookOpts(ran *[]string) CleanupOptions {
 	return CleanupOptions{RunHook: func(_ context.Context, dir, command string, env []string) error {
 		*ran = append(*ran, command+"@"+filepath.Base(dir))
@@ -138,24 +95,25 @@ func hookOpts(ran *[]string) CleanupOptions {
 	}}
 }
 
-func TestApplyCleanup_RunsHooksOnlyWhenTheConfigIsTrusted(t *testing.T) {
+func TestCleanupSkipsAnItemWhoseHookCannotRunBecauseTheConfigIsNotTrusted(t *testing.T) {
 	trustFile(t)
 	f := newCleanupFixture(t)
 	f.writeConfig("cleanup:\n  hooks:\n    - make stop\n")
 	var ran []string
 	opts := hookOpts(&ran)
 	items := mergedCandidate(t, f)
-
-	untrusted := ApplyCleanup(context.Background(), items, opts)
-	if len(ran) != 0 {
-		t.Fatalf("an untrusted hook must not run: %v", ran)
+	it := only(t, items)
+	if it.Status != CleanupSkipped || !strings.Contains(it.Reason, "not trusted") || !strings.Contains(it.Reason, "make stop") {
+		t.Fatalf("an item whose hooks cannot run is skipped with the commands shown: %+v", it)
 	}
-	got := strings.Join(only(t, untrusted).Done, "\n")
-	if !strings.Contains(got, "not run") || !strings.Contains(got, "make stop") || !strings.Contains(got, "specsync trust") {
-		t.Fatalf("the hook must be printed with how to trust it: %q", got)
+	forged := it
+	forged.Status = CleanupCandidate
+	got := only(t, ApplyCleanup(context.Background(), []CleanupItem{forged}, opts))
+	if got.Error == "" || len(ran) != 0 {
+		t.Fatalf("apply must refuse too: %+v ran=%v", got, ran)
 	}
-	if _, err := os.Stat(f.wt); err == nil {
-		t.Fatal("the other steps still apply when the config is untrusted")
+	if _, err := os.Stat(f.wt); err != nil {
+		t.Fatal("the worktree must stay")
 	}
 }
 
@@ -190,9 +148,18 @@ func TestApplyCleanup_EachRepoDecidesTrustForItsOwnHooks(t *testing.T) {
 	var ran []string
 	opts := hookOpts(&ran)
 	items := append(mergedCandidate(t, a), mergedCandidate(t, b)...)
-	ApplyCleanup(context.Background(), items, opts)
+	rep := ApplyCleanup(context.Background(), items, opts)
 	if len(ran) != 1 || ran[0] != "make stop@wt" {
 		t.Fatalf("only the trusted repo's hook runs: %v", ran)
+	}
+	skipped := 0
+	for _, it := range rep {
+		if it.Status == CleanupSkipped {
+			skipped++
+		}
+	}
+	if skipped != 1 {
+		t.Fatalf("the untrusted repo's item is skipped: %+v", rep)
 	}
 }
 
@@ -235,11 +202,11 @@ func TestApplyCleanup_NeverActsOnSkippedOrAttentionItems(t *testing.T) {
 }
 
 func TestParseWaysReadsTheCleanupSection(t *testing.T) {
-	w, issues := ParseWays([]byte("cleanup:\n  remote_branch: delete\n  archive: false\n  min_age_days: 14\n  hooks:\n    - make stop\n    - rm notes\n"))
+	w, issues := ParseWays([]byte("cleanup:\n  remote_branch: delete\n  archive: false\n  min_age_days: 14\n  hooks:\n    - make stop\n    - rm notes\n  protect:\n    - keep/*\n"))
 	if len(issues) != 0 {
 		t.Fatalf("issues: %+v", issues)
 	}
-	want := CleanupConfig{RemoteBranch: "delete", Archive: false, MinAgeDays: 14, Hooks: []string{"make stop", "rm notes"}}
+	want := CleanupConfig{RemoteBranch: "delete", Archive: false, MinAgeDays: 14, Hooks: []string{"make stop", "rm notes"}, Protect: []string{"keep/*"}}
 	if !reflect.DeepEqual(w.Cleanup, want) {
 		t.Fatalf("got %+v", w.Cleanup)
 	}
@@ -254,17 +221,36 @@ func TestParseWaysReadsTheCleanupSection(t *testing.T) {
 	}
 }
 
-func TestApplyCleanup_DoesNotArchiveUnlessConfigured(t *testing.T) {
+func TestCleanupArchiveIsAFollowUpLineNeverARunAction(t *testing.T) {
 	trustFile(t)
-	f := newCleanupFixture(t)
-	f.squashIntoMain()
-	called := false
-	opts := CleanupOptions{ArchiveChange: func(context.Context, ChangeTopology) (string, error) { called = true; return "", nil }}
-	row := f.row(&ChangeRequest{Number: 7, State: "merged", HeadSHA: f.head()})
-	row.Issue = &TopologyIssue{State: "closed"}
-	items := PlanCleanup(context.Background(), []ChangeTopology{row}, opts)
-	ApplyCleanup(context.Background(), items, opts)
-	if called {
-		t.Fatal("archive defaults to off")
+	for _, c := range []struct {
+		name, cfg, issue string
+		want             bool
+	}{
+		{"configured and closed", "cleanup:\n  archive: true\n", "closed", true},
+		{"configured but open", "cleanup:\n  archive: true\n", "open", false},
+		{"not configured", "", "closed", false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f := newCleanupFixture(t)
+			if c.cfg != "" {
+				f.writeConfig(c.cfg)
+			}
+			f.squashIntoMain()
+			row := f.row(&ChangeRequest{Number: 7, State: "merged", Base: "main", HeadSHA: f.head()})
+			row.Issue = &TopologyIssue{State: c.issue}
+			items := PlanCleanup(context.Background(), []ChangeTopology{row}, CleanupOptions{})
+			it := only(t, ApplyCleanup(context.Background(), items, CleanupOptions{}))
+			if it.Error != "" {
+				t.Fatal(it.Error)
+			}
+			got := strings.Join(it.FollowUps, "\n")
+			if c.want != strings.Contains(got, "archive pending: specsync archive -change thing") {
+				t.Fatalf("follow-ups = %q", got)
+			}
+			if _, err := os.Stat(filepath.Join(f.main, "openspec")); c.cfg == "" && err == nil {
+				t.Fatal("cleanup must not touch the main checkout's specs")
+			}
+		})
 	}
 }

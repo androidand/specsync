@@ -17,18 +17,21 @@ import (
 // is. Every field is read from git; nothing is inferred. See
 // openspec/changes/status-pr-and-worktree-state.
 type LocalState struct {
-	Head           string      `json:"head,omitempty"` // full commit id of HEAD
-	Modified       int         `json:"modified"`
-	Untracked      int         `json:"untracked"`
-	Upstream       string      `json:"upstream,omitempty"`
-	UpstreamGone   bool        `json:"upstreamGone,omitempty"`
-	Ahead          int         `json:"ahead"`
-	UpstreamBehind int         `json:"upstreamBehind"`
-	Base           string      `json:"base,omitempty"`
-	BehindBase     int         `json:"behindBase"`
-	Size           *BranchSize `json:"size,omitempty"`
-	LastCommit     string      `json:"lastCommit,omitempty"` // RFC 3339
-	VolatilePath   bool        `json:"volatilePath,omitempty"`
+	Head string `json:"head,omitempty"` // full commit id of HEAD
+	// StatusUnavailable is set when `git status` failed, so Modified and
+	// Untracked are unknown rather than zero.
+	StatusUnavailable bool        `json:"statusUnavailable,omitempty"`
+	Modified          int         `json:"modified"`
+	Untracked         int         `json:"untracked"`
+	Upstream          string      `json:"upstream,omitempty"`
+	UpstreamGone      bool        `json:"upstreamGone,omitempty"`
+	Ahead             int         `json:"ahead"`
+	UpstreamBehind    int         `json:"upstreamBehind"`
+	Base              string      `json:"base,omitempty"`
+	BehindBase        int         `json:"behindBase"`
+	Size              *BranchSize `json:"size,omitempty"`
+	LastCommit        string      `json:"lastCommit,omitempty"` // RFC 3339
+	VolatilePath      bool        `json:"volatilePath,omitempty"`
 
 	// Freshness: has the base moved, over files this branch also changed, and
 	// would merging or rebasing onto it conflict? Set only when a base exists.
@@ -78,7 +81,9 @@ func CollectLocalState(ctx context.Context, dir string, opts LocalStateOptions) 
 	}
 	ls := &LocalState{}
 
-	if out, err := gitIn(ctx, dir, "--no-optional-locks", "status", "--porcelain=v1"); err == nil {
+	if out, err := gitIn(ctx, dir, "--no-optional-locks", "status", "--porcelain=v1", "--untracked-files=normal"); err != nil {
+		ls.StatusUnavailable = true
+	} else {
 		for _, line := range strings.Split(out, "\n") {
 			switch {
 			case line == "":
@@ -283,8 +288,16 @@ func resolved(p string) string {
 // insideOrSame reports whether child is parent or lies under it, after
 // resolving symlinks through the deepest existing ancestor of each.
 func insideOrSame(child, parent string) bool {
-	c, p := resolved(absPath(child)), resolved(absPath(parent))
-	return c == p || strings.HasPrefix(c, p+string(filepath.Separator))
+	for p := absPath(child); ; {
+		if SameFolder(p, parent) {
+			return true
+		}
+		up := filepath.Dir(p)
+		if up == p {
+			return false
+		}
+		p = up
+	}
 }
 
 // LocalAttention returns the attention flags that git facts alone decide.

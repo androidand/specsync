@@ -81,7 +81,7 @@ func only(t *testing.T, items []CleanupItem) CleanupItem {
 func TestCleanupCandidate_MergedWithSameHeadAndClean(t *testing.T) {
 	f := newCleanupFixture(t)
 	f.squashIntoMain()
-	it := only(t, plan(t, []ChangeTopology{f.row(&ChangeRequest{Number: 7, State: "merged", HeadSHA: f.head()})}, nil))
+	it := only(t, plan(t, []ChangeTopology{f.row(&ChangeRequest{Number: 7, State: "merged", Base: "main", HeadSHA: f.head()})}, nil))
 	if it.Status != CleanupCandidate || !strings.Contains(it.Reason, "#7") {
 		t.Fatalf("got %+v", it)
 	}
@@ -128,7 +128,7 @@ func TestCleanupNotCandidate_CommitAfterTheMergeIsNamed(t *testing.T) {
 	merged := f.head()
 	f.squashIntoMain()
 	writeCommit(t, f.wt, "b.txt", "late fix")
-	it := only(t, plan(t, []ChangeTopology{f.row(&ChangeRequest{Number: 7, State: "merged", HeadSHA: merged})}, nil))
+	it := only(t, plan(t, []ChangeTopology{f.row(&ChangeRequest{Number: 7, State: "merged", Base: "main", HeadSHA: merged})}, nil))
 	if it.Status == CleanupCandidate || !strings.Contains(it.Reason, "late fix") {
 		t.Fatalf("the extra commit must be named: %+v", it)
 	}
@@ -136,7 +136,7 @@ func TestCleanupNotCandidate_CommitAfterTheMergeIsNamed(t *testing.T) {
 
 func TestCleanupNotCandidate_UpstreamGoneAndHeadNotMergedNorInBase(t *testing.T) {
 	f := newCleanupFixture(t)
-	row := f.row(&ChangeRequest{Number: 7, State: "merged", HeadSHA: "0000000000000000000000000000000000000000"})
+	row := f.row(&ChangeRequest{Number: 7, State: "merged", Base: "main", HeadSHA: "0000000000000000000000000000000000000000"})
 	row.Local.Upstream, row.Local.UpstreamGone = "origin/feat/42-thing", true
 	it := only(t, plan(t, []ChangeTopology{row}, nil))
 	if it.Status != CleanupAttention || !strings.Contains(it.Reason, "unpushed") {
@@ -147,7 +147,7 @@ func TestCleanupNotCandidate_UpstreamGoneAndHeadNotMergedNorInBase(t *testing.T)
 func TestCleanupUpstreamGone_MergedHeadIsStillACandidate(t *testing.T) {
 	f := newCleanupFixture(t)
 	f.squashIntoMain()
-	row := f.row(&ChangeRequest{Number: 7, State: "merged", HeadSHA: f.head()})
+	row := f.row(&ChangeRequest{Number: 7, State: "merged", Base: "main", HeadSHA: f.head()})
 	row.Local.Upstream, row.Local.UpstreamGone = "origin/feat/42-thing", true
 	if it := only(t, plan(t, []ChangeTopology{row}, nil)); it.Status != CleanupCandidate {
 		t.Fatalf("got %+v", it)
@@ -176,7 +176,7 @@ func TestCleanupSkips_ShownWithTheReason(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			f := newCleanupFixture(t)
 			f.squashIntoMain()
-			row := f.row(&ChangeRequest{Number: 7, State: "merged", HeadSHA: f.head()})
+			row := f.row(&ChangeRequest{Number: 7, State: "merged", Base: "main", HeadSHA: f.head()})
 			opts := CleanupOptions{}
 			c.mod(f, &row, &opts)
 			it := only(t, PlanCleanup(context.Background(), []ChangeTopology{row}, opts))
@@ -190,7 +190,7 @@ func TestCleanupSkips_ShownWithTheReason(t *testing.T) {
 func TestCleanupNeverListsTheMainCheckout(t *testing.T) {
 	f := newCleanupFixture(t)
 	f.squashIntoMain()
-	row := f.row(&ChangeRequest{Number: 7, State: "merged", HeadSHA: f.head()})
+	row := f.row(&ChangeRequest{Number: 7, State: "merged", Base: "main", HeadSHA: f.head()})
 	row.Worktree = f.main
 	if items := plan(t, []ChangeTopology{row}, nil); len(items) != 0 {
 		t.Fatalf("the main checkout is never a cleanup target: %+v", items)
