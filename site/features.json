@@ -130,5 +130,11 @@
     "icon": "state",
     "title": "A clean issue, not a wall of text",
     "body": "A synced issue shows title and task checklist first — Proposal, Original ask, and Discoveries render inside collapsed <code>&lt;details&gt;</code> blocks, one click away, nothing removed."
+  },
+  {
+    "group": "collaborate",
+    "icon": "state",
+    "title": "Catch stale references in your docs",
+    "body": "<code>specsync verify -refs</code> finds commit hashes and issue or PR references in change documents that no longer resolve after a rebase. Read-only and advisory; it never guesses a replacement."
   }
 ]
