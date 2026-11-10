@@ -544,6 +544,24 @@ change from the branch name), then `SPECSYNC_BUDGET`, then defaults of 30 files,
 Flags apply to unmerged work only: no size flag appears once the request is merged or closed. Defaults are policy, not a
 claim about the right size.
 
+### Plan a large change as slices
+
+Declare the parts of a change in `tasks.md` before the code. A `## Slice <n>: <title>` heading starts a slice, with
+optional `after: 1, 2`, `budget: files<=15, lines<=400` and `contract: <one sentence>` lines; the checkboxes below
+belong to it. A change without slice headings behaves as before, and specsync never proposes or infers slices.
+
+```bash
+specsync slices -change my-change              # progress, order, budget and state of each slice
+specsync slice start -change my-change -dry-run 2
+specsync slice start -change my-change 2       # branch and worktree, stacked on slice 1 when `after: 1`
+specsync -change my-change -slices -dry-run    # child issue per slice, blocked-by per `after`
+```
+
+`validate` reports slice numbers that are not contiguous, `after` targets that are missing or form a cycle, tasks
+under no slice, and slices without a contract. `status` shows which slice a branch was started for and uses that
+slice's budget as the size threshold. `-slices` is off by default; a provider that cannot nest issues gets the
+slices listed in the issue body instead. specsync records the order and reports state; it creates no pull request.
+
 ### `scan` — what already exists here?
 
 Run before planning new work. Give it an area — one or more paths and/or a

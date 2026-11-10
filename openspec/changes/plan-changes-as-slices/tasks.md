@@ -27,5 +27,5 @@
 
 ## 5. Docs
 
-- [ ] 5.1 Implement each new command or flag once, as a `Command` type per `make-commands-discoverable`; README, `agent-help`, the overview and the skill are generated, never hand-written
-- [ ] 5.2 Update `site/features.json`; run `specsync changelog -fail-on-unlinked-commits`
+- [x] 5.1 Implement each new command or flag once, as a `Command` type per `make-commands-discoverable`; README, `agent-help`, the overview and the skill are generated, never hand-written
+- [x] 5.2 Update `site/features.json`; run `specsync changelog -fail-on-unlinked-commits`
