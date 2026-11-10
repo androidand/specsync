@@ -129,6 +129,8 @@ appear on someone else's repository.
 | `pull` | Pull an issue into a local OpenSpec change. |
 | `set-priority` | Set or unset a change's numeric priority override. |
 | `set-stage` | Set the workflow stage of a change. |
+| `slice` | Start a slice: create its branch and worktree, stacked on the previous slice. |
+| `slices` | List a change's slices with progress, order, budget and state. |
 | `spinoff` | Spin off emergent work from a discovery. |
 
 **Sync with the tracker.** Start with `specsync -dry-run -change <slug>`.

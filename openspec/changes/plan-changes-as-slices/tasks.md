@@ -8,8 +8,8 @@
 
 ## 2. Commands
 
-- [ ] 2.1 `specsync slices [-change] [-json]` with progress, order, budget and derived state via the status join
-- [ ] 2.2 `specsync slice start <n>`: branch and worktree, stacked on the previous slice when `after` is set; record the binding
+- [x] 2.1 `specsync slices [-change] [-json]` with progress, order, budget and derived state via the status join
+- [x] 2.2 `specsync slice start <n>`: branch and worktree, stacked on the previous slice when `after` is set; record the binding
 - [ ] 2.3 Show a branch's slice in `status`, and use the slice budget as the threshold in the size advisory
 
 ## 3. Projection
@@ -21,7 +21,7 @@
 ## 4. Tests
 
 - [x] 4.1 Grammar fixtures: valid plan, missing contract, cycle, orphan task, no slices
-- [ ] 4.2 `slice start` in a fixture repo: stacked and unstacked, binding recorded
+- [x] 4.2 `slice start` in a fixture repo: stacked and unstacked, binding recorded
 - [ ] 4.3 Projection with a mocked provider, with and without hierarchy support
 - [x] 4.4 Property: specsync never emits a slice that the author did not declare
 

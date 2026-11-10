@@ -1,6 +1,7 @@
 package specsync
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -289,4 +290,107 @@ func SliceStatuses(plan SlicePlan, bindings map[int]SliceBinding, branchExists f
 		out = append(out, st)
 	}
 	return out
+}
+
+// StartSliceOptions configures StartSlice.
+type StartSliceOptions struct {
+	RepoDir     string
+	ChangeDir   string
+	Slug        string
+	IssueID     string // optional; names the branch feat/<issue>-<slug>-slice-<n>
+	N           int
+	WorktreeDir string // folder that holds the worktrees; default ../worktrees next to RepoDir
+	Base        string // base for a slice with no `after`; default origin/HEAD
+	DryRun      bool
+}
+
+// StartSliceResult says what StartSlice did, or on a dry run would do.
+type StartSliceResult struct {
+	Branch   string
+	Worktree string
+	Base     string
+	Stacked  bool
+	Created  bool
+}
+
+func localBranchExists(ctx context.Context, repoDir, branch string) bool {
+	for _, ref := range []string{"refs/heads/" + branch, "refs/remotes/origin/" + branch} {
+		if _, err := gitIn(ctx, repoDir, "rev-parse", "--verify", "--quiet", ref); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+// StartSlice creates slice N's branch and worktree and records the binding. A
+// slice with `after` is based on the branch of the last slice it names, so
+// slices form a stack; otherwise on Base (default origin/HEAD). It never creates
+// a change request, and starting an already started slice changes nothing.
+func StartSlice(ctx context.Context, opts StartSliceOptions) (*StartSliceResult, error) {
+	tasks, err := os.ReadFile(filepath.Join(opts.ChangeDir, "tasks.md"))
+	if err != nil {
+		return nil, fmt.Errorf("read tasks.md: %w", err)
+	}
+	plan := ParseSlices(string(tasks))
+	s, ok := plan.Get(opts.N)
+	if !ok {
+		return nil, fmt.Errorf("change %s declares no slice %d", opts.Slug, opts.N)
+	}
+	bindings, err := LoadSliceBindings(opts.ChangeDir)
+	if err != nil {
+		return nil, err
+	}
+
+	repoName := filepath.Base(opts.RepoDir)
+	name := opts.Slug
+	if opts.IssueID != "" {
+		name = opts.IssueID + "-" + opts.Slug
+	}
+	res := &StartSliceResult{Branch: fmt.Sprintf("feat/%s-slice-%d", name, s.N)}
+	wtDir := opts.WorktreeDir
+	if wtDir == "" {
+		wtDir = filepath.Join(filepath.Dir(opts.RepoDir), "worktrees")
+	}
+	res.Worktree = filepath.Join(wtDir, fmt.Sprintf("%s-%s-slice-%d", repoName, name, s.N))
+
+	if b, ok := bindings[s.N]; ok && b.Branch != "" && localBranchExists(ctx, opts.RepoDir, b.Branch) {
+		if _, err := os.Stat(b.Worktree); err == nil {
+			return &StartSliceResult{Branch: b.Branch, Worktree: b.Worktree, Base: b.Base, Stacked: len(s.After) > 0}, nil
+		}
+	}
+
+	if len(s.After) > 0 {
+		prev := s.After[len(s.After)-1]
+		pb, ok := bindings[prev]
+		if !ok || pb.Branch == "" || !localBranchExists(ctx, opts.RepoDir, pb.Branch) {
+			return nil, fmt.Errorf("slice %d comes after slice %d, which has no branch yet: run `specsync slice start %d` first", s.N, prev, prev)
+		}
+		res.Base, res.Stacked = pb.Branch, true
+	} else {
+		res.Base = opts.Base
+		if res.Base == "" {
+			if res.Base, err = DefaultBase(ctx, opts.RepoDir); err != nil {
+				return nil, fmt.Errorf("no base for slice %d: %w; pass -base", s.N, err)
+			}
+		}
+	}
+	if opts.DryRun {
+		return res, nil
+	}
+
+	if err := os.MkdirAll(wtDir, 0o755); err != nil {
+		return nil, fmt.Errorf("create worktree folder: %w", err)
+	}
+	args := []string{"worktree", "add", "-b", res.Branch, res.Worktree, res.Base}
+	if localBranchExists(ctx, opts.RepoDir, res.Branch) {
+		args = []string{"worktree", "add", res.Worktree, res.Branch}
+	}
+	if _, err := gitIn(ctx, opts.RepoDir, args...); err != nil {
+		return nil, err
+	}
+	res.Created = true
+	if err := SaveSliceBinding(opts.ChangeDir, s.N, SliceBinding{Branch: res.Branch, Worktree: res.Worktree, Base: res.Base}); err != nil {
+		return nil, err
+	}
+	return res, nil
 }
