@@ -284,3 +284,15 @@ func TestPrintCurrentStatus_FailedLookupIsNotPrintedAsNone(t *testing.T) {
 		t.Errorf("unknown must not read as none:\n%s", out)
 	}
 }
+
+func TestPrintCurrentStatus_ShowsTheSliceTheBranchBelongsTo(t *testing.T) {
+	row := currentRow()
+	if out := captureStdout(t, func() { printCurrentStatus(row, true) }); strings.Contains(out, "slice:") {
+		t.Fatalf("no slice line without a bound slice:\n%s", out)
+	}
+	row.Slice = &specsync.SliceRef{N: 2, Title: "Commands"}
+	out := captureStdout(t, func() { printCurrentStatus(row, true) })
+	if !strings.Contains(out, "slice:   2 Commands") {
+		t.Fatalf("missing slice line:\n%s", out)
+	}
+}

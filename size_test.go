@@ -247,8 +247,29 @@ func TestSliceDeclarations(t *testing.T) {
 	if !HasSlices(dir) {
 		t.Fatal("a Slice heading declares slices")
 	}
-	if got := SliceBudgetLine(dir); got != "files<=5" {
-		t.Fatalf("budget line = %q", got)
+	if got := ChangeBudgetLine(dir); got != "" {
+		t.Fatalf("a budget inside a slice is not the change-level budget, got %q", got)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "tasks.md"), []byte("# Tasks\n\nbudget: files<=20\n\n## Slice 1: parser\nbudget: files<=5\n- [ ] a\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := ChangeBudgetLine(dir); got != "files<=20" {
+		t.Fatalf("change-level budget = %q", got)
+	}
+	if got := BudgetLineForBranch(dir, "feat/x"); got != "files<=20" {
+		t.Fatalf("an unbound branch gets the change-level budget, got %q", got)
+	}
+	if err := SaveSliceBinding(dir, 1, SliceBinding{Branch: "feat/x"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := BudgetLineForBranch(dir, "feat/x"); got != "files<=5" {
+		t.Fatalf("a bound slice uses its own budget, got %q", got)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "tasks.md"), []byte("# Tasks\n\nbudget: files<=20\n\n## Slice 1: parser\n- [ ] a\n\n## Slice 2: cmds\nbudget: files<=3\n- [ ] b\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := BudgetLineForBranch(dir, "feat/x"); got != "files<=20" {
+		t.Fatalf("a bound slice without a budget falls back to the change-level one, never another slice's: %q", got)
 	}
 }
 
@@ -256,7 +277,7 @@ func TestSizeAnalysisNeverGeneratesSlices(t *testing.T) {
 	dir := t.TempDir()
 	before := fmt.Sprint(listDir(t, dir))
 	_ = HasSlices(dir)
-	_ = SliceBudgetLine(dir)
+	_ = ChangeBudgetLine(dir)
 	if after := fmt.Sprint(listDir(t, dir)); after != before {
 		t.Fatalf("analysis must not write files: %s -> %s", before, after)
 	}

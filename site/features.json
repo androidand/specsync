@@ -158,5 +158,9 @@
   {
     "title": "Short, consistent issues and PRs",
     "body": "<code>specsync lint</code> checks titles, headers, sentences and length against a short standard, advisory unless <code>-fail</code>. <code>pr-body -template</code> writes a brief PR body from the change and your repo's template. Never rewrites your text."
+  },
+  {
+    "title": "Plan a big change as slices",
+    "body": "Declare reviewable slices in <code>tasks.md</code>, each with a contract, an order and a size budget. <code>specsync slices</code> shows each slice's branch and pull request, <code>slice start</code> opens the next one stacked on the last, and <code>sync -slices</code> mirrors them as child issues."
   }
 ]

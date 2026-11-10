@@ -90,6 +90,9 @@ func Adopt(ctx context.Context, opts AdoptOptions) (AdoptResult, error) {
 	// Refuse when the issue already carries another change's marker, unless
 	// -force. Adopting it anyway would silently steal a binding that some
 	// other change depends on.
+	if parent, n, ok := SliceMarker(item.Body); ok {
+		return AdoptResult{}, fmt.Errorf("issue %s is slice %d of change %q and cannot be adopted as a change", item.URL, n, parent)
+	}
 	if owner := slugFromMarker(item.Body); owner != "" && owner != slug && !opts.Force {
 		return AdoptResult{}, fmt.Errorf("issue %s already carries the marker for change %q; pass -force to rebind it to %q", item.URL, owner, slug)
 	}

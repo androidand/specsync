@@ -73,7 +73,19 @@ func changeBudgetLine(ctx context.Context, fs *flag.FlagSet, openspec, store *st
 	if c == nil {
 		return "", ""
 	}
-	return specsync.SliceBudgetLine(c.Dir), c.Slug
+	return specsync.BudgetLineForBranch(c.Dir, branchName(ctx, dir, head)), c.Slug
+}
+
+// branchName resolves head to a branch name; "HEAD" means the checked-out one.
+func branchName(ctx context.Context, dir, head string) string {
+	if head != "HEAD" {
+		return head
+	}
+	out, err := exec.CommandContext(ctx, "git", "-C", dir, "rev-parse", "--abbrev-ref", "HEAD").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }
 
 // matchedChange finds the one change a branch belongs to, by slug or by issue
@@ -88,13 +100,9 @@ func matchedChange(ctx context.Context, fs *flag.FlagSet, openspec, store *strin
 	if err != nil {
 		return nil
 	}
-	name := head
-	if name == "HEAD" {
-		out, err := exec.CommandContext(ctx, "git", "-C", dir, "rev-parse", "--abbrev-ref", "HEAD").Output()
-		if err != nil {
-			return nil
-		}
-		name = strings.TrimSpace(string(out))
+	name := branchName(ctx, dir, head)
+	if name == "" {
+		return nil
 	}
 	issue := ""
 	if m := branchIssue.FindStringSubmatch(name); m != nil {

@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -21,6 +22,7 @@ type syncCmd struct {
 	providerNames  stringSlice
 	mcpConfig      *string
 	dryRun         *bool
+	slices         *bool
 	reconcile      *bool
 	closeCompleted *bool
 	labels         *bool
@@ -52,6 +54,7 @@ func (*syncCmd) Spec() Spec {
 			"specsync -dry-run -change my-change",
 			"specsync -change my-change",
 			"specsync sync -dry-run -change my-change",
+			"specsync -dry-run -change my-change -slices",
 		},
 	}
 }
@@ -64,6 +67,7 @@ func (cm *syncCmd) Flags(fs *flag.FlagSet) {
 	fs.Var(&cm.providerNames, "provider", "work provider: github, beads, mcp (repeatable; auto-detect when absent)")
 	cm.mcpConfig = fs.String("mcp-config", ".specsync-mcp.json", "path to the MCP provider's config (used only with -provider mcp)")
 	cm.dryRun = fs.Bool("dry-run", false, "print the provider commands and rendered body without executing")
+	cm.slices = fs.Bool("slices", false, "project each declared slice as a child issue of the change's issue, blocked by the slices it comes after; list them in the issue body when the provider cannot nest issues")
 	cm.reconcile = fs.Bool("reconcile", true, "merge external task state back into tasks.md before pushing")
 	cm.closeCompleted = fs.Bool("close-completed", false, "close the tracker item once every task in a change is checked")
 	cm.labels = fs.Bool("labels", false, "add specsync/stage:<stage> labels to synced issues (off by default: neither is read back by specsync; a sync without this flag also removes them from issues that already carry them)")
@@ -255,6 +259,7 @@ func (cm *syncCmd) run(args []string) {
 		Providers:      providers,
 		Slug:           *change,
 		DryRun:         *dryRun,
+		Slices:         *cm.slices,
 		Reconcile:      *reconcile,
 		CloseCompleted: *closeCompleted,
 		Project:        target,
@@ -269,6 +274,7 @@ func (cm *syncCmd) run(args []string) {
 		fmt.Println("(reconcile applies on a real sync — dry-run makes no issue reads)")
 	}
 	fmt.Println()
+	sliceFailed := false
 	for _, it := range res.Items {
 		if len(it.Providers) > 0 {
 			for _, pr := range it.Providers {
@@ -313,6 +319,13 @@ func (cm *syncCmd) run(args []string) {
 		if it.TitleSuggestion != "" {
 			fmt.Printf("           ↳ title could be tighter: %q — edit the proposal.md H1 if you agree\n", it.TitleSuggestion)
 		}
+		for _, line := range it.Slices {
+			fmt.Printf("           ↳ %s\n", line)
+		}
+		for _, line := range it.SliceFailures {
+			fmt.Printf("           ✗ %s\n", line)
+			sliceFailed = true
+		}
 		if it.BoardConfigured {
 			printBoardPlan(it.Board, *dryRun)
 		}
@@ -321,4 +334,8 @@ func (cm *syncCmd) run(args []string) {
 		}
 	}
 	fmt.Printf("specsync: %d created, %d updated\n", res.Created, res.Updated)
+	if sliceFailed {
+		fmt.Fprintln(os.Stderr, "specsync: some slice steps failed; run again to retry them")
+		os.Exit(1)
+	}
 }

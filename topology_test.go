@@ -1035,3 +1035,41 @@ func TestBuildTopology_SyncAdviceFollowsTheRepoConfig(t *testing.T) {
 		t.Fatalf("strategy: merge must make the advice a merge, got %+v", row.Sync)
 	}
 }
+
+func TestBuildTopology_ShowsTheSliceABranchIsBoundToAndUsesItsBudget(t *testing.T) {
+	opts, _ := localStateFixture(t)
+	cdir := filepath.Join(opts.OpenSpecDir, "changes", "add-field-forms")
+	mustWrite(t, filepath.Join(cdir, "tasks.md"),
+		"# Tasks\n\n## Slice 1: parser\ncontract: a\nbudget: files<=9\n- [ ] a\n\n## Slice 2: commands\nafter: 1\ncontract: b\nbudget: files<=3\n- [ ] b\n")
+	var got LocalStateOptions
+	opts.localState = func(_ context.Context, _ string, lo LocalStateOptions) (*LocalState, error) {
+		got = lo
+		return &LocalState{Upstream: "origin/x"}, nil
+	}
+
+	topo, err := BuildTopology(context.Background(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if topo.Changes[0].Slice != nil {
+		t.Fatalf("a branch that is bound to no slice must not be given one by its name: %+v", topo.Changes[0].Slice)
+	}
+	if got.Budget.Files != DefaultBudget.Files {
+		t.Fatalf("an unbound branch uses no slice's budget, got %+v", got.Budget)
+	}
+
+	if err := SaveSliceBinding(cdir, 2, SliceBinding{Branch: "feat/4231-add-field-forms"}); err != nil {
+		t.Fatal(err)
+	}
+	topo, err = BuildTopology(context.Background(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	row := topo.Changes[0]
+	if row.Slice == nil || row.Slice.N != 2 || row.Slice.Title != "commands" {
+		t.Fatalf("slice = %+v", row.Slice)
+	}
+	if got.Budget.Files != 3 {
+		t.Fatalf("the bound slice's budget is the threshold, got %+v", got.Budget)
+	}
+}

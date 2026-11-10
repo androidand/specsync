@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -92,6 +94,10 @@ func Pull(ctx context.Context, opts PullOptions) (PullResult, error) {
 	item, err := reader.Get(ctx, issueID)
 	if err != nil {
 		return PullResult{}, err
+	}
+
+	if parent, n, ok := SliceMarker(item.Body); ok {
+		return PullResult{}, fmt.Errorf("issue %s is slice %d of change %q: pull the change's own issue instead", item.URL, n, parent)
 	}
 
 	slug := opts.Slug
@@ -515,8 +521,30 @@ func startsWithH1(md string) bool {
 	return false
 }
 
-// slugFromMarker returns the slug encoded in a specsync identity marker, or "".
+var sliceMarkerSlug = regexp.MustCompile(`^(.+):slice-(\d+)$`)
+
+// SliceMarker reports whether body carries the identity marker of a slice's
+// child issue (`specsync:change=<slug>:slice-<n>`), and which change and slice.
+func SliceMarker(body string) (changeSlug string, n int, ok bool) {
+	m := sliceMarkerSlug.FindStringSubmatch(rawMarkerSlug(body))
+	if m == nil {
+		return "", 0, false
+	}
+	n, _ = strconv.Atoi(m[2])
+	return m[1], n, true
+}
+
+// slugFromMarker returns the change slug encoded in a specsync identity
+// marker, or "". A slice's marker names no change of its own, so it yields "".
 func slugFromMarker(body string) string {
+	slug := rawMarkerSlug(body)
+	if sliceMarkerSlug.MatchString(slug) {
+		return ""
+	}
+	return slug
+}
+
+func rawMarkerSlug(body string) string {
 	const open = "<!-- specsync:change="
 	i := strings.Index(body, open)
 	if i < 0 {

@@ -528,9 +528,38 @@ func (e *ClosedIssueError) Error() string {
 
 func (p *GitHubProvider) Find(ctx context.Context, slug string) (*Ref, error) {
 	// Search the inner token (not the full HTML comment) for friendlier indexing.
+	// A slug with a colon (an epic or a slice) is quoted: unquoted, GitHub reads
+	// the colon as a qualifier.
 	search := fmt.Sprintf("specsync:change=%s in:body", slug)
+	if strings.Contains(slug, ":") {
+		search = fmt.Sprintf("\"specsync:change=%s\" in:body", slug)
+	}
 	args := append([]string{"issue", "list"}, p.repoFlag()...)
 	args = append(args, "--state", "all", "--search", search, "--json", "number,url,body", "--limit", "30")
+	matches, err := p.findMarker(ctx, args, slug)
+	if err != nil {
+		return nil, err
+	}
+	if len(matches) == 0 && sliceMarkerSlug.MatchString(slug) {
+		listArgs := append([]string{"issue", "list"}, p.repoFlag()...)
+		listArgs = append(listArgs, "--state", "all", "--label", "type:slice", "--json", "number,url,body", "--limit", "200")
+		if matches, err = p.findMarker(ctx, listArgs, slug); err != nil {
+			return nil, err
+		}
+	}
+	switch len(matches) {
+	case 0:
+		return nil, nil
+	case 1:
+		return &matches[0], nil
+	default:
+		return nil, &AmbiguousMarkerError{Slug: slug, Candidates: matches}
+	}
+}
+
+// findMarker runs an issue listing and keeps the issues whose body carries
+// slug's identity marker; the search index is a hint, the marker is the proof.
+func (p *GitHubProvider) findMarker(ctx context.Context, args []string, slug string) ([]Ref, error) {
 	out, err := p.run(ctx, args...)
 	if err != nil {
 		return nil, err
@@ -553,14 +582,7 @@ func (p *GitHubProvider) Find(ctx context.Context, slug string) (*Ref, error) {
 			matches = append(matches, Ref{Provider: p.Name(), ID: fmt.Sprintf("%d", it.Number), URL: it.URL})
 		}
 	}
-	switch len(matches) {
-	case 0:
-		return nil, nil
-	case 1:
-		return &matches[0], nil
-	default:
-		return nil, &AmbiguousMarkerError{Slug: slug, Candidates: matches}
-	}
+	return matches, nil
 }
 
 // SearchOpenIssues finds open issues matching a free-text query, satisfying the
@@ -950,4 +972,83 @@ func (p *GitHubProvider) RemoveBlockedBy(ctx context.Context, issueNum, blockedB
 		"-f", "issueId="+issueNum,
 		"-f", "blockedById="+blockedByNodeID,
 	)
+}
+
+// LinkSubIssue nests child under parent as a native GitHub sub-issue.
+func (p *GitHubProvider) LinkSubIssue(ctx context.Context, parent, child Ref) error {
+	parentID, err := p.ResolveNodeID(ctx, parent.URL)
+	if err != nil {
+		return err
+	}
+	childID, err := p.ResolveNodeID(ctx, child.URL)
+	if err != nil {
+		return err
+	}
+	mutation := `
+		mutation($issueId: ID!, $subIssueId: ID!) {
+			addSubIssue(input: {issueId: $issueId, subIssueId: $subIssueId}) {
+				clientMutationId
+			}
+		}
+	`
+	return p.graphql(ctx, "addSubIssue", mutation, nil, "-f", "issueId="+parentID, "-f", "subIssueId="+childID)
+}
+
+// AddBlockedByRef records that issue is blocked by blocker.
+func (p *GitHubProvider) AddBlockedByRef(ctx context.Context, issue, blocker Ref) error {
+	issueID, err := p.ResolveNodeID(ctx, issue.URL)
+	if err != nil {
+		return err
+	}
+	blockerID, err := p.ResolveNodeID(ctx, blocker.URL)
+	if err != nil {
+		return err
+	}
+	return p.AddBlockedBy(ctx, issueID, blockerID)
+}
+
+// IsSubIssue reports whether child is already nested under parent.
+func (p *GitHubProvider) IsSubIssue(ctx context.Context, parent, child Ref) (bool, error) {
+	owner, repo, number, err := parseIssueURL(child.URL)
+	if err != nil {
+		return false, err
+	}
+	query := `
+		query($owner: String!, $repo: String!, $number: Int!) {
+			repository(owner: $owner, name: $repo) {
+				issue(number: $number) {
+					parent {
+						url
+					}
+				}
+			}
+		}
+	`
+	var out struct {
+		Repository struct {
+			Issue struct {
+				Parent *struct {
+					URL string `json:"url"`
+				} `json:"parent"`
+			} `json:"issue"`
+		} `json:"repository"`
+	}
+	if err := p.graphql(ctx, "readParent", query, &out,
+		"-f", "owner="+owner, "-f", "repo="+repo, "-F", fmt.Sprintf("number=%d", number)); err != nil {
+		return false, err
+	}
+	return out.Repository.Issue.Parent != nil && out.Repository.Issue.Parent.URL == parent.URL, nil
+}
+
+// BlockedByRefs lists the issues that block issue.
+func (p *GitHubProvider) BlockedByRefs(ctx context.Context, issue Ref) ([]Ref, error) {
+	edges, err := p.ReadDependenciesForRef(ctx, issue)
+	if err != nil {
+		return nil, err
+	}
+	refs := make([]Ref, 0, len(edges))
+	for _, e := range edges {
+		refs = append(refs, e.Ref)
+	}
+	return refs, nil
 }

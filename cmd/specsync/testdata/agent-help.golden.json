@@ -27,6 +27,8 @@
     "scan",
     "set-priority",
     "set-stage",
+    "slice",
+    "slices",
     "spinoff",
     "status",
     "sync",
@@ -1745,6 +1747,153 @@
         "specsync set-stage my-change complete"
       ]
     },
+    "slice": {
+      "command": "slice",
+      "description": "Start a slice: create its branch and worktree, stacked on the previous slice.",
+      "mutates": true,
+      "args": [
+        {
+          "name": "start",
+          "description": "the action; only `start` exists",
+          "required": true
+        },
+        {
+          "name": "n",
+          "description": "the slice number",
+          "required": true
+        }
+      ],
+      "workflow": {
+        "position": "implementation",
+        "related_before": [
+          "slices"
+        ],
+        "related_after": [
+          "status"
+        ]
+      },
+      "flags": [
+        {
+          "name": "base",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "base for a slice with no `after` (default: origin/HEAD)"
+        },
+        {
+          "name": "change",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "the change (default: the only change that declares slices)"
+        },
+        {
+          "name": "dry-run",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "show the branch, worktree and base without creating anything"
+        },
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "store",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "registered OpenSpec store id to operate on (default: openspec/config.yaml `store:`, else ./openspec)"
+        },
+        {
+          "name": "worktree-dir",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "folder for worktrees (default: $SPECSYNC_WORKTREE_DIR or ../worktrees)"
+        }
+      ],
+      "safety_rules": [
+        "Use -dry-run to see the branch, worktree and base first",
+        "Creates a branch and a worktree and records the binding under the change's .specsync/ folder; never creates a pull request",
+        "A slice with `after` is based on the previous slice's branch; otherwise on -base (default origin/HEAD)",
+        "Starting a slice that is already started changes nothing"
+      ],
+      "examples": [
+        "specsync slice start -change my-change -dry-run 1",
+        "specsync slice start -change my-change 2"
+      ]
+    },
+    "slices": {
+      "command": "slices",
+      "description": "List a change's slices with progress, order, budget and state.",
+      "mutates": false,
+      "workflow": {
+        "position": "planning",
+        "related_before": [
+          "changes"
+        ],
+        "related_after": [
+          "slice",
+          "status"
+        ]
+      },
+      "flags": [
+        {
+          "name": "change",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "the change (default: the only change that declares slices)"
+        },
+        {
+          "name": "json",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "output as JSON"
+        },
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "repo",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "target repo as owner/name (default: auto-detect from git remote)"
+        },
+        {
+          "name": "state",
+          "type": "string",
+          "required": false,
+          "default": "on",
+          "description": "on asks the tracker for each slice's pull request; off uses local git only"
+        },
+        {
+          "name": "store",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "registered OpenSpec store id to operate on (default: openspec/config.yaml `store:`, else ./openspec)"
+        }
+      ],
+      "safety_rules": [
+        "Read-only: never writes to disk, git or the tracker",
+        "Slices exist only where tasks.md declares a `## Slice \u003cn\u003e: \u003ctitle\u003e` heading; specsync never proposes or infers them"
+      ],
+      "examples": [
+        "specsync slices -change my-change",
+        "specsync slices -change my-change -json"
+      ]
+    },
     "spinoff": {
       "command": "spinoff",
       "description": "Spin off emergent work from a discovery.",
@@ -2039,6 +2188,13 @@
           "description": "target repo as owner/name (default: auto-detect from git remote)"
         },
         {
+          "name": "slices",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "project each declared slice as a child issue of the change's issue, blocked by the slices it comes after; list them in the issue body when the provider cannot nest issues"
+        },
+        {
           "name": "spec",
           "type": "string",
           "required": false,
@@ -2068,7 +2224,8 @@
       "examples": [
         "specsync -dry-run -change my-change",
         "specsync -change my-change",
-        "specsync sync -dry-run -change my-change"
+        "specsync sync -dry-run -change my-change",
+        "specsync -dry-run -change my-change -slices"
       ]
     },
     "trace": {

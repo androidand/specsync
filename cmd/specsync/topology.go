@@ -308,6 +308,9 @@ func printCurrentStatus(row specsync.ChangeTopology, requestsKnown bool) {
 		}
 	}
 	fmt.Printf("branch:  %s\n", branch)
+	if row.Slice != nil {
+		fmt.Printf("slice:   %d %s\n", row.Slice.N, row.Slice.Title)
+	}
 	if row.Worktree != "" {
 		fmt.Printf("path:    %s\n", row.Worktree)
 	}
