@@ -62,3 +62,22 @@ func TestPlainProfileDoesNotMakeTextProfileReserved(t *testing.T) {
 		}
 	}
 }
+
+func TestTextIssuesAreInAFixedOrder(t *testing.T) {
+	cfg := []byte("text:\n  headers: nope\n  filler: nope\n")
+	first := ""
+	for i := 0; i < 20; i++ {
+		_, issues := ParseWays(cfg)
+		var keys []string
+		for _, is := range issues {
+			keys = append(keys, is.Key)
+		}
+		got := strings.Join(keys, ",")
+		if i == 0 {
+			first = got
+		}
+		if got != first {
+			t.Fatalf("issue order changed: %q vs %q", got, first)
+		}
+	}
+}

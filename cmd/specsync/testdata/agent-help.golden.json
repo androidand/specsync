@@ -994,7 +994,7 @@
         }
       ],
       "safety_rules": [
-        "Advisory: exits 0 unless -fail is given; never edits text",
+        "Advisory: exits 0 unless -fail is given (then 1 on findings); exit 2 means it could not run; never edits text",
         "The standard is the default or the text: section of openspec/specsync.yml"
       ],
       "examples": [

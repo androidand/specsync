@@ -126,20 +126,20 @@ func TestRenderPRBodyTemplateWithoutKnownSectionsGetsTheReference(t *testing.T) 
 
 func TestFindPRTemplate(t *testing.T) {
 	root := t.TempDir()
-	if p, _ := FindPRTemplate(root, DefaultText()); p != "" {
+	if p, _, _ := FindPRTemplate(root, DefaultText()); p != "" {
 		t.Fatalf("no template yet: %q", p)
 	}
 	gh := filepath.Join(root, ".github")
 	_ = os.MkdirAll(gh, 0o755)
 	_ = os.WriteFile(filepath.Join(gh, "pull_request_template.md"), []byte("## Why\n"), 0o644)
-	if p, body := FindPRTemplate(root, DefaultText()); p != ".github/pull_request_template.md" || body != "## Why\n" {
+	if p, body, _ := FindPRTemplate(root, DefaultText()); p != ".github/pull_request_template.md" || body != "## Why\n" {
 		t.Fatalf("got %q %q", p, body)
 	}
 	cfg := DefaultText()
 	cfg.Template = "docs/pr.md"
 	_ = os.MkdirAll(filepath.Join(root, "docs"), 0o755)
 	_ = os.WriteFile(filepath.Join(root, "docs", "pr.md"), []byte("## What\n"), 0o644)
-	if p, _ := FindPRTemplate(root, cfg); p != "docs/pr.md" {
+	if p, _, _ := FindPRTemplate(root, cfg); p != "docs/pr.md" {
 		t.Fatalf("the configured path wins: %q", p)
 	}
 }
@@ -148,5 +148,46 @@ func TestRenderPRBodyAddsTheReferenceWhenTheTemplateHasNoClosesSection(t *testin
 	out := RenderPRBody(PRBodyInput{Change: demoChange(), Template: "## Description\n\nx\n\n## Checklist\n\n- [ ] docs\n", Reference: "Part of #12", Text: DefaultText()})
 	if !strings.HasSuffix(strings.TrimSpace(out), "Part of #12") || !strings.Contains(out, "- [ ] docs") {
 		t.Fatalf("got:\n%s", out)
+	}
+}
+
+func TestRenderPRBodyReadsWhatChangesAndSubheadings(t *testing.T) {
+	c := demoChange()
+	c.Body = "# T\n\n## Why\n\nReason.\n\n## What Changes\n\n- First change.\n\n### Detail\n\n- Second change.\n\n## Impact\n\n- Not this.\n"
+	out := RenderPRBody(PRBodyInput{Change: c, Reference: "Part of #1", Text: DefaultText()})
+	if !strings.Contains(out, "- First change.") || !strings.Contains(out, "- Second change.") || strings.Contains(out, "Not this") {
+		t.Fatalf("got:\n%s", out)
+	}
+	c.Body = "# T\n\n## Why\n\nReason.\n\n## Changes\n\n- Plain.\n"
+	if out := RenderPRBody(PRBodyInput{Change: c, Reference: "Part of #1", Text: DefaultText()}); !strings.Contains(out, "- Plain.") {
+		t.Fatalf("## Changes also works:\n%s", out)
+	}
+}
+
+func TestRenderPRBodyTemplateIgnoresHeadingsInCodeAndComments(t *testing.T) {
+	tpl := "## Notes\n\n```\n## Summary\nnot a section\n```\n\n<!--\n## Testing\n-->\n\n## Summary\n\nplaceholder\n\n## Description\n\nold\n"
+	out := RenderPRBody(PRBodyInput{Change: demoChange(), Template: tpl, Reference: "Part of #1", Text: DefaultText()})
+	if !strings.Contains(out, "```\n## Summary\nnot a section\n```") || !strings.Contains(out, "<!--\n## Testing\n-->") {
+		t.Fatalf("code and comment content must survive:\n%s", out)
+	}
+	if strings.Count(out, "Work is spread over many branches.") != 1 || strings.Contains(out, "placeholder") {
+		t.Fatalf("a kind is filled once, by its first heading:\n%s", out)
+	}
+	if !strings.Contains(out, "## Description\n\nold") {
+		t.Fatalf("the second heading of the same kind keeps its template text:\n%s", out)
+	}
+}
+
+func TestFindPRTemplateStaysInsideTheRepo(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	_ = os.WriteFile(filepath.Join(outside, "t.md"), []byte("## Why\n"), 0o644)
+	_ = os.Symlink(outside, filepath.Join(root, "link"))
+	for _, tpl := range []string{filepath.Join(outside, "t.md"), "../" + filepath.Base(outside) + "/t.md", "link/t.md"} {
+		cfg := DefaultText()
+		cfg.Template = tpl
+		if _, _, err := FindPRTemplate(root, cfg); err == nil || !strings.Contains(err.Error(), "inside the repository") {
+			t.Errorf("%q must be rejected, got %v", tpl, err)
+		}
 	}
 }

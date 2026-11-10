@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/androidand/specsync"
@@ -69,7 +68,8 @@ func (cm *prBodyCmd) run(args []string) {
 		fail(fmt.Errorf("pr-body: -template renders the whole body; it cannot be combined with -body-file"))
 	}
 
-	abs := resolveRoot(fs, openspec, storeFlag).Dir
+	resolved := resolveRoot(fs, openspec, storeFlag)
+	abs := resolved.Dir
 
 	c, err := specsync.LoadChangeBySlug(abs, *change)
 	if err != nil {
@@ -111,7 +111,7 @@ func (cm *prBodyCmd) run(args []string) {
 	}
 
 	if *cm.template {
-		printTemplateBody(ctx, abs, c, refLine)
+		printTemplateBody(ctx, &resolved, c, refLine)
 		return
 	}
 	if refLine != "" {
@@ -132,15 +132,19 @@ func (cm *prBodyCmd) run(args []string) {
 	}
 }
 
-func printTemplateBody(ctx context.Context, openspecDir string, c *specsync.Change, refLine string) {
-	repoRoot := filepath.Dir(openspecDir)
+func printTemplateBody(ctx context.Context, resolved *specsync.ResolvedRoot, c *specsync.Change, refLine string) {
+	repoRoot := textRepoRoot(resolved)
 	ways, issues := specsync.LoadWays(repoRoot)
 	if len(issues) > 0 {
 		fmt.Fprintf(os.Stderr, "specsync: %s has problems (%s); run specsync doctor config\n", specsync.SpecSyncConfigPath, issues[0])
 	}
-	_, tpl := specsync.FindPRTemplate(repoRoot, ways.Text)
+	_, tpl, err := specsync.FindPRTemplate(repoRoot, ways.Text)
+	if err != nil {
+		fail(err)
+	}
+	cwd, _ := os.Getwd()
 	fmt.Print(specsync.RenderPRBody(specsync.PRBodyInput{
-		Change: *c, Template: tpl, Reference: refLine, Size: branchSizeLine(ctx, repoRoot), Text: ways.Text,
+		Change: *c, Template: tpl, Reference: refLine, Size: branchSizeLine(ctx, repoTop(cwd)), Text: ways.Text,
 	}))
 }
 

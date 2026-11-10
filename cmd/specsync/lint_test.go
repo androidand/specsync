@@ -1,7 +1,9 @@
 package main
 
 import (
+	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -198,5 +200,61 @@ func TestDoctorConfigValidatesTheTextSection(t *testing.T) {
 	dir, env = lintRepo(t, "", "text:\n  profile: plain\n  headers: [Non-goals]\n")
 	if out, err := runIn(t, bin, dir, env, "doctor", "config"); err != nil || !strings.Contains(out, "config is valid") {
 		t.Fatalf("a valid text section: err=%v\n%s", err, out)
+	}
+}
+
+func lintExit(err error) int {
+	var ee *exec.ExitError
+	if errors.As(err, &ee) {
+		return ee.ExitCode()
+	}
+	return 0
+}
+
+func TestLintSetupErrorsExitTwoAndFindingsExitOne(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	dir, env := lintRepo(t, "# T\n", "")
+	cases := []struct {
+		name string
+		args []string
+		want int
+	}{
+		{"nothing to check", []string{"lint"}, 2},
+		{"empty title", []string{"lint", "-title", ""}, 2},
+		{"unknown change", []string{"lint", "-change", "nope"}, 2},
+		{"bad kind", []string{"lint", "-title", "x", "-kind", "bug"}, 2},
+		{"missing file", []string{"lint", "-body-file", "nope.md"}, 2},
+		{"findings without -fail", []string{"lint", "-title", "Add the thing"}, 0},
+		{"findings with -fail", []string{"lint", "-title", "Add the thing", "-fail"}, 1},
+	}
+	for _, c := range cases {
+		out, err := runIn(t, bin, dir, env, c.args...)
+		if got := lintExit(err); got != c.want {
+			t.Errorf("%s: exit %d, want %d\n%s", c.name, got, c.want, out)
+		}
+	}
+}
+
+func TestLintReadsTheStandardFromTheRepoRootNotTheWorkingDirectory(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	dir, env := lintRepo(t, "", "text: {profile: plain}\n")
+	sub := filepath.Join(dir, "pkg", "x")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := runIn(t, bin, sub, env, "lint", "-title", "Add the thing", "-fail"); err != nil {
+		t.Fatalf("the plain profile at the repo root applies from a subdirectory: %v\n%s", err, out)
+	}
+}
+
+func TestPRBodyTemplateRejectsATemplatePathOutsideTheRepo(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	dir, env := prBodyRepo(t, "")
+	if err := os.WriteFile(filepath.Join(dir, "openspec", "specsync.yml"), []byte("text: {template: ../outside.md}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, err := runIn(t, bin, dir, env, "pr-body", "-change", "demo", "-repo", "o/r", "-template")
+	if err == nil || !strings.Contains(out, "inside the repository") {
+		t.Fatalf("a template outside the repo must be refused: %v\n%s", err, out)
 	}
 }

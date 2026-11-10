@@ -38,7 +38,7 @@ func (*lintCmd) Spec() Spec {
 		Intents:  []string{"keep issues short", "check my PR title", "conventional commits"},
 		Workflow: AgentCommandWorkflow{Position: "pre-merge", RelatedBefore: []string{"pr-body"}},
 		Safety: []string{
-			"Advisory: exits 0 unless -fail is given; never edits text",
+			"Advisory: exits 0 unless -fail is given (then 1 on findings); exit 2 means it could not run; never edits text",
 			"The standard is the default or the text: section of openspec/specsync.yml",
 		},
 		Examples: []string{
@@ -88,27 +88,32 @@ func (cm *lintCmd) Run(_ context.Context, args []string) error {
 	_ = fs.Parse(args)
 	checkArgs(fs, args, 0)
 
-	if *cm.change == "" && *cm.title == "" && *cm.bodyFile == "" && *cm.pr == "" {
-		fail(fmt.Errorf("lint: pass -change <slug>, -title <text>, -body-file <file> or -pr <number>"))
+	titleGiven := false
+	fs.Visit(func(f *flag.Flag) { titleGiven = titleGiven || f.Name == "title" })
+	if titleGiven && strings.TrimSpace(*cm.title) == "" {
+		lintSetupError(fmt.Errorf("lint: -title is empty"))
+	}
+	if *cm.change == "" && !titleGiven && *cm.bodyFile == "" && *cm.pr == "" {
+		lintSetupError(fmt.Errorf("lint: pass -change <slug>, -title <text>, -body-file <file> or -pr <number>"))
 	}
 	kind := *cm.kind
 	if kind != "" && kind != "pr" && kind != "commit" && kind != "issue" {
-		fail(fmt.Errorf("lint: -kind must be pr, commit or issue"))
+		lintSetupError(fmt.Errorf("lint: -kind must be pr, commit or issue"))
 	}
 	if kind == "" {
 		kind = "pr"
 	}
 
-	repoRoot := "."
+	repoRoot := textRepoRoot(nil)
 	var change *specsync.Change
 	if *cm.change != "" {
 		resolved := resolveRoot(fs, cm.openspec, cm.storeFlag)
 		c, err := specsync.LoadChangeBySlug(resolved.Dir, *cm.change)
 		if err != nil {
-			fail(err)
+			lintSetupError(err)
 		}
 		change = c
-		repoRoot = filepath.Dir(resolved.Dir)
+		repoRoot = textRepoRoot(&resolved)
 	}
 	cfg, issues := specsync.LoadWays(repoRoot)
 	if len(issues) > 0 {
@@ -126,13 +131,13 @@ func (cm *lintCmd) Run(_ context.Context, args []string) error {
 		add("title", specsync.LintTitle("issue", change.Title, text))
 		add(filepath.Join(change.Slug, "proposal.md"), specsync.LintDocument("issue", change.Body, text))
 	}
-	if *cm.title != "" {
+	if titleGiven {
 		add("title", specsync.LintTitle(kind, *cm.title, text))
 	}
 	if *cm.bodyFile != "" {
 		b, err := os.ReadFile(*cm.bodyFile)
 		if err != nil {
-			fail(err)
+			lintSetupError(err)
 		}
 		docKind := "pr"
 		if kind == "issue" {
@@ -143,7 +148,7 @@ func (cm *lintCmd) Run(_ context.Context, args []string) error {
 	if *cm.pr != "" {
 		title, body, err := ghPRText(*cm.pr, *cm.repo)
 		if err != nil {
-			fail(err)
+			lintSetupError(err)
 		}
 		add("pr #"+*cm.pr+" title", specsync.LintTitle("pr", title, text))
 		add("pr #"+*cm.pr+" body", specsync.LintDocument("pr", body, text))
@@ -161,6 +166,12 @@ func (cm *lintCmd) Run(_ context.Context, args []string) error {
 		os.Exit(1)
 	}
 	return nil
+}
+
+// lintSetupError exits 2: the check could not run, which is not a finding.
+func lintSetupError(err error) {
+	fmt.Fprintf(os.Stderr, "specsync: %v\n", err)
+	os.Exit(2)
 }
 
 func printLint(reports []lintReport) {

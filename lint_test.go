@@ -128,3 +128,55 @@ func TestLintNeverChangesItsInput(t *testing.T) {
 		t.Fatal("lint must not modify text")
 	}
 }
+
+func TestLintOneLineDetailsDoesNotHideTheRest(t *testing.T) {
+	doc := "# T\n\n<details>short</details>\n\n## Why\n\nWe basically fix it.\n"
+	if got := rules(LintDocument("issue", doc, DefaultText())); got != "filler" {
+		t.Fatalf("text after a one-line details block must still be linted: %q", got)
+	}
+}
+
+func TestLintOneLineFenceAndInlineComment(t *testing.T) {
+	doc := "# T\n\n```go x := 1```\n\nWe basically fix it. <!-- a note -->\n"
+	if got := rules(LintDocument("issue", doc, DefaultText())); got != "filler" {
+		t.Fatalf("got %q", got)
+	}
+	doc = "# T\n\nBefore <!-- start\nof a long comment -->\nWe basically fix it.\n"
+	if got := rules(LintDocument("issue", doc, DefaultText())); got != "filler" {
+		t.Fatalf("a comment that starts mid-line: %q", got)
+	}
+}
+
+func TestLintListItemContinuationBelongsToTheItem(t *testing.T) {
+	long := strings.Repeat("word ", 12)
+	doc := "# T\n\n## Why\n\n- " + long + "\n  " + long + "end.\n"
+	if got := rules(LintDocument("issue", doc, DefaultText())); got != "sentence-length" {
+		t.Fatalf("a wrapped bullet is one sentence: %q", got)
+	}
+	doc = "# T\n\n## Why\n\n- One.\n  Two.\n  Three.\n  Four.\n  Five.\n"
+	if got := rules(LintDocument("issue", doc, DefaultText())); got != "paragraph-length" {
+		t.Fatalf("a list item longer than the paragraph limit: %q", got)
+	}
+}
+
+func TestLintTitleKnowsProductNames(t *testing.T) {
+	cfg := DefaultText()
+	for _, ok := range []string{"Add Next.js support", "Migrate to Node.js 22", "Chart.js axes", "Vue.js build"} {
+		if got := LintTitle("issue", ok, cfg); len(got) != 0 {
+			t.Errorf("%q: %+v", ok, got)
+		}
+	}
+	for _, bad := range []string{"Fix pull.go", "Fix src/app.js", "Update README.md"} {
+		if rules(LintTitle("issue", bad, cfg)) != "no-file-names" {
+			t.Errorf("%q should be flagged", bad)
+		}
+	}
+}
+
+func TestLintHeadingKeepsHashesThatAreText(t *testing.T) {
+	cfg := DefaultText()
+	cfg.Headers = append(cfg.Headers, "C#", "Fix #12")
+	if got := LintDocument("issue", "# T\n\n## C#\n\nShort.\n\n## Fix #12\n\nShort.\n\n## Why ##\n\nShort.\n", cfg); len(got) != 0 {
+		t.Fatalf("%+v", got)
+	}
+}

@@ -26,18 +26,56 @@ var prTemplateCandidates = []string{
 
 // FindPRTemplate returns the repository's pull request template: the
 // configured path when set, else the usual locations. The path is relative to
-// repoRoot; both results are empty when there is none.
-func FindPRTemplate(repoRoot string, cfg TextConfig) (path, text string) {
-	candidates := prTemplateCandidates
+// repoRoot; both results are empty when there is none. A configured path must
+// stay inside the repository, symlinks included.
+func FindPRTemplate(repoRoot string, cfg TextConfig) (path, text string, err error) {
 	if cfg.Template != "" {
-		candidates = []string{cfg.Template}
+		full, err := insideRepo(repoRoot, cfg.Template)
+		if err != nil {
+			return "", "", fmt.Errorf("text.template %q must be a path inside the repository: %w", cfg.Template, err)
+		}
+		b, err := os.ReadFile(full)
+		if err != nil {
+			return "", "", fmt.Errorf("text.template %q: %w", cfg.Template, err)
+		}
+		return cfg.Template, string(b), nil
 	}
-	for _, c := range candidates {
-		if b, err := os.ReadFile(filepath.Join(repoRoot, filepath.FromSlash(c))); err == nil {
-			return c, string(b)
+	for _, c := range prTemplateCandidates {
+		full, err := insideRepo(repoRoot, c)
+		if err != nil {
+			continue
+		}
+		if b, err := os.ReadFile(full); err == nil {
+			return c, string(b), nil
 		}
 	}
-	return "", ""
+	return "", "", nil
+}
+
+func insideRepo(repoRoot, rel string) (string, error) {
+	if filepath.IsAbs(rel) {
+		return "", fmt.Errorf("absolute paths are not allowed")
+	}
+	clean := filepath.Clean(filepath.FromSlash(rel))
+	if clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("it leaves the repository")
+	}
+	root, err := filepath.EvalSymlinks(repoRoot)
+	if err != nil {
+		return "", err
+	}
+	full := filepath.Join(root, clean)
+	resolved, err := filepath.EvalSymlinks(full)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return full, nil
+		}
+		return "", err
+	}
+	if resolved != root && !strings.HasPrefix(resolved, root+string(filepath.Separator)) {
+		return "", fmt.Errorf("it resolves outside the repository")
+	}
+	return resolved, nil
 }
 
 const (
@@ -56,8 +94,8 @@ type prSection struct {
 func RenderPRBody(in PRBodyInput) string {
 	generated := map[string]string{
 		"summary":      summaryOf(in.Change.Body),
-		"changes":      bulletsOf(in.Change.Body, "what", changesWords),
-		"focus":        bulletsOf(in.Change.Body, "review focus", focusWords),
+		"changes":      bulletsOf(in.Change.Body, changesWords, "what", "what changes", "changes"),
+		"focus":        bulletsOf(in.Change.Body, focusWords, "review focus"),
 		"size":         in.Size,
 		"verification": verificationOf(in.Change.TasksMarkdown),
 		"closes":       in.Reference,
@@ -88,22 +126,24 @@ var templateKinds = map[string]string{
 
 func renderFromTemplate(tpl string, generated map[string]string) string {
 	lines := strings.Split(strings.ReplaceAll(tpl, "\r\n", "\n"), "\n")
+	heading := templateHeadings(lines)
 	var out []string
 	closesPlaced := false
+	filled := map[string]bool{}
 	i := 0
-	for i < len(lines) && !strings.HasPrefix(lines[i], "## ") {
+	for i < len(lines) && !heading[i] {
 		out = append(out, lines[i])
 		i++
 	}
 	for i < len(lines) {
-		heading := lines[i]
 		j := i + 1
-		for j < len(lines) && !strings.HasPrefix(lines[j], "## ") {
+		for j < len(lines) && !heading[j] {
 			j++
 		}
-		kind := templateKinds[strings.ToLower(strings.TrimSpace(strings.TrimPrefix(heading, "## ")))]
-		if g := generated[kind]; kind != "" && g != "" {
-			out = append(out, heading, "", g, "")
+		kind := templateKinds[strings.ToLower(strings.TrimSpace(strings.TrimPrefix(lines[i], "## ")))]
+		if g := generated[kind]; kind != "" && g != "" && !filled[kind] {
+			out = append(out, lines[i], "", g, "")
+			filled[kind] = true
 			closesPlaced = closesPlaced || kind == "closes"
 		} else {
 			out = append(out, lines[i:j]...)
@@ -117,19 +157,75 @@ func renderFromTemplate(tpl string, generated map[string]string) string {
 	return body
 }
 
-func markdownSection(body, name string) []string {
-	var out []string
-	in := false
-	for _, l := range strings.Split(body, "\n") {
-		if m := headingLine.FindStringSubmatch(strings.TrimSpace(l)); m != nil {
-			in = strings.EqualFold(m[2], name)
+// templateHeadings marks the lines that start a section: `## ` lines outside
+// code fences and comments.
+func templateHeadings(lines []string) map[int]bool {
+	out := map[int]bool{}
+	inFence, inComment := false, false
+	for i, l := range lines {
+		trim := strings.TrimSpace(l)
+		switch {
+		case inFence:
+			if strings.HasPrefix(trim, "```") || strings.HasPrefix(trim, "~~~") {
+				inFence = false
+			}
+			continue
+		case inComment:
+			if strings.Contains(l, "-->") {
+				inComment = false
+			}
+			continue
+		case strings.HasPrefix(trim, "```") || strings.HasPrefix(trim, "~~~"):
+			inFence = !strings.Contains(trim[3:], trim[:3])
 			continue
 		}
-		if in {
-			out = append(out, l)
+		if rest, ok := strings.CutPrefix(l, "<!--"); ok || strings.Contains(l, "<!--") {
+			if !ok {
+				rest = l[strings.Index(l, "<!--")+4:]
+			}
+			inComment = !strings.Contains(rest, "-->")
+			if strings.HasPrefix(l, "<!--") {
+				continue
+			}
+		}
+		if strings.HasPrefix(l, "## ") {
+			out[i] = true
 		}
 	}
 	return out
+}
+
+// markdownSection returns the lines under the first-level match of any name,
+// sub-headings included, up to the next heading of the same or a higher level.
+func markdownSection(body string, names ...string) []string {
+	var out []string
+	level := 0
+	for _, l := range visibleLines(body) {
+		if m := headingLine.FindStringSubmatch(strings.TrimSpace(l.text)); m != nil {
+			depth := len(m[1])
+			switch {
+			case level > 0 && depth > level:
+			case matchesAny(m[2], names):
+				level = depth
+			default:
+				level = 0
+			}
+			continue
+		}
+		if level > 0 {
+			out = append(out, l.text)
+		}
+	}
+	return out
+}
+
+func matchesAny(name string, names []string) bool {
+	for _, n := range names {
+		if strings.EqualFold(name, n) {
+			return true
+		}
+	}
+	return false
 }
 
 func summaryOf(body string) string {
@@ -157,10 +253,10 @@ func summaryOf(body string) string {
 	return truncateWords(strings.TrimSpace(sentences[0]), summaryWords)
 }
 
-func bulletsOf(body, section string, budget int) string {
+func bulletsOf(body string, budget int, sections ...string) string {
 	var out []string
 	used := 0
-	for _, l := range markdownSection(body, section) {
+	for _, l := range markdownSection(body, sections...) {
 		if !listItemLine.MatchString(l) || checkboxLine.MatchString(l) {
 			continue
 		}

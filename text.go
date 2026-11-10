@@ -62,7 +62,11 @@ func (t *TextConfig) read(n *YNode, add addIssue) {
 			*dst[k] = num
 		}
 	}
-	for key, list := range map[string]*[]string{"headers": &t.Headers, "filler": &t.Filler} {
+	for _, key := range []string{"headers", "filler"} {
+		list := &t.Headers
+		if key == "filler" {
+			list = &t.Filler
+		}
 		c := n.Get(key)
 		if c == nil {
 			continue

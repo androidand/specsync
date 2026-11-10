@@ -28,6 +28,7 @@ jobs:
         run: go run ./cmd/specsync validate
       - name: Lint issue and PR text (advisory)
         if: github.event_name == 'pull_request'
+        continue-on-error: true
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
           BASE_REF: ${{ github.base_ref }}
