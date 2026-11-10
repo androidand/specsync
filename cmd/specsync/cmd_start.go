@@ -75,9 +75,9 @@ func (cm *startCmd) Run(ctx context.Context, args []string) error {
 	if change == nil {
 		return fmt.Errorf("no change matches %q: pull the issue first (specsync pull -issue N) or create one (specsync new <title>)", ref)
 	}
-	repoRoot := textRepoRoot(&root)
-	ways := loadWaysOrFail(repoRoot)
 	cwd, _ := os.Getwd()
+	repoRoot := configRoot(ctx, fs, cwd)
+	ways := loadWaysOrFail(repoRoot)
 	opts := specsync.StartOptions{RepoDir: cwd, ConfigRoot: repoRoot, Ways: ways, Slug: change.Slug, Issue: issue, Type: *cm.typ, Base: *cm.base, DryRun: *cm.dryRun}
 	if cmdline := cm.sessions.command(fs); cmdline != "" {
 		opts.SessionsChecked = true

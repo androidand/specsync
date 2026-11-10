@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"flag"
@@ -16,7 +17,7 @@ import (
 type saveFlags struct {
 	openspec, storeFlag *string
 	message, change     *string
-	add                 stringSlice
+	add, allow          stringSlice
 	push, pushToRequest *bool
 	syncSpec, yes       *bool
 	dryRun, asJSON      *bool
@@ -26,6 +27,7 @@ func (sf *saveFlags) define(fs *flag.FlagSet) {
 	sf.openspec, sf.storeFlag = addRootFlags(fs)
 	sf.message = fs.String("m", "", "commit message (required)")
 	sf.change = fs.String("change", "", "the change this work belongs to (default: found from the branch name)")
+	fs.Var(&sf.allow, "allow", "a file whose secret scan result you have reviewed as a false positive (repeatable); reported when used")
 	fs.Var(&sf.add, "add", "an untracked file to include (repeatable); untracked files are never included otherwise")
 	sf.push = fs.Bool("push", false, "push the branch after committing (never forces)")
 	sf.pushToRequest = fs.Bool("push-to-request", false, "allow pushing a branch that has an open pull request")
@@ -33,6 +35,57 @@ func (sf *saveFlags) define(fs *flag.FlagSet) {
 	sf.yes = fs.Bool("yes", false, "with -sync, allow creating a new tracker issue for a change that has none")
 	sf.dryRun = fs.Bool("dry-run", false, "show what would be committed and pushed and change nothing")
 	sf.asJSON = fs.Bool("json", false, "output as JSON")
+}
+
+// configRoot is where the repo's openspec/specsync.yml lives for this run: the
+// directory of an explicit -openspec, else the repository top of the current
+// directory (or the main checkout's when the worktree has none).
+func configRoot(ctx context.Context, fs *flag.FlagSet, cwd string) string {
+	if f := fs.Lookup("openspec"); f != nil && flagVisited(fs, "openspec") {
+		abs, _ := filepath.Abs(f.Value.String())
+		return filepath.Dir(abs)
+	}
+	return specsync.RepoConfigRoot(ctx, cwd)
+}
+
+// openRequestFrom reads the open request for branch out of a listing. A
+// truncated listing with no match may simply be missing it, so the direct
+// query decides; if that fails too the state is unknown.
+func openRequestFrom(ctx context.Context, set specsync.ChangeRequestSet, branch string, direct func(context.Context, string) (int, error)) (int, error) {
+	for _, r := range set.Requests {
+		if r.Branch == branch && r.State == "open" && !r.Fork {
+			return r.Number, nil
+		}
+	}
+	if set.Truncated {
+		return direct(ctx, branch)
+	}
+	return 0, nil
+}
+
+func directOpenRequest(repo string) func(context.Context, string) (int, error) {
+	return func(ctx context.Context, branch string) (int, error) {
+		args := []string{"pr", "list", "--head", branch, "--state", "open", "--json", "number", "--limit", "5"}
+		if repo != "" {
+			args = append(args, "--repo", repo)
+		}
+		var out, errb bytes.Buffer
+		cmd := exec.CommandContext(ctx, "gh", args...)
+		cmd.Stdout, cmd.Stderr = &out, &errb
+		if err := cmd.Run(); err != nil {
+			return 0, fmt.Errorf("gh pr list: %s", strings.TrimSpace(errb.String()))
+		}
+		var rows []struct {
+			Number int `json:"number"`
+		}
+		if err := json.Unmarshal(out.Bytes(), &rows); err != nil {
+			return 0, err
+		}
+		if len(rows) > 0 {
+			return rows[0].Number, nil
+		}
+		return 0, nil
+	}
 }
 
 func openRequestFor(repo string) func(ctx context.Context, branch string) (int, error) {
@@ -45,12 +98,7 @@ func openRequestFor(repo string) func(ctx context.Context, branch string) (int, 
 		if err != nil {
 			return 0, err
 		}
-		for _, r := range set.Requests {
-			if r.Branch == branch && r.State == "open" && !r.Fork {
-				return r.Number, nil
-			}
-		}
-		return 0, nil
+		return openRequestFrom(ctx, set, branch, directOpenRequest(repo))
 	}
 }
 
@@ -106,7 +154,9 @@ func (*saveCmd) Spec() Spec {
 		Safety: []string{
 			"Commits tracked changes only; an untracked file is included only when named with -add",
 			"Refuses files that look like secrets (by name or content) and any save.forbid_files, and trailers listed in save.forbid_trailers",
-			"Pushes only with -push, never forces, and refuses a branch that has an open pull request unless -push-to-request is given",
+			"Scans only the lines a change adds (whole new files), the commit message too; a file it cannot scan is refused unless named with -allow, which is reported",
+			"Refuses a detached HEAD, and pushes only with -push, by explicit refspec, never forcing: it refuses the default branch and a branch with an open or unknown pull request unless -push-to-request is given",
+			"Every refusal happens before anything is committed",
 			"-dry-run lists what would be committed and changes nothing",
 		},
 		Examples: []string{
@@ -129,8 +179,7 @@ func (cm *saveCmd) Run(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	abs, _ := filepath.Abs(*cm.openspec)
-	ways := loadWaysOrFail(filepath.Dir(abs))
+	ways := loadWaysOrFail(configRoot(ctx, fs, cwd))
 	slug := ""
 	var syncChange *specsync.Change
 	if *cm.syncSpec {
@@ -144,7 +193,7 @@ func (cm *saveCmd) Run(ctx context.Context, args []string) error {
 		slug, syncChange = c.Slug, c
 	}
 	res, err := specsync.Save(ctx, specsync.SaveOptions{
-		Dir: cwd, Message: *cm.message, Add: cm.add, Ways: ways,
+		Dir: cwd, Message: *cm.message, Add: cm.add, Allow: cm.allow, Ways: ways,
 		Push: *cm.push, PushToRequest: *cm.pushToRequest, OpenRequest: openRequestFor(""), DryRun: *cm.dryRun,
 	})
 	if err != nil && !res.Committed {
@@ -157,6 +206,9 @@ func (cm *saveCmd) Run(ctx context.Context, args []string) error {
 		return err
 	}
 	printSave(res, *cm.dryRun, *cm.asJSON, *cm.push)
+	for _, a := range res.Allowed {
+		fmt.Fprintf(os.Stderr, "specsync: allowed %s (secret scan overridden with -allow)\n", a)
+	}
 	if err != nil || slug == "" || *cm.dryRun {
 		if slug != "" && *cm.dryRun {
 			fmt.Printf("DRY RUN — would then sync %s to its issue\n", slug)
@@ -249,8 +301,7 @@ func (cm *parkCmd) Run(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	abs, _ := filepath.Abs(*cm.openspec)
-	ways := loadWaysOrFail(filepath.Dir(abs))
+	ways := loadWaysOrFail(configRoot(ctx, fs, cwd))
 	var change *specsync.Change
 	if *cm.change != "" {
 		change = mutableChange(resolveRoot(fs, cm.openspec, cm.storeFlag).Dir, *cm.change, false)
@@ -261,7 +312,7 @@ func (cm *parkCmd) Run(ctx context.Context, args []string) error {
 		return fmt.Errorf("park could not tell which change this branch belongs to; pass -change <slug>")
 	}
 	opts := specsync.SaveOptions{Dir: cwd, Message: "park: " + *cm.message, Ways: ways, Push: *cm.push,
-		PushToRequest: *cm.pushToRequest, OpenRequest: openRequestFor(""), DryRun: true, Add: cm.add}
+		PushToRequest: *cm.pushToRequest, OpenRequest: openRequestFor(""), DryRun: true, Add: cm.add, Allow: cm.allow}
 	if _, err := specsync.Save(ctx, opts); err != nil && !strings.Contains(err.Error(), "nothing to commit") {
 		return err
 	}

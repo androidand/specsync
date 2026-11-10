@@ -78,8 +78,22 @@ func (cm *prCmd) Run(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	abs, _ := filepath.Abs(*cm.openspec)
-	ways := loadWaysOrFail(filepath.Dir(abs))
+	ways := loadWaysOrFail(configRoot(ctx, fs, cwd))
+	baseName := *cm.base
+	if baseName == "" {
+		if b, err := specsync.DefaultBase(ctx, cwd); err == nil {
+			baseName = strings.TrimPrefix(b, "origin/")
+		}
+	}
+	baseRef := ""
+	if baseName != "" {
+		baseRef = "origin/" + baseName
+	}
+	if verb == "open" && !*cm.dryRun && baseName != "" {
+		if out, err := exec.CommandContext(ctx, "git", "-C", cwd, "fetch", "--quiet", "origin", baseName).CombinedOutput(); err != nil {
+			return fmt.Errorf("could not fetch origin/%s, so freshness and size cannot be trusted: %v: %s", baseName, err, strings.TrimSpace(string(out)))
+		}
+	}
 	var change *specsync.Change
 	if *cm.change != "" {
 		change = mutableChange(resolveRoot(fs, cm.openspec, cm.storeFlag).Dir, *cm.change, false)
@@ -90,7 +104,7 @@ func (cm *prCmd) Run(ctx context.Context, args []string) error {
 	if change != nil {
 		line = specsync.BudgetLineForBranch(change.Dir, branchName(ctx, cwd, "HEAD"))
 	}
-	rep, err := specsync.PreparePR(ctx, specsync.PrepOptions{Dir: cwd, Ways: ways, Change: change, BudgetFlag: *cm.budget, BudgetLine: line, Exclude: cm.exclude})
+	rep, err := specsync.PreparePR(ctx, specsync.PrepOptions{Dir: cwd, Ways: ways, Change: change, BudgetFlag: *cm.budget, BudgetLine: line, Exclude: cm.exclude, Base: baseRef})
 	if err != nil {
 		return err
 	}
@@ -107,7 +121,7 @@ func (cm *prCmd) Run(ctx context.Context, args []string) error {
 		}
 		return nil
 	}
-	return cm.open(ctx, cwd, ways, change, rep)
+	return cm.open(ctx, cwd, ways, change, rep, baseName)
 }
 
 func printPrep(rep specsync.PrepReport) {
@@ -121,9 +135,13 @@ func printPrep(rep specsync.PrepReport) {
 	}
 }
 
-func (cm *prCmd) open(ctx context.Context, cwd string, ways specsync.Ways, change *specsync.Change, rep specsync.PrepReport) error {
+func (cm *prCmd) open(ctx context.Context, cwd string, ways specsync.Ways, change *specsync.Change, rep specsync.PrepReport, base string) error {
 	var blocked []string
 	for _, c := range rep.Checks {
+		if c.Status == "skipped" && c.Blocking && !slices.Contains(cm.confirm, c.Name) {
+			blocked = append(blocked, c.Name+" was skipped and could not be measured ("+c.Detail+"); fix that or acknowledge it with -confirm "+c.Name)
+			continue
+		}
 		if c.Status != "fail" {
 			continue
 		}
@@ -153,13 +171,8 @@ func (cm *prCmd) open(ctx context.Context, cwd string, ways specsync.Ways, chang
 	if ls.Upstream == "" || ls.Ahead > 0 || ls.UpstreamGone {
 		return fmt.Errorf("%s is not pushed: push it first (specsync save -push), then open", branch)
 	}
-	base := *cm.base
 	if base == "" {
-		b, err := specsync.DefaultBase(ctx, cwd)
-		if err != nil {
-			return fmt.Errorf("cannot tell the base branch (%v); pass -base", err)
-		}
-		base = strings.TrimPrefix(b, "origin/")
+		return fmt.Errorf("cannot tell the base branch; pass -base")
 	}
 	title, body, err := cm.titleAndBody(ctx, change)
 	if err != nil {
@@ -204,7 +217,11 @@ func (cm *prCmd) titleAndBody(ctx context.Context, change *specsync.Change) (tit
 	if err != nil {
 		return "", "", err
 	}
-	gen := exec.CommandContext(ctx, exe, "pr-body", "-change", change.Slug, "-template", "-openspec", *cm.openspec)
+	genArgs := []string{"pr-body", "-change", change.Slug, "-template", "-openspec", *cm.openspec}
+	if *cm.storeFlag != "" {
+		genArgs = append(genArgs, "-store", *cm.storeFlag)
+	}
+	gen := exec.CommandContext(ctx, exe, genArgs...)
 	var out, errb bytes.Buffer
 	gen.Stdout, gen.Stderr = &out, &errb
 	if err := gen.Run(); err != nil {

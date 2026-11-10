@@ -124,7 +124,11 @@ func (cm *newCmd) Run(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	sync := exec.CommandContext(ctx, exe, "-change", slug, "-openspec", *cm.openspec)
+	syncArgs := []string{"-change", slug, "-openspec", *cm.openspec}
+	if *cm.storeFlag != "" {
+		syncArgs = append(syncArgs, "-store", *cm.storeFlag)
+	}
+	sync := exec.CommandContext(ctx, exe, syncArgs...)
 	sync.Stdout, sync.Stderr = os.Stdout, os.Stderr
 	return sync.Run()
 }

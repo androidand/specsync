@@ -1476,6 +1476,13 @@
           "description": "an untracked file to include (repeatable); untracked files are never included otherwise"
         },
         {
+          "name": "allow",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "a file whose secret scan result you have reviewed as a false positive (repeatable); reported when used"
+        },
+        {
           "name": "change",
           "type": "string",
           "required": false,
@@ -2087,6 +2094,13 @@
           "description": "an untracked file to include (repeatable); untracked files are never included otherwise"
         },
         {
+          "name": "allow",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "a file whose secret scan result you have reviewed as a false positive (repeatable); reported when used"
+        },
+        {
           "name": "change",
           "type": "string",
           "required": false,
@@ -2160,7 +2174,9 @@
       "safety_rules": [
         "Commits tracked changes only; an untracked file is included only when named with -add",
         "Refuses files that look like secrets (by name or content) and any save.forbid_files, and trailers listed in save.forbid_trailers",
-        "Pushes only with -push, never forces, and refuses a branch that has an open pull request unless -push-to-request is given",
+        "Scans only the lines a change adds (whole new files), the commit message too; a file it cannot scan is refused unless named with -allow, which is reported",
+        "Refuses a detached HEAD, and pushes only with -push, by explicit refspec, never forcing: it refuses the default branch and a branch with an open or unknown pull request unless -push-to-request is given",
+        "Every refusal happens before anything is committed",
         "-dry-run lists what would be committed and changes nothing"
       ],
       "examples": [
@@ -3033,6 +3049,13 @@
           "description": "run git fetch first so the plan sees current remote branches"
         },
         {
+          "name": "force-with-lease",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "with -push, allow publishing a rebase of a pushed branch, by a lease on the remote sha"
+        },
+        {
           "name": "json",
           "type": "boolean",
           "required": false,
@@ -3064,7 +3087,8 @@
       "safety_rules": [
         "Without -apply it prints the plan and changes nothing",
         "Refuses a dirty working tree; never force-pushes a shared branch (those are merged)",
-        "Pushes only with -push, by explicit refspec to the branch's own name, and after a rebase of a pushed branch only with an explicit lease on the sha it saw",
+        "Pushes only with -push, by explicit refspec to the branch's own name; publishing a rebase of a pushed branch also needs -force-with-lease, which leases against a freshly fetched remote sha already contained in HEAD",
+        "Refuses a detached HEAD, and -push from the default branch unless -push-to-request is given; every refusal happens before anything is changed",
         "An unknown or open pull request state counts as under review: the plan merges, and -push then needs -push-to-request",
         "Stops at a conflict, names the files and leaves git's own merge or rebase state for you to resolve or abort",
         "The plan uses the sync: strategy from openspec/specsync.yml; run with -fetch to refresh remote branches first"

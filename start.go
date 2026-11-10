@@ -162,3 +162,23 @@ func StartWork(ctx context.Context, o StartOptions) (StartResult, error) {
 	}
 	return res, nil
 }
+
+// RepoConfigRoot is the directory whose openspec/specsync.yml applies to dir:
+// the repository top of dir's worktree, or the main checkout when that
+// worktree has no config of its own. It never depends on a relative path, so a
+// subdirectory gets the same config as the root.
+func RepoConfigRoot(ctx context.Context, dir string) string {
+	top, err := gitIn(ctx, dir, "rev-parse", "--show-toplevel")
+	if err != nil || top == "" {
+		return dir
+	}
+	if _, err := os.Stat(filepath.Join(top, SpecSyncConfigPath)); err == nil {
+		return top
+	}
+	if main := mainCheckout(dir); main != "" {
+		if _, err := os.Stat(filepath.Join(main, SpecSyncConfigPath)); err == nil {
+			return main
+		}
+	}
+	return top
+}

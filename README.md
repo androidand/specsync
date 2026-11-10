@@ -742,10 +742,11 @@ change nothing then. See `docs/flow-verbs.md` for moving a personal script onto 
 - `specsync save -m <msg>` commits tracked changes (untracked files only with `-add`), refuses
   secret-looking files and forbidden trailers, pushes only with `-push` (by explicit refspec to the
   branch's own name), and not onto a branch with an open pull request without `-push-to-request`.
-  `-sync` previews the tracker sync first and creates a new issue only with `-yes`. `specsync park -m <note>` saves, sets the stage and leaves a note.
+  `-sync` previews the tracker sync first and creates a new issue only with `-yes`.
+  It scans only the lines a change adds (and the message), refuses a detached HEAD, and takes `-allow <file>` for a reviewed false positive. `specsync park -m <note>` saves, sets the stage and leaves a note.
 - `specsync gates` runs the configured gates after trust and stamps the commit when a full run passes on a clean tree.
 - `specsync update` plans how to bring the branch current (the `sync:` strategy); `-apply` runs it,
-  stops at a conflict, and `-push` pushes with a lease on the sha it saw; shared branches, and branches whose pull request state is open or unknown, are merged, never rewritten.
+  stops at a conflict, and `-push` publishes a rebase of a pushed branch only with `-force-with-lease`, leased on a freshly fetched sha; shared branches, and branches whose pull request state is open or unknown, are merged, never rewritten.
 - `specsync pr prep` checks tasks, freshness, the gate stamp and the size budget; `specsync pr open`
   creates the pull request with the generated short body once prep passes and every `pr.confirm` entry is given with `-confirm`.
 

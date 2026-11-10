@@ -7,19 +7,19 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 
 	specsync "github.com/androidand/specsync"
 )
 
 type updateCmd struct {
-	openspec      *string
-	apply         *bool
-	push          *bool
-	pushToRequest *bool
-	fetch         *bool
-	asJSON        *bool
+	openspec       *string
+	apply          *bool
+	push           *bool
+	pushToRequest  *bool
+	forceWithLease *bool
+	fetch          *bool
+	asJSON         *bool
 }
 
 func init() { Register(&updateCmd{}) }
@@ -35,7 +35,8 @@ func (*updateCmd) Spec() Spec {
 		Safety: []string{
 			"Without -apply it prints the plan and changes nothing",
 			"Refuses a dirty working tree; never force-pushes a shared branch (those are merged)",
-			"Pushes only with -push, by explicit refspec to the branch's own name, and after a rebase of a pushed branch only with an explicit lease on the sha it saw",
+			"Pushes only with -push, by explicit refspec to the branch's own name; publishing a rebase of a pushed branch also needs -force-with-lease, which leases against a freshly fetched remote sha already contained in HEAD",
+			"Refuses a detached HEAD, and -push from the default branch unless -push-to-request is given; every refusal happens before anything is changed",
 			"An unknown or open pull request state counts as under review: the plan merges, and -push then needs -push-to-request",
 			"Stops at a conflict, names the files and leaves git's own merge or rebase state for you to resolve or abort",
 			"The plan uses the sync: strategy from openspec/specsync.yml; run with -fetch to refresh remote branches first",
@@ -53,6 +54,7 @@ func (cm *updateCmd) Flags(fs *flag.FlagSet) {
 	cm.apply = fs.Bool("apply", false, "run the plan (without it nothing changes)")
 	cm.push = fs.Bool("push", false, "with -apply, push afterwards (with a lease after a rebase)")
 	cm.pushToRequest = fs.Bool("push-to-request", false, "with -push, allow pushing when the branch has an open pull request or that could not be checked")
+	cm.forceWithLease = fs.Bool("force-with-lease", false, "with -push, allow publishing a rebase of a pushed branch, by a lease on the remote sha")
 	cm.fetch = fs.Bool("fetch", false, "run git fetch first so the plan sees current remote branches")
 	cm.asJSON = fs.Bool("json", false, "output the plan as JSON")
 }
@@ -70,8 +72,7 @@ func (cm *updateCmd) Run(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	abs, _ := filepath.Abs(*cm.openspec)
-	ways := loadWaysOrFail(filepath.Dir(abs))
+	ways := loadWaysOrFail(configRoot(ctx, fs, cwd))
 	if *cm.fetch {
 		if out, err := exec.CommandContext(ctx, "git", "-C", cwd, "fetch", "--quiet").CombinedOutput(); err != nil {
 			return fmt.Errorf("git fetch: %v: %s", err, strings.TrimSpace(string(out)))
@@ -96,15 +97,9 @@ func (cm *updateCmd) Run(ctx context.Context, args []string) error {
 	if !*cm.apply {
 		return nil
 	}
-	if *cm.push && !*cm.pushToRequest {
-		switch {
-		case lookupErr != nil:
-			return fmt.Errorf("not applied: cannot tell whether a pull request is open for %s (%v); pass -push-to-request to push anyway, or update without -push", plan.Branch, lookupErr)
-		case openN > 0:
-			return fmt.Errorf("not applied: %s has an open pull request (#%d), and a push notifies its reviewers; pass -push-to-request to push anyway, or update without -push", plan.Branch, openN)
-		}
-	}
-	res, err := specsync.ApplyUpdate(ctx, cwd, plan, *cm.push)
+	res, err := specsync.ApplyUpdate(ctx, cwd, plan, specsync.UpdateApply{
+		Push: *cm.push, ForceWithLease: *cm.forceWithLease, PushToRequest: *cm.pushToRequest, OpenRequest: openRequestFor(""),
+	})
 	if err != nil {
 		return err
 	}

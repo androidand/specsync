@@ -170,3 +170,25 @@ func TestStartBranchHasNoUpstreamUntilTheFirstPush(t *testing.T) {
 		t.Fatalf("a branch made from origin/main must not track it, got upstream %q", out)
 	}
 }
+
+func TestRepoConfigRootIsTheRepoTopOrTheMainCheckoutWhenTheWorktreeHasNone(t *testing.T) {
+	clone := startRepo(t, "flow: minimal\n")
+	sub := filepath.Join(clone, "pkg", "x")
+	os.MkdirAll(sub, 0o755)
+	if got := RepoConfigRoot(context.Background(), sub); resolved(absPath(got)) != resolved(absPath(clone)) {
+		t.Fatalf("from a subdirectory the repo top, got %q", got)
+	}
+	res, err := startIn(t, clone, StartOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Remove(filepath.Join(res.Path, SpecSyncConfigPath))
+	if got := RepoConfigRoot(context.Background(), res.Path); resolved(absPath(got)) != resolved(absPath(clone)) {
+		t.Fatalf("a worktree with no config falls back to the main checkout's, got %q", got)
+	}
+	os.MkdirAll(filepath.Join(res.Path, "openspec"), 0o755)
+	os.WriteFile(filepath.Join(res.Path, SpecSyncConfigPath), []byte("flow: strict\n"), 0o644)
+	if got := RepoConfigRoot(context.Background(), res.Path); resolved(absPath(got)) != resolved(absPath(res.Path)) {
+		t.Fatalf("a worktree's own config wins, got %q", got)
+	}
+}

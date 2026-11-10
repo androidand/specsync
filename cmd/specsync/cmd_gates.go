@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	specsync "github.com/androidand/specsync"
@@ -70,18 +69,14 @@ func (cm *gatesCmd) Run(ctx context.Context, args []string) error {
 		return err
 	}
 	checkArgs(fs, args, 0)
-	abs, err := filepath.Abs(*cm.openspec)
-	if err != nil {
-		return err
-	}
-	root := filepath.Dir(abs)
-	ways, issues := specsync.LoadWays(root)
-	if len(issues) > 0 {
-		return fmt.Errorf("fix the config first (specsync doctor config): %s", issues[0])
-	}
 	cwd, err := os.Getwd()
 	if err != nil {
 		return err
+	}
+	root := configRoot(ctx, fs, cwd)
+	ways, issues := specsync.LoadWays(root)
+	if len(issues) > 0 {
+		return fmt.Errorf("fix the config first (specsync doctor config): %s", issues[0])
 	}
 	opts := specsync.GateOptions{Dir: cwd, Root: root, Ways: ways, Only: splitList(*cm.only), With: splitList(*cm.with), Continue: *cm.cont, Out: os.Stdout}
 	if *cm.asJSON {

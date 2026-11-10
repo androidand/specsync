@@ -1,11 +1,15 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	specsync "github.com/androidand/specsync"
 )
 
 func commitAll(t *testing.T, repo, msg string) {
@@ -631,5 +635,161 @@ func TestSaveSyncRunsADryRunFirstAndCreatesANewIssueOnlyWithYes(t *testing.T) {
 	}
 	if b, _ := os.ReadFile(ghLog); !strings.Contains(string(b), "issue create") {
 		t.Fatalf("-sync -yes creates the issue:\n%s\n%s", b, out)
+	}
+}
+
+func TestSaveParkAndGatesFromASubdirectoryUseTheRepoConfig(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env := waysRepo(t, "save:\n  forbid_trailers: [Co-Authored-By]\ngates:\n  - {name: g, run: \"touch ../gate-ran\"}\npr:\n  confirm: [tests-run]\n")
+	env = withIdentity(env)
+	os.MkdirAll(filepath.Join(repo, "sub"), 0o755)
+	commitAll(t, repo, "config")
+	runIn(t, bin, repo, env, "trust", "-yes")
+	sub := filepath.Join(repo, "sub")
+	os.WriteFile(filepath.Join(repo, "openspec", "specsync.yml"), []byte(readFile(t, filepath.Join(repo, "openspec", "specsync.yml"))+"# edit\n"), 0o644)
+	out, err := runIn(t, bin, sub, env, "save", "-m", "x\n\nCo-Authored-By: A <a@example.com>")
+	if err == nil || !strings.Contains(out, "Co-Authored-By") {
+		t.Fatalf("the forbidden trailer from the repo config must apply from a subdirectory: err=%v\n%s", err, out)
+	}
+	gitIn(t, repo, "checkout", "-q", "--", "openspec/specsync.yml")
+	out, err = runIn(t, bin, sub, env, "gates")
+	if err != nil || !strings.Contains(out, "passed") {
+		t.Fatalf("gates from a subdirectory: err=%v\n%s", err, out)
+	}
+	if _, statErr := os.Stat(filepath.Join(repo, "gate-ran")); statErr != nil {
+		t.Fatal("the configured gate must have run")
+	}
+}
+
+func readFile(t *testing.T, p string) string {
+	t.Helper()
+	b, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+func TestPrOpenFromASubdirectoryStillRequiresTheConfiguredConfirmations(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env, ghLog := prRepo(t, "pr:\n  confirm: [tests-run]\n")
+	sub := filepath.Join(repo, "sub")
+	os.MkdirAll(sub, 0o755)
+	out, err := runIn(t, bin, sub, env, "pr", "open")
+	if err == nil || !strings.Contains(out, "tests-run") {
+		t.Fatalf("err=%v\n%s", err, out)
+	}
+	if b, _ := os.ReadFile(ghLog); strings.Contains(string(b), "pr create") {
+		t.Fatal("nothing may be created")
+	}
+}
+
+func TestParkRefusesASecretInTheMessageBeforeWritingAnything(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env, change := parkRepo(t)
+	out, err := runIn(t, bin, repo, env, "park", "-m", "pausing ghp_"+strings.Repeat("a", 36))
+	if err == nil || !strings.Contains(out, "message") {
+		t.Fatalf("err=%v\n%s", err, out)
+	}
+	if _, statErr := os.Stat(filepath.Join(change, "discoveries.md")); statErr == nil {
+		t.Fatal("nothing may be written when a guard refuses")
+	}
+}
+
+func TestPrOpenFetchesTheBaseAndMeasuresAgainstIt(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env, ghLog := prRepo(t, "flow: minimal\n")
+	origin := exec.Command("git", "remote", "get-url", "origin")
+	origin.Dir = repo
+	url, _ := origin.Output()
+	other := filepath.Join(t.TempDir(), "other")
+	gitIn(t, filepath.Dir(other), "clone", "-q", strings.TrimSpace(string(url)), other)
+	os.WriteFile(filepath.Join(other, "m.txt"), []byte("m\n"), 0o644)
+	commitAll(t, other, "m")
+	gitIn(t, other, "push", "-q", "origin", "main")
+	out, err := runIn(t, bin, repo, env, "pr", "open", "-base", "main")
+	if err == nil || !strings.Contains(out, "behind") {
+		t.Fatalf("the base must be fetched first so a stale branch is caught: err=%v\n%s", err, out)
+	}
+	if b, _ := os.ReadFile(ghLog); strings.Contains(string(b), "pr create") {
+		t.Fatal("a branch behind the fetched base must not be opened")
+	}
+}
+
+func TestPrOpenBlocksOnASkippedCheckItCannotMeasureUnlessNamed(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env, ghLog := prRepo(t, "flow: minimal\n")
+	gitIn(t, repo, "remote", "set-head", "origin", "-d")
+	out, err := runIn(t, bin, repo, env, "pr", "open")
+	if err == nil || !strings.Contains(out, "-confirm fresh") || !strings.Contains(out, "-confirm size") {
+		t.Fatalf("an unmeasurable base must block and name the checks to acknowledge: err=%v\n%s", err, out)
+	}
+	out, err = runIn(t, bin, repo, env, "pr", "open", "-confirm", "fresh", "-confirm", "size")
+	if err == nil || !strings.Contains(out, "-base") {
+		t.Fatalf("acknowledged, it still cannot open without a base: err=%v\n%s", err, out)
+	}
+	if b, _ := os.ReadFile(ghLog); strings.Contains(string(b), "pr create") {
+		t.Fatal("nothing may be created")
+	}
+}
+
+func TestUpdateForcePushNeedsTheLeaseFlag(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	clone, env, advance := updateRepo(t)
+	gitIn(t, clone, "push", "-q", "-u", "origin", "feature")
+	advance()
+	out, err := runIn(t, bin, clone, env, "update", "-fetch")
+	if err != nil || !strings.Contains(out, "rewrites pushed history") || !strings.Contains(out, "-force-with-lease") {
+		t.Fatalf("err=%v\n%s", err, out)
+	}
+	rev := func() string {
+		c := exec.Command("git", "rev-parse", "HEAD")
+		c.Dir = clone
+		b, _ := c.Output()
+		return string(b)
+	}
+	before := rev()
+	out, err = runIn(t, bin, clone, env, "update", "-apply", "-push")
+	if err == nil || !strings.Contains(out, "-force-with-lease") || rev() != before {
+		t.Fatalf("a publish of rewritten history needs the flag and changes nothing without it: err=%v\n%s", err, out)
+	}
+	out, err = runIn(t, bin, clone, env, "update", "-apply", "-push", "-force-with-lease")
+	if err != nil || !strings.Contains(out, "pushed") {
+		t.Fatalf("err=%v\n%s", err, out)
+	}
+}
+
+func TestSaveAllowOverridesAReviewedFalsePositiveAndSaysSo(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env := waysRepo(t, "flow: minimal\n")
+	env = withIdentity(env)
+	commitAll(t, repo, "config")
+	os.WriteFile(filepath.Join(repo, ".env.local"), []byte("A=1\n"), 0o644)
+	if out, err := runIn(t, bin, repo, env, "save", "-m", "x", "-add", ".env.local"); err == nil {
+		t.Fatalf("must be refused first:\n%s", out)
+	}
+	out, err := runIn(t, bin, repo, env, "save", "-m", "x", "-add", ".env.local", "-allow", ".env.local")
+	if err != nil || !strings.Contains(out, "allowed") || !strings.Contains(out, ".env.local") {
+		t.Fatalf("err=%v\n%s", err, out)
+	}
+}
+
+func TestOpenRequestLookupFallsBackToADirectQueryWhenTheListingIsTruncated(t *testing.T) {
+	set := specsync.ChangeRequestSet{Truncated: true}
+	direct := func(context.Context, string) (int, error) { return 7, nil }
+	if n, err := openRequestFrom(context.Background(), set, "feat/x", direct); err != nil || n != 7 {
+		t.Fatalf("a truncated listing without a match asks directly: %d %v", n, err)
+	}
+	failing := func(context.Context, string) (int, error) { return 0, errors.New("gh down") }
+	if _, err := openRequestFrom(context.Background(), set, "feat/x", failing); err == nil {
+		t.Fatal("when the direct query fails too the state is unknown, not zero")
+	}
+	set.Truncated = false
+	if n, err := openRequestFrom(context.Background(), set, "feat/x", failing); err != nil || n != 0 {
+		t.Fatalf("a complete listing with no match is a real zero: %d %v", n, err)
+	}
+	set = specsync.ChangeRequestSet{Truncated: true, Requests: []specsync.ChangeRequest{{Number: 3, State: "open", Branch: "feat/x"}}}
+	if n, err := openRequestFrom(context.Background(), set, "feat/x", failing); err != nil || n != 3 {
+		t.Fatalf("a match needs no second query: %d %v", n, err)
 	}
 }
