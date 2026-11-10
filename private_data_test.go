@@ -31,7 +31,7 @@ var (
 	// Names of private organisations and repositories. Written as a
 	// concatenation so this file does not match its own pattern. Use
 	// placeholders such as acme/app in examples, specs and fixtures.
-	internalName = regexp.MustCompile(`Exopen` + `GitHub|Fusion` + `Hub`)
+	internalName = regexp.MustCompile(`(?i)ex` + `open|fusion` + `hub`)
 
 	// Credential prefixes. Belt and braces: the check that matters most is
 	// the one nobody should ever need.

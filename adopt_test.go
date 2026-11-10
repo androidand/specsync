@@ -153,7 +153,7 @@ func TestAdoptRejectsConflictingIssueMarker(t *testing.T) {
 	}
 }
 
-// TestAdoptRegressionRace reproduces the observed api failure: a
+// TestAdoptRegressionRace reproduces the observed acme/api failure: a
 // change is adopted onto an issue whose marker has not yet reached the
 // tracker's search index. A later sync — which would previously find
 // nothing via marker search and create a duplicate — must instead find the

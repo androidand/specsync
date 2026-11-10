@@ -72,4 +72,4 @@ After step 2, steps 3, 4 and 5 can run in parallel, except where a step names it
 
 ## Related
 
-All changes above. `START-PROMPT.md` in this folder starts the work.
+All changes above.

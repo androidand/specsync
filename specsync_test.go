@@ -357,7 +357,7 @@ func TestGitHubFindReturnsNilWithoutExactMarker(t *testing.T) {
 // TestGitHubFindAmbiguousMarker pins the duplicate-detection guard: marker
 // search returning more than one exact match must stop rather than pick a
 // first hit — silently choosing is exactly how a sync started writing to the
-// wrong issue of the api #3691/#3692 pair.
+// wrong issue of the acme/api #3691/#3692 pair.
 func TestGitHubFindAmbiguousMarker(t *testing.T) {
 	p := &GitHubProvider{run: func(_ context.Context, args ...string) (string, error) {
 		if args[0] == "issue" && args[1] == "list" {
@@ -426,7 +426,7 @@ func TestSyncStopsOnAmbiguousMarker(t *testing.T) {
 // TestGitHubPushRefusesClosedIssueWithoutForce pins the second guard: a
 // cached/found ref pointing at a closed issue is the strongest signal the
 // ref is stale, so Push must refuse rather than edit it — this is what let a
-// sync silently write to api's closed duplicate #3692.
+// sync silently write to acme/api's closed duplicate #3692.
 func TestGitHubPushRefusesClosedIssueWithoutForce(t *testing.T) {
 	var editCalled bool
 	p := &GitHubProvider{run: func(_ context.Context, args ...string) (string, error) {
