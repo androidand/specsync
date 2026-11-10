@@ -83,3 +83,36 @@ func TestCleanupCommandNeverRemovesTheCurrentWorktree(t *testing.T) {
 		t.Fatal("the current worktree must stay")
 	}
 }
+
+func TestTrustListsCleanupHooksWithTheGates(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, "openspec"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := "gates:\n  - name: test\n    run: make test\ncleanup:\n  hooks:\n    - make stop\n"
+	if err := os.WriteFile(filepath.Join(repo, "openspec", "specsync.yml"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	env := append(os.Environ(), "SPECSYNC_TRUST_FILE="+filepath.Join(t.TempDir(), "trust.json"))
+	out, err := runIn(t, bin, repo, env, "trust")
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if !strings.Contains(out, "$ make test") || !strings.Contains(out, "$ make stop") {
+		t.Fatalf("trust must list everything it will later run:\n%s", out)
+	}
+}
+
+func TestCleanupCommandWarnsWhenLiveSessionsWereNotChecked(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	root, _ := cleanupWorkspace(t)
+	env := append(os.Environ(), "SPECSYNC_TRUST_FILE="+filepath.Join(t.TempDir(), "trust.json"), "SPECSYNC_SESSIONS_CMD=")
+	out, err := runIn(t, bin, t.TempDir(), env, "cleanup", "-root", root, "-state", "off")
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if !strings.Contains(out, "warning: live sessions not checked") {
+		t.Fatalf("the plan must say live sessions were not checked:\n%s", out)
+	}
+}

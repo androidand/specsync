@@ -79,7 +79,7 @@ func (cm *trustCmd) Run(_ context.Context, args []string) error {
 	if specsync.ConfigHash(root) == "" {
 		return fmt.Errorf("no %s to trust", specsync.SpecSyncConfigPath)
 	}
-	for _, c := range ways.GateCommands(true, nil) {
+	for _, c := range ways.TrustedCommands() {
 		fmt.Printf("  $ %s\n", c)
 	}
 	if !*cm.yes {

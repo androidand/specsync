@@ -572,11 +572,20 @@ specsync cleanup -root ~/dev     # every repo under a folder
 ```
 
 A worktree is finished only when its work is provably in the base: its request merged with this
-head, or the head is already in the base, and the tree is clean. A request closed without merging
+head, or the head is already in the base (and the branch's reflog shows commits made on it, so an
+empty branch is never "finished"), and the tree is clean. A request closed without merging
 is never a candidate, and old work with unpushed commits is listed as needing attention, never
-removed. Dirty trees, open requests, the current worktree, the main checkout and worktrees with a
-live session are skipped. Each candidate is checked again just before removal. Configure it in
-`openspec/specsync.yml`; hooks run only after `specsync trust -yes`:
+removed. Skipped: dirty trees, worktrees with ignored files (build output such as `node_modules`,
+`dist`, `build`, `target`, `.next`, `vendor` and `__pycache__` alone does not block; `-include-ignored`
+overrides), open requests, protected branches (`main`, `master`, `develop`, `trunk`, the base and
+default branch, the one checked out in the main checkout), the current worktree, the main checkout
+and worktrees with a live session. Live sessions are checked only when a session provider is
+configured (`-sessions-cmd`); otherwise the plan says so. Each candidate is checked again from
+fresh facts just before it is touched, then done in this order: hooks (in the worktree, only when
+trusted), archive, remove the worktree, delete the local branch, delete the remote branch (only
+when its upstream has the same name and its tip is still this head). A failed hook or archive
+leaves everything in place. Configure it in `openspec/specsync.yml`; `specsync trust` lists every
+gate and cleanup hook, and `trust -yes` records them:
 
 ```yaml
 cleanup:
