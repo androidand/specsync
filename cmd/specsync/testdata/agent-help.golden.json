@@ -15,6 +15,7 @@
     "init",
     "install-skill",
     "link",
+    "lint",
     "next",
     "note",
     "overview",
@@ -908,6 +909,99 @@
         "specsync link my-change other-change -dry-run",
         "specsync link my-change other-change",
         "specsync link change-a change-b change-c"
+      ]
+    },
+    "lint": {
+      "command": "lint",
+      "description": "Check titles and issue or PR text against the short-text standard.",
+      "mutates": false,
+      "workflow": {
+        "position": "pre-merge",
+        "related_before": [
+          "pr-body"
+        ]
+      },
+      "flags": [
+        {
+          "name": "body-file",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "lint the text in this file"
+        },
+        {
+          "name": "change",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "lint this change's title and proposal as an issue"
+        },
+        {
+          "name": "fail",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "exit non-zero when anything is reported, for CI"
+        },
+        {
+          "name": "json",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "output as JSON"
+        },
+        {
+          "name": "kind",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "what -title and -body-file are: pr, commit or issue (default: pr)"
+        },
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "pr",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "lint the title and body of this pull request number"
+        },
+        {
+          "name": "repo",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "with -pr: repo as owner/name (default: auto-detect from git remote)"
+        },
+        {
+          "name": "store",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "registered OpenSpec store id to operate on (default: openspec/config.yaml `store:`, else ./openspec)"
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "lint this title"
+        }
+      ],
+      "safety_rules": [
+        "Advisory: exits 0 unless -fail is given; never edits text",
+        "The standard is the default or the text: section of openspec/specsync.yml"
+      ],
+      "examples": [
+        "specsync lint -change my-change",
+        "specsync lint -title 'fix(sync): keep links out of sections' -fail",
+        "specsync lint -pr 42 -fail",
+        "specsync lint -body-file body.md"
       ]
     },
     "next": {

@@ -143,6 +143,7 @@ appear on someone else's repository.
 |---|---|
 | `archive` | Archive a completed change: final push, close, then retention. |
 | `changelog` | Generate release notes from OpenSpec changes and commits. |
+| `lint` | Check titles and issue or PR text against the short-text standard. |
 | `pr-body` | Generate the correct PR body fragment for a change. |
 | `release-plan` | Inspect release impact and generate release notes. |
 | `review-map` | Turn a branch into a review checklist, or prove a rewritten branch has the same content. |

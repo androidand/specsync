@@ -6,9 +6,9 @@
 
 - [x] 1.1 Rules: title format and length, header set (including the names specsync writes or reads; slice headings exempt) and length, sentence and paragraph limits, filler list
 - [x] 1.2 Word budget for the visible part, excluding links and generated sections
-- [ ] 1.3 `specsync lint [-change] [-pr|-body-file] [-fail]`
+- [x] 1.3 `specsync lint [-change] [-pr|-body-file] [-fail]`
 - [x] 1.4 Reuse `advisory-title-suggestions` for titles
-- [ ] 1.5 Tests per rule, advisory exit 0, `-fail` exit non-zero
+- [x] 1.5 Tests per rule, advisory exit 0, `-fail` exit non-zero
 
 ## Slice 2: PR body template
 - after: 1
@@ -25,7 +25,7 @@
 - contract: A repo can choose its profile and limits.
 
 - [ ] 3.1 `text:` section in `openspec/specsync.yml`; validated by `doctor`
-- [ ] 3.2 Declare `lint` once as a `Command` type; docs are generated
+- [x] 3.2 Declare `lint` once as a `Command` type; docs are generated
 - [ ] 3.3 Update `site/features.json`; run `specsync changelog -fail-on-unlinked-commits`
 
 ## Slice 4: Dogfood
