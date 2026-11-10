@@ -35,4 +35,4 @@
 - [x] 4.1 Implement each new command or flag once, as a `Command` type per `make-commands-discoverable`; README, `agent-help`, the overview and the skill are generated, never hand-written
 - [x] 4.2 Update the skill so agents prefer `status`/`status -json` over hand-run `git`/`gh`
 - [x] 4.3 Update `site/features.json`
-- [ ] 4.4 Run `specsync changelog -fail-on-unlinked-commits`
+- [x] 4.4 Run `specsync changelog -fail-on-unlinked-commits` (only the pre-existing #198 commit on main is unlinked; none of this change)
