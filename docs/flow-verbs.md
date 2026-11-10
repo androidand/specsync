@@ -6,7 +6,7 @@ judgement in it and call these verbs for the mechanics. Local conventions move t
 
 | Your script does | Call | Config |
 |---|---|---|
-| create a worktree and branch, run setup | `specsync start <slug>` | `worktrees.dir`, `worktrees.branch`, `worktrees.hooks` |
+| create a worktree and branch, run setup | `specsync start <slug>` | `worktrees.dir`, `worktrees.branch`, `worktrees.hooks`, `worktrees.launcher` |
 | write the issue | `specsync new <title>` | the text standard under `text:` |
 | commit, refuse secrets and trailers, push | `specsync save -m ... [-push]` | `save.forbid_trailers`, `save.forbid_files` |
 | lint, types, tests, then remember it passed | `specsync gates` | `gates:` |

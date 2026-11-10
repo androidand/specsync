@@ -32,6 +32,10 @@ type StartOptions struct {
 	SessionsChecked bool
 	SessionsErr     error
 	DryRun          bool
+	// Orca is the Orca CLI to create a new worktree with; "" uses git.
+	Orca string
+	// Agent and Prompt are passed to Orca to start an agent in the workspace.
+	Agent, Prompt string
 }
 
 // StartResult reports the worktree a start used or would create.
@@ -41,6 +45,35 @@ type StartResult struct {
 	Existing bool   `json:"existing"`
 	Created  bool   `json:"created"`
 	Hooks    int    `json:"hooksRun"`
+	// Launcher is "git" or "orca" for a worktree start creates or would create.
+	Launcher string `json:"launcher,omitempty"`
+	// Command is the Orca command, when Orca creates the worktree.
+	Command []string `json:"command,omitempty"`
+}
+
+// runOrcaFn runs an Orca command in dir. A variable so tests can fake Orca.
+var runOrcaFn = func(ctx context.Context, dir string, argv []string) (string, error) {
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	return string(out), err
+}
+
+// orcaCreateArgs is the `orca worktree create` command for a new worktree.
+// --no-parent: a change is independent work, not a child of whatever Orca
+// workspace start runs in.
+func orcaCreateArgs(o StartOptions, branch, base string) []string {
+	argv := []string{o.Orca, "worktree", "create", "--name", o.Slug, "--branch", branch, "--base-branch", base, "--no-parent"}
+	if o.Issue != "" {
+		argv = append(argv, "--issue", o.Issue)
+	}
+	if o.Agent != "" {
+		argv = append(argv, "--agent", o.Agent)
+	}
+	if o.Prompt != "" {
+		argv = append(argv, "--prompt", o.Prompt)
+	}
+	return argv
 }
 
 // BranchName expands a branch pattern. {issue} and the separator after it
@@ -125,9 +158,6 @@ func StartWork(ctx context.Context, o StartOptions) (StartResult, error) {
 	if err := RequireTrust(configRoot, hooks); err != nil {
 		return res, err
 	}
-	if o.DryRun {
-		return res, nil
-	}
 	base := o.Base
 	if base == "" {
 		if b, err := DefaultBase(ctx, root); err == nil {
@@ -136,16 +166,32 @@ func StartWork(ctx context.Context, o StartOptions) (StartResult, error) {
 			base = "HEAD"
 		}
 	}
-	if err := os.MkdirAll(filepath.Dir(res.Path), 0o755); err != nil {
-		return res, err
+	res.Launcher = "git"
+	if o.Orca != "" {
+		res.Launcher = "orca"
+		res.Command = orcaCreateArgs(o, res.Branch, base)
 	}
-	if _, err := gitIn(ctx, root, "rev-parse", "--verify", "--quiet", "refs/heads/"+res.Branch); err == nil {
-		_, err = gitIn(ctx, root, "worktree", "add", res.Path, res.Branch)
+	if o.DryRun {
+		return res, nil
+	}
+	if o.Orca != "" {
+		path, err := startWithOrca(ctx, root, res.Command, res.Branch)
 		if err != nil {
 			return res, err
 		}
-	} else if _, err := gitIn(ctx, root, "worktree", "add", "--no-track", "-b", res.Branch, res.Path, base); err != nil {
-		return res, err
+		res.Path = path
+	} else {
+		if err := os.MkdirAll(filepath.Dir(res.Path), 0o755); err != nil {
+			return res, err
+		}
+		if _, err := gitIn(ctx, root, "rev-parse", "--verify", "--quiet", "refs/heads/"+res.Branch); err == nil {
+			_, err = gitIn(ctx, root, "worktree", "add", res.Path, res.Branch)
+			if err != nil {
+				return res, err
+			}
+		} else if _, err := gitIn(ctx, root, "worktree", "add", "--no-track", "-b", res.Branch, res.Path, base); err != nil {
+			return res, err
+		}
 	}
 	res.Created = true
 	if _, err := gitIn(ctx, root, "config", "branch."+res.Branch+".specsyncChange", o.Slug); err != nil {
@@ -161,6 +207,35 @@ func StartWork(ctx context.Context, o StartOptions) (StartResult, error) {
 		res.Hooks++
 	}
 	return res, nil
+}
+
+// startWithOrca creates the worktree with Orca and returns its path. Orca
+// renames a taken branch instead of failing, so the worktree must be on the
+// exact branch asked for; and any upstream Orca set is removed, so a bare
+// `git push` cannot reach the base branch, as with git's --no-track.
+func startWithOrca(ctx context.Context, root string, argv []string, branch string) (string, error) {
+	if out, err := runOrcaFn(ctx, root, argv); err != nil {
+		return "", fmt.Errorf("%s: %v: %s", strings.Join(argv, " "), err, strings.TrimSpace(out))
+	}
+	wts, err := listWorktrees(ctx, gitWorktreeListReal, root)
+	if err != nil {
+		return "", err
+	}
+	path := ""
+	for _, w := range wts {
+		if w.branch == branch {
+			path = w.path
+		}
+	}
+	if path == "" {
+		return "", fmt.Errorf("Orca created no worktree on branch %s (it renames a branch that is taken); check `orca worktree list` and remove the workspace it made", branch)
+	}
+	if _, err := gitIn(ctx, root, "rev-parse", "--abbrev-ref", "--symbolic-full-name", branch+"@{upstream}"); err == nil {
+		if _, err := gitIn(ctx, root, "branch", "--unset-upstream", branch); err != nil {
+			return "", fmt.Errorf("remove the upstream Orca set on %s: %w", branch, err)
+		}
+	}
+	return path, nil
 }
 
 // RepoConfigRoot is the directory whose openspec/specsync.yml applies to dir:

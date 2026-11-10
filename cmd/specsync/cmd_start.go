@@ -6,7 +6,9 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"regexp"
+	"runtime"
 	"strings"
 
 	specsync "github.com/androidand/specsync"
@@ -15,6 +17,8 @@ import (
 type startCmd struct {
 	openspec, storeFlag *string
 	typ, base           *string
+	launcher            *string
+	agent, prompt       *string
 	dryRun, asJSON      *bool
 	sessions            sessionFlags
 }
@@ -35,11 +39,14 @@ func (*startCmd) Spec() Spec {
 			"Start hooks run only in a newly created worktree, and only after `specsync trust -yes`",
 			"Refuses when the session provider reports a live session in the worktree, or cannot be asked while one is configured",
 			"Records the branch-to-change link in the repository's git config; -dry-run changes nothing",
+			"With the orca launcher (worktrees.launcher or -launcher), Orca creates the worktree linked to the change's issue; start fails if Orca put it on a different branch, and removes any upstream it set",
+			"Orca is found via $ORCA_CLI_COMMAND, then orca-ide on Linux (a bare orca there is the screen reader), then orca",
 		},
 		Examples: []string{
 			"specsync start add-retry -dry-run",
 			"specsync start add-retry",
 			"specsync start 42",
+			"specsync start -launcher orca -agent claude add-retry",
 		},
 	}
 }
@@ -48,6 +55,9 @@ func (cm *startCmd) Flags(fs *flag.FlagSet) {
 	cm.openspec, cm.storeFlag = addRootFlags(fs)
 	cm.typ = fs.String("type", "feat", "branch type for the {type} placeholder")
 	cm.base = fs.String("base", "", "start point for a new branch (default: the repository's default branch)")
+	cm.launcher = fs.String("launcher", "", "git, orca or auto (Orca when installed) to create a new worktree (default: worktrees.launcher, else git)")
+	cm.agent = fs.String("agent", "", "Orca only: agent to launch in the new workspace, e.g. claude or codex")
+	cm.prompt = fs.String("prompt", "", "Orca only: initial prompt for that agent")
 	cm.dryRun = fs.Bool("dry-run", false, "show the worktree and branch and create nothing")
 	cm.asJSON = fs.Bool("json", false, "output as JSON")
 	cm.sessions = addSessionFlags(fs)
@@ -94,7 +104,15 @@ func (cm *startCmd) Run(ctx context.Context, args []string) error {
 	cwd, _ := os.Getwd()
 	repoRoot := configRoot(ctx, fs, cwd)
 	ways := loadWaysOrFail(repoRoot)
-	opts := specsync.StartOptions{RepoDir: cwd, ConfigRoot: repoRoot, Ways: ways, Slug: change.Slug, Issue: issue, Type: *cm.typ, Base: *cm.base, DryRun: *cm.dryRun}
+	orca, err := startLauncher(*cm.launcher, ways.Worktrees.Launcher, os.Getenv, exec.LookPath, runtime.GOOS)
+	if err != nil {
+		return err
+	}
+	if orca == "" && (*cm.agent != "" || *cm.prompt != "") {
+		return fmt.Errorf("-agent and -prompt need the orca launcher")
+	}
+	opts := specsync.StartOptions{RepoDir: cwd, ConfigRoot: repoRoot, Ways: ways, Slug: change.Slug, Issue: issue, Type: *cm.typ, Base: *cm.base, DryRun: *cm.dryRun,
+		Orca: orca, Agent: *cm.agent, Prompt: *cm.prompt}
 	if cmdline := cm.sessions.command(fs); cmdline != "" {
 		opts.SessionsChecked = true
 		opts.Sessions, opts.SessionsErr = specsync.LoadSessions(ctx, cmdline, *cm.sessions.timeout)
@@ -111,6 +129,8 @@ func (cm *startCmd) Run(ctx context.Context, args []string) error {
 	switch {
 	case res.Existing:
 		fmt.Printf("specsync: %s already has a worktree: %s (branch %s); nothing created\n", change.Slug, res.Path, res.Branch)
+	case *cm.dryRun && res.Launcher == "orca":
+		fmt.Printf("DRY RUN — would run %s, then %d start hook(s) in the worktree Orca creates on branch %s\n", shellJoin(res.Command), len(ways.Worktrees.Hooks), res.Branch)
 	case *cm.dryRun:
 		fmt.Printf("DRY RUN — would create %s on branch %s, run %d start hook(s) there\n", res.Path, res.Branch, len(ways.Worktrees.Hooks))
 	default:
@@ -120,6 +140,32 @@ func (cm *startCmd) Run(ctx context.Context, args []string) error {
 		fmt.Printf("next: cd %s\n", shellQuote(res.Path))
 	}
 	return nil
+}
+
+// startLauncher returns the Orca CLI that should create a new worktree, or ""
+// for git. The flag wins over the config; both default to git.
+func startLauncher(flagValue, configValue string, getenv func(string) string, lookPath func(string) (string, error), goos string) (string, error) {
+	launcher := flagValue
+	if launcher == "" {
+		launcher = configValue
+	}
+	switch launcher {
+	case "", "git":
+		return "", nil
+	case "auto":
+		return resolveOrca(getenv, lookPath, goos), nil
+	case "orca":
+		if orca := resolveOrca(getenv, lookPath, goos); orca != "" {
+			return orca, nil
+		}
+		hint := "put orca on PATH"
+		if goos == "linux" {
+			hint = "put orca-ide on PATH (a bare orca on Linux is the screen reader)"
+		}
+		return "", fmt.Errorf("the orca launcher needs Orca: set ORCA_CLI_COMMAND or %s", hint)
+	default:
+		return "", fmt.Errorf("-launcher must be git, orca or auto; got %q", launcher)
+	}
 }
 
 func resolveStartRef(changes []specsync.Change, ref string) (*specsync.Change, string) {
