@@ -54,6 +54,8 @@ type ChangeTopology struct {
 	NoChange bool `json:"noChange,omitempty"`
 	// Tasks counts the change's checklist items.
 	Tasks *TaskCount `json:"tasks,omitempty"`
+	// dir is the change folder, used to read its slice declarations.
+	dir string
 	// PR is the change request on the row's branch, from the work provider.
 	PR *ChangeRequest `json:"pr,omitempty"`
 }
@@ -111,6 +113,12 @@ type TopologyOptions struct {
 	// Sync is the `sync:` config for suggestions; zero means the defaults.
 	Sync SyncConfig
 
+	// Budget is the -budget flag value and Exclude the -exclude globs for the
+	// advisory size flags; the slice budget line, SPECSYNC_BUDGET and the
+	// defaults fill in what they leave unset.
+	Budget  string
+	Exclude []string
+
 	// NoCoordination skips the coordinated sibling stores: the caller walks
 	// the workspace itself and asks one store at a time.
 	NoCoordination bool
@@ -132,6 +140,9 @@ type storeEntry struct {
 // are recorded in Topology.Status instead. The CLI decides what a fully
 // empty result means (see cmd/specsync topology.go).
 func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error) {
+	if _, err := ResolveBudget(opts.Budget, "", os.Getenv(BudgetEnv)); err != nil {
+		return nil, fmt.Errorf("size budget: %w", err)
+	}
 	if opts.readCoordination == nil {
 		opts.readCoordination = ReadCoordination
 	}
@@ -330,6 +341,7 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 
 	// enrich adds everything that needs the row's branch and worktree: the
 	// request, local git state, attention flags and the sync suggestion.
+	warnedBudget := false
 	enrich := func(row *ChangeTopology) {
 		var cr *ChangeRequest
 		if row.Branch != "" {
@@ -346,11 +358,20 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 		}
 		var ls *LocalState
 		if row.Worktree != "" {
-			if got, err := opts.localState(ctx, row.Worktree, LocalStateOptions{Base: base}); err != nil {
+			budget, err := ResolveBudget(opts.Budget, SliceBudgetLine(row.dir), os.Getenv(BudgetEnv))
+			if err != nil {
+				if !warnedBudget {
+					warnedBudget = true
+					addStatus("budget line of change %s ignored: %v", row.Slug, err)
+				}
+				budget, _ = ResolveBudget(opts.Budget, "", os.Getenv(BudgetEnv))
+			}
+			if got, err := opts.localState(ctx, row.Worktree, LocalStateOptions{Base: base, Budget: budget, Exclude: opts.Exclude}); err != nil {
 				addStatus("local state unavailable for %s: %v", rowLabel(*row), err)
 			} else {
 				ls = got
 				row.Local = ls
+				ls.NoSlicePlan = row.dir != "" && !HasSlices(row.dir)
 			}
 		}
 
@@ -389,6 +410,7 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 			Title: c.Title,
 			Stage: string(c.Stage),
 			Store: l.store.path,
+			dir:   c.Dir,
 		}
 		if total, done := CountCheckboxes(c.TasksMarkdown); total > 0 {
 			row.Tasks = &TaskCount{Done: done, Total: total}

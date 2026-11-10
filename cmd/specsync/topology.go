@@ -21,6 +21,8 @@ type statusCmd struct {
 	all, asJSON      *bool
 	state            *string
 	everything       *bool
+	budget           *string
+	exclude          stringSlice
 }
 
 func init() { Register(&statusCmd{}) }
@@ -38,6 +40,7 @@ func (*statusCmd) Spec() Spec {
 			"specsync status -change my-change -json",
 			"specsync status -state=off",
 			"specsync status -state=fresh",
+			"specsync status -budget files=15,lines=400 -exclude go.sum",
 		},
 	}
 }
@@ -48,6 +51,8 @@ func (cm *statusCmd) Flags(fs *flag.FlagSet) {
 	cm.all = fs.Bool("all", false, "include archived changes")
 	cm.asJSON = fs.Bool("json", false, "output as JSON")
 	cm.everything = fs.Bool("everything", false, "list every change instead of the current work")
+	cm.budget = fs.String("budget", "", "advisory size budget for the size flags, e.g. files=15,lines=400,commits=30 (default: the change's budget line, then $SPECSYNC_BUDGET, then built-in limits)")
+	fs.Var(&cm.exclude, "exclude", "glob of paths left out of the size counts (repeatable), e.g. go.sum")
 	cm.state = fs.String("state", "on", "on (default) reuses pull request data for up to a minute; fresh refetches it; off skips the tracker and pull request lookups: local git facts only, offline")
 }
 
@@ -86,6 +91,8 @@ func (cm *statusCmd) run(args []string) {
 		LocalOnly:       *state == "off",
 		Cache:           requestCache(),
 		RefreshRequests: *state == "fresh",
+		Budget:          *cm.budget,
+		Exclude:         cm.exclude,
 	})
 	if err != nil {
 		fail(err)
@@ -207,7 +214,11 @@ func printTopologyTable(topo specsync.Topology) {
 			}
 			fmt.Printf("%-32s %-11s %-27s %-11s %-41s %s\n", c.Slug, c.Stage, repo, issue, branch, worktree)
 			if len(c.Attention) > 0 {
-				fmt.Printf("    ↳ attention: %s\n", strings.Join(c.Attention, ", "))
+				parts := make([]string, len(c.Attention))
+				for i, f := range c.Attention {
+					parts[i] = attentionDetail(f, c)
+				}
+				fmt.Printf("    ↳ attention: %s\n", strings.Join(parts, ", "))
 			}
 			printRequest(c.PR, "    ↳ ", "        ")
 			printSync(c.Sync, "    ↳ ", "        ")
@@ -322,6 +333,10 @@ func attentionDetail(flag string, row specsync.ChangeTopology) string {
 		return fmt.Sprintf("%s (%s)", flag, plural(l.UpstreamBehind, "commit"))
 	case flag == "behind-base" && l != nil:
 		return fmt.Sprintf("%s (%s)", flag, plural(l.BehindBase, "commit"))
+	case flag == "oversized" && l != nil:
+		return fmt.Sprintf("%s (%s)", flag, strings.Join(l.Exceeded, ", "))
+	case flag == "mixed-scopes" && l != nil:
+		return fmt.Sprintf("%s (%s)", flag, strings.Join(l.Scopes, ", "))
 	case flag == "ci-failing" && pr != nil:
 		return fmt.Sprintf("%s (%d failing)", flag, pr.Checks.Fail)
 	case flag == "unresolved-comments" && pr != nil && pr.UnresolvedThreads != nil:

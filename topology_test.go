@@ -929,3 +929,81 @@ func TestBuildTopology_AnOpenNonDraftRequestIsUnderReview(t *testing.T) {
 		t.Fatalf("closed: %+v", got)
 	}
 }
+
+func TestBuildTopology_SizeBudgetPrecedenceAndSliceFlag(t *testing.T) {
+	opts, _ := localStateFixture(t)
+	cdir := filepath.Join(opts.OpenSpecDir, "changes", "add-field-forms")
+	mustWrite(t, filepath.Join(cdir, "tasks.md"), "# Tasks\n\nbudget: files<=5,lines<=50\n- [ ] a\n")
+	t.Setenv(BudgetEnv, "files=7,commits=9")
+	var got LocalStateOptions
+	opts.Budget = "lines=20"
+	opts.Exclude = []string{"go.sum"}
+	opts.localState = func(_ context.Context, _ string, lo LocalStateOptions) (*LocalState, error) {
+		got = lo
+		return &LocalState{Upstream: "origin/x", Exceeded: []string{"lines 99 > 20"}}, nil
+	}
+	topo, err := BuildTopology(context.Background(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := (Budget{Files: 5, Lines: 20, Commits: 9}); got.Budget != want {
+		t.Fatalf("budget = %+v, want %+v (flag, then slice line, then env)", got.Budget, want)
+	}
+	if !reflect.DeepEqual(got.Exclude, []string{"go.sum"}) {
+		t.Fatalf("exclude = %v", got.Exclude)
+	}
+	if want := []string{"oversized", "no-slice-plan"}; !reflect.DeepEqual(topo.Changes[0].Attention, want) {
+		t.Fatalf("attention = %v, want %v", topo.Changes[0].Attention, want)
+	}
+
+	mustWrite(t, filepath.Join(cdir, "tasks.md"), "# Tasks\n\n## Slice 1: parser\nbudget: files<=5\n- [ ] a\n")
+	topo, err = BuildTopology(context.Background(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"oversized"}; !reflect.DeepEqual(topo.Changes[0].Attention, want) {
+		t.Fatalf("a change with slices must not get no-slice-plan: %v", topo.Changes[0].Attention)
+	}
+}
+
+func TestBuildTopology_BadBudgetFlagOrEnvAbortsBadSliceLineFallsBack(t *testing.T) {
+	opts, _ := localStateFixture(t)
+	opts.localState = func(_ context.Context, _ string, _ LocalStateOptions) (*LocalState, error) {
+		return &LocalState{Upstream: "origin/x"}, nil
+	}
+	bad := opts
+	bad.Budget = "files<5"
+	if _, err := BuildTopology(context.Background(), bad); err == nil || !strings.Contains(err.Error(), "budget") {
+		t.Fatalf("a bad -budget must abort, got %v", err)
+	}
+	t.Setenv(BudgetEnv, "nonsense")
+	if _, err := BuildTopology(context.Background(), opts); err == nil {
+		t.Fatal("a bad SPECSYNC_BUDGET must abort")
+	}
+	t.Setenv(BudgetEnv, "")
+
+	cdir := filepath.Join(opts.OpenSpecDir, "changes", "add-field-forms")
+	mustWrite(t, filepath.Join(cdir, "tasks.md"), "# Tasks\n\nbudget: lines<5\n")
+	var got LocalStateOptions
+	opts.Budget = "files=9"
+	opts.localState = func(_ context.Context, _ string, lo LocalStateOptions) (*LocalState, error) {
+		got = lo
+		return &LocalState{Upstream: "origin/x"}, nil
+	}
+	topo, err := BuildTopology(context.Background(), opts)
+	if err != nil {
+		t.Fatalf("a bad slice line must not abort: %v", err)
+	}
+	if got.Budget.Files != 9 || got.Budget.Lines != DefaultBudget.Lines {
+		t.Fatalf("valid higher layers must survive a bad slice line: %+v", got.Budget)
+	}
+	warned := 0
+	for _, s := range topo.Status {
+		if strings.Contains(s, "budget") {
+			warned++
+		}
+	}
+	if warned != 1 {
+		t.Fatalf("want one warning, got %d in %v", warned, topo.Status)
+	}
+}

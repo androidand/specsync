@@ -507,6 +507,30 @@ which also names a change's branch when its name follows no convention. Both
 commands are read-only, and mark a result incomplete, with the reason, when a source
 such as the tracker was unreachable.
 
+
+### Catch oversized branches early
+
+`specsync status` flags a branch that is `oversized` (files, changed lines or commits over
+the budget), has `mixed-scopes` (commits with more than one conventional scope, such as
+`feat(billing)` and `feat(onboarding)`), or is oversized with `no-slice-plan` (its change
+declares no `## Slice` headings). It is advice, never a gate. Size comes from git alone.
+
+```bash
+specsync verify -size                          # advisory, exits 0
+specsync verify -size -fail-on-oversized       # a CI gate, if you want one
+specsync verify -size -budget files=15,lines=400 -exclude go.sum -exclude 'vendor/'
+```
+
+`-exclude` takes globs: `*` stays within a directory, `**` crosses directories, a trailing `/`
+means everything under that directory, and a glob with no slash matches the file name at any
+depth. `status`, `overview` and `verify -size` all accept `-budget` and `-exclude`.
+
+The budget is `-budget`, then a `budget: files<=5` line in the change (`verify -size` finds the
+change from the branch name), then `SPECSYNC_BUDGET`, then defaults of 30 files, 1000 lines and
+30 commits per measure. Write `files=0` to remove a limit. Only `key=n` and `key<=n` are accepted.
+Flags apply to unmerged work only: no size flag appears once the request is merged or closed. Defaults are policy, not a
+claim about the right size.
+
 ### `scan` — what already exists here?
 
 Run before planning new work. Give it an area — one or more paths and/or a
