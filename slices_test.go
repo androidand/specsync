@@ -87,3 +87,17 @@ func TestParseSlices_NeverInventsSlices(t *testing.T) {
 		}
 	}
 }
+
+func TestSlicePlanValidate_MalformedAndDuplicateAfterAreReported(t *testing.T) {
+	for name, c := range map[string]struct{ md, want string }{
+		"malformed": {"## Slice 1: A\ncontract: x\n- [ ] a\n## Slice 2: B\ncontract: y\nafter: one\n- [ ] b\n", "slice 2: malformed after"},
+		"partly":    {"## Slice 1: A\ncontract: x\n- [ ] a\n## Slice 2: B\ncontract: y\nafter: 1, x\n- [ ] b\n", "slice 2: malformed after"},
+		"twice":     {"## Slice 1: A\ncontract: x\n- [ ] a\n## Slice 2: B\ncontract: y\nafter: 1\nafter: 1\n- [ ] b\n", "slice 2: after is declared more than once"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := strings.Join(ParseSlices(c.md).Validate(), "\n"); !strings.Contains(got, c.want) {
+				t.Fatalf("want %q in %q", c.want, got)
+			}
+		})
+	}
+}

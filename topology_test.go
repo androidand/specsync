@@ -1054,8 +1054,8 @@ func TestBuildTopology_ShowsTheSliceABranchIsBoundToAndUsesItsBudget(t *testing.
 	if topo.Changes[0].Slice != nil {
 		t.Fatalf("a branch that is bound to no slice must not be given one by its name: %+v", topo.Changes[0].Slice)
 	}
-	if got.Budget.Files != 9 {
-		t.Fatalf("unbound branch keeps the first budget line, got %+v", got.Budget)
+	if got.Budget.Files != DefaultBudget.Files {
+		t.Fatalf("an unbound branch uses no slice's budget, got %+v", got.Budget)
 	}
 
 	if err := SaveSliceBinding(cdir, 2, SliceBinding{Branch: "feat/4231-add-field-forms"}); err != nil {

@@ -112,13 +112,3 @@ func (cm *sliceCmd) Run(ctx context.Context, args []string) error {
 	}
 	return nil
 }
-
-func sliceBranchExists(dir, branch string) bool {
-	for _, ref := range []string{"refs/heads/" + branch, "refs/remotes/origin/" + branch} {
-		cmd := exec.Command("git", "-C", dir, "rev-parse", "--verify", "--quiet", ref)
-		if cmd.Run() == nil {
-			return true
-		}
-	}
-	return false
-}

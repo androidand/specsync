@@ -244,13 +244,35 @@ func HasSlices(changeDir string) bool {
 	return sliceHeading.MatchString(changeText(changeDir))
 }
 
-// SliceBudgetLine returns the value of the first `budget:` line in the change's
-// tasks.md or proposal.md, or "".
-func SliceBudgetLine(changeDir string) string {
-	if m := budgetLine.FindStringSubmatch(changeText(changeDir)); m != nil {
-		return m[1]
+// ChangeBudgetLine returns the change-level `budget:` line: the first one in
+// tasks.md before its first slice heading, else in proposal.md. A budget inside
+// a slice block belongs to that slice, never to the change.
+func ChangeBudgetLine(changeDir string) string {
+	for _, f := range []string{"tasks.md", "proposal.md"} {
+		data, err := os.ReadFile(filepath.Join(changeDir, f))
+		if err != nil {
+			continue
+		}
+		for _, line := range strings.Split(string(data), "\n") {
+			if sliceHeading.MatchString(line) {
+				break
+			}
+			if m := budgetLine.FindStringSubmatch(line); m != nil {
+				return m[1]
+			}
+		}
 	}
 	return ""
+}
+
+// BudgetLineForBranch returns the budget line that applies to a branch: the
+// budget of the slice the branch is bound to, falling back to the change-level
+// budget when that slice declares none or the branch is bound to no slice.
+func BudgetLineForBranch(changeDir, branch string) string {
+	if s := sliceForBranch(changeDir, branch); s != nil && s.Budget != "" {
+		return s.Budget
+	}
+	return ChangeBudgetLine(changeDir)
 }
 
 // DefaultBase resolves the branch work is measured against: origin/HEAD.

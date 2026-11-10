@@ -134,8 +134,10 @@ type ItemResult struct {
 	Providers []ProviderResult
 	// ClosedDeferred carries the deferral reason when no provider fan-out is used.
 	ClosedDeferred string
-	// Slices lists what projecting the change's slices did (or would do).
-	Slices []string
+	// Slices lists what projecting the change's slices did (or would do);
+	// SliceFailures names each step that failed, to be retried by the next run.
+	Slices        []string
+	SliceFailures []string
 }
 
 // Sync projects every change into the provider(s), idempotently. When
@@ -190,7 +192,7 @@ func Sync(ctx context.Context, opts Options) (Result, error) {
 		var firstClosedDeferred string
 		var boardPlan BoardPlan
 		providerResults := make([]ProviderResult, 0, len(providers))
-		var sliceActions []string
+		var sliceActions, sliceFailed []string
 
 		for _, prov := range providers {
 			refs, err := LoadRefs(c.Dir)
@@ -353,11 +355,9 @@ func Sync(ctx context.Context, opts Options) (Result, error) {
 			}
 
 			if opts.Slices {
-				proj, serr := ProjectSlices(ctx, c, ref, prov, opts.DryRun)
+				proj, _ := ProjectSlices(ctx, c, ref, prov, opts.DryRun)
 				sliceActions = append(sliceActions, proj.Actions...)
-				if serr != nil {
-					fmt.Fprintf(os.Stderr, "specsync: warning: slice projection for %s failed: %v\n", c.Slug, serr)
-				}
+				sliceFailed = append(sliceFailed, proj.Failed...)
 			}
 
 			// Reconcile dependency edges with GitHub.
@@ -393,6 +393,7 @@ func Sync(ctx context.Context, opts Options) (Result, error) {
 			ClosedDeferred:  firstClosedDeferred,
 			Providers:       providerResults,
 			Slices:          sliceActions,
+			SliceFailures:   sliceFailed,
 		})
 	}
 

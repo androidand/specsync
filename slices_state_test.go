@@ -1,6 +1,8 @@
 package specsync
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 )
@@ -48,5 +50,39 @@ func TestSliceStatuses_StateComesFromAssertedFacts(t *testing.T) {
 	noPR := SliceStatuses(plan, bindings, func(string) bool { return true }, nil)
 	if noPR[0].State != "branch exists" {
 		t.Fatalf("a branch without a known request is just a branch: %q", noPR[0].State)
+	}
+}
+
+func TestSliceStatuses_MergedSliceReadsMergedEvenWhenItsBranchIsGone(t *testing.T) {
+	plan := ParseSlices("## Slice 1: A\ncontract: x\n- [x] a\n")
+	bindings := map[int]SliceBinding{1: {Branch: "feat/x-slice-1"}}
+	set := &ChangeRequestSet{Requests: []ChangeRequest{{Number: 10, State: "merged", Branch: "feat/x-slice-1"}}}
+	got := SliceStatuses(plan, bindings, func(string) bool { return false }, set)
+	if got[0].State != "merged" || got[0].PR == nil {
+		t.Fatalf("a merged slice whose branch was deleted must read merged: %+v", got[0])
+	}
+	none := SliceStatuses(plan, bindings, func(string) bool { return false }, &ChangeRequestSet{})
+	if none[0].State != "not started" {
+		t.Fatalf("a stale binding with no request and no branch is not started: %q", none[0].State)
+	}
+}
+
+func TestSliceBindings_AreSharedByEveryWorktreeOfTheChange(t *testing.T) {
+	repo, changeDir := sliceRepo(t)
+	linked := filepath.Join(filepath.Dir(repo), "app-wip")
+	runGitS(t, repo, "worktree", "add", "-q", "-b", "wip", linked, "main")
+	linkedChange := filepath.Join(linked, "openspec", "changes", "big-thing")
+	if err := os.MkdirAll(linkedChange, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveSliceBinding(linkedChange, 1, SliceBinding{Branch: "feat/b1"}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := LoadSliceBindings(changeDir)
+	if err != nil || got[1].Branch != "feat/b1" {
+		t.Fatalf("the main checkout must see a binding written from a linked worktree: %+v %v", got, err)
+	}
+	if _, statErr := os.Stat(filepath.Join(linkedChange, ".specsync", "slices.json")); statErr == nil {
+		t.Fatal("bindings must not be stored inside one worktree")
 	}
 }

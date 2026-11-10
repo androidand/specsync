@@ -560,7 +560,7 @@ specsync -change my-change -slices -dry-run    # child issue per slice, blocked-
 `validate` reports slice numbers that are not contiguous, `after` targets that are missing or form a cycle, tasks
 under no slice, and slices without a contract. `status` shows which slice a branch was started for and uses that
 slice's budget as the size threshold. `-slices` is off by default; a provider that cannot nest issues gets the
-slices listed in the issue body instead. specsync records the order and reports state; it creates no pull request.
+slices listed in the issue body instead. `sync -slices` heals on every run (it adds a missing child, nesting or edge and skips what exists), and exits non-zero listing any step that failed. specsync records the order and reports state; it creates no pull request.
 
 ### `scan` — what already exists here?
 

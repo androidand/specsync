@@ -113,3 +113,86 @@ func TestStartSlice_DryRunAndUnknownSliceChangeNothing(t *testing.T) {
 		t.Fatal("an undeclared slice cannot be started")
 	}
 }
+
+func TestStartSlice_FromALinkedWorktreeUsesTheMainRepoName(t *testing.T) {
+	repo, changeDir := sliceRepo(t)
+	linked := filepath.Join(filepath.Dir(repo), "app-wip")
+	runGitS(t, repo, "worktree", "add", "-q", "-b", "wip", linked, "main")
+	linkedChange := filepath.Join(linked, "openspec", "changes", "big-thing")
+	if err := os.MkdirAll(filepath.Dir(linkedChange), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mustWrite(t, filepath.Join(linkedChange, "tasks.md"), mustRead(t, filepath.Join(changeDir, "tasks.md")))
+	r, err := StartSlice(context.Background(), StartSliceOptions{RepoDir: linked, ChangeDir: linkedChange, Slug: "big-thing", N: 1, Base: "main"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved, _ := filepath.EvalSymlinks(filepath.Dir(repo))
+	if filepath.Base(r.Worktree) != "app-big-thing-slice-1" || filepath.Dir(r.Worktree) != filepath.Join(resolved, "worktrees") {
+		t.Fatalf("worktree = %s; want it named from the main repo, next to it", r.Worktree)
+	}
+	got, err := LoadSliceBindings(changeDir)
+	if err != nil || got[1].Branch != r.Branch {
+		t.Fatalf("the main checkout must see the binding: %+v %v", got, err)
+	}
+}
+
+func mustRead(t *testing.T, p string) string {
+	t.Helper()
+	b, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+func TestStartSlice_AfterAMergedAndDeletedSliceBasesOnTheBase(t *testing.T) {
+	repo, changeDir := sliceRepo(t)
+	wt := filepath.Join(filepath.Dir(repo), "worktrees")
+	o := func(n int) StartSliceOptions {
+		return StartSliceOptions{RepoDir: repo, ChangeDir: changeDir, Slug: "big-thing", N: n, WorktreeDir: wt, Base: "main"}
+	}
+	r1, err := StartSlice(context.Background(), o(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	runGitS(t, repo, "worktree", "remove", "--force", r1.Worktree)
+	runGitS(t, repo, "branch", "-D", r1.Branch)
+	r2, err := StartSlice(context.Background(), o(2))
+	if err != nil {
+		t.Fatalf("a deleted (merged) previous slice must not block the next: %v", err)
+	}
+	if r2.Base != "main" || r2.Stacked {
+		t.Fatalf("base = %q stacked = %v, want main and not stacked", r2.Base, r2.Stacked)
+	}
+}
+
+func TestStartSlice_StacksOnARemoteOnlyBranch(t *testing.T) {
+	repo, changeDir := sliceRepo(t)
+	origin := filepath.Join(filepath.Dir(repo), "origin.git")
+	runGitS(t, filepath.Dir(repo), "init", "-q", "--bare", origin)
+	runGitS(t, repo, "remote", "add", "origin", origin)
+	wt := filepath.Join(filepath.Dir(repo), "worktrees")
+	o := func(n int) StartSliceOptions {
+		return StartSliceOptions{RepoDir: repo, ChangeDir: changeDir, Slug: "big-thing", N: n, WorktreeDir: wt, Base: "main"}
+	}
+	r1, err := StartSlice(context.Background(), o(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	runGitS(t, r1.Worktree, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "--allow-empty", "-m", "slice one work")
+	runGitS(t, repo, "push", "-q", "origin", r1.Branch)
+	runGitS(t, repo, "fetch", "-q", "origin")
+	runGitS(t, repo, "worktree", "remove", "--force", r1.Worktree)
+	runGitS(t, repo, "branch", "-D", r1.Branch)
+	r2, err := StartSlice(context.Background(), o(2))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r2.Base != "origin/"+r1.Branch || !r2.Stacked {
+		t.Fatalf("base = %q stacked = %v, want origin/%s", r2.Base, r2.Stacked, r1.Branch)
+	}
+	if subj := runGitS(t, r2.Worktree, "log", "-1", "--format=%s"); subj != "slice one work" {
+		t.Fatalf("head = %q", subj)
+	}
+}

@@ -78,7 +78,7 @@ func (cm *slicesCmd) Run(ctx context.Context, args []string) error {
 		if *cm.state != "off" {
 			set = sliceRequests(ctx, *cm.repo)
 		}
-		res.Slices = specsync.SliceStatuses(plan, bindings, func(b string) bool { return sliceBranchExists(cwd, b) }, set)
+		res.Slices = specsync.SliceStatuses(plan, bindings, func(b string) bool { return specsync.BranchRef(ctx, cwd, b) != "" }, set)
 	}
 
 	if *cm.asJSON {
@@ -97,7 +97,7 @@ func (cm *slicesCmd) Run(ctx context.Context, args []string) error {
 	for _, s := range res.Slices {
 		after := ""
 		if len(s.After) > 0 {
-			after = fmt.Sprintf("  after %s", joinInts(s.After))
+			after = fmt.Sprintf("  after %s", specsync.JoinSliceNumbers(s.After))
 		}
 		budget := ""
 		if s.Budget != "" {
@@ -139,14 +139,6 @@ func prDetail(pr *specsync.ChangeRequest) string {
 		return ""
 	}
 	return " (" + strings.Join(parts, ", ") + ")"
-}
-
-func joinInts(ns []int) string {
-	s := make([]string, len(ns))
-	for i, n := range ns {
-		s[i] = fmt.Sprint(n)
-	}
-	return strings.Join(s, ", ")
 }
 
 // findSliceChange resolves the change a slice command works on: the named one,

@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -273,6 +274,7 @@ func (cm *syncCmd) run(args []string) {
 		fmt.Println("(reconcile applies on a real sync — dry-run makes no issue reads)")
 	}
 	fmt.Println()
+	sliceFailed := false
 	for _, it := range res.Items {
 		if len(it.Providers) > 0 {
 			for _, pr := range it.Providers {
@@ -320,6 +322,10 @@ func (cm *syncCmd) run(args []string) {
 		for _, line := range it.Slices {
 			fmt.Printf("           ↳ %s\n", line)
 		}
+		for _, line := range it.SliceFailures {
+			fmt.Printf("           ✗ %s\n", line)
+			sliceFailed = true
+		}
 		if it.BoardConfigured {
 			printBoardPlan(it.Board, *dryRun)
 		}
@@ -328,4 +334,8 @@ func (cm *syncCmd) run(args []string) {
 		}
 	}
 	fmt.Printf("specsync: %d created, %d updated\n", res.Created, res.Updated)
+	if sliceFailed {
+		fmt.Fprintln(os.Stderr, "specsync: some slice steps failed; run again to retry them")
+		os.Exit(1)
+	}
 }

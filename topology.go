@@ -399,12 +399,9 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 		if cr != nil && cr.State == "open" && cr.Base != "" {
 			base = "origin/" + cr.Base
 		}
-		sliceLine := SliceBudgetLine(row.dir)
+		sliceLine := BudgetLineForBranch(row.dir, row.Branch)
 		if s := sliceForBranch(row.dir, row.Branch); s != nil {
 			row.Slice = &SliceRef{N: s.N, Title: s.Title}
-			if s.Budget != "" {
-				sliceLine = s.Budget
-			}
 		}
 		var ls *LocalState
 		if row.Worktree != "" {

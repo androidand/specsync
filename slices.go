@@ -28,6 +28,8 @@ type Slice struct {
 type SlicePlan struct {
 	Slices      []Slice
 	OrphanTasks int
+	// Problems are parse-time findings, such as a malformed `after:` line.
+	Problems []string
 }
 
 var (
@@ -47,6 +49,7 @@ func ParseSlices(md string) SlicePlan {
 	var bodies []*strings.Builder
 	var orphan strings.Builder
 	cur, curLevel := -1, 0
+	afterSeen := map[int]bool{}
 	for _, line := range strings.Split(md, "\n") {
 		if m := sliceHead.FindStringSubmatch(line); m != nil {
 			n, _ := strconv.Atoi(m[2])
@@ -64,8 +67,17 @@ func ParseSlices(md string) SlicePlan {
 		}
 		s := &plan.Slices[cur]
 		switch {
-		case sliceAfterRe.MatchString(line) && s.After == nil:
-			s.After = parseSliceNumbers(sliceAfterRe.FindStringSubmatch(line)[1])
+		case sliceAfterRe.MatchString(line):
+			if afterSeen[cur] {
+				plan.Problems = append(plan.Problems, fmt.Sprintf("slice %d: after is declared more than once", s.N))
+				break
+			}
+			afterSeen[cur] = true
+			nums, ok := parseSliceNumbers(sliceAfterRe.FindStringSubmatch(line)[1])
+			if !ok {
+				plan.Problems = append(plan.Problems, fmt.Sprintf("slice %d: malformed after line %q: use slice numbers such as `after: 1, 2`", s.N, strings.TrimSpace(line)))
+			}
+			s.After = nums
 		case sliceBudget.MatchString(line) && s.Budget == "":
 			s.Budget = sliceBudget.FindStringSubmatch(line)[1]
 		case sliceContrct.MatchString(line) && s.Contract == "":
@@ -80,15 +92,18 @@ func ParseSlices(md string) SlicePlan {
 	return plan
 }
 
-func parseSliceNumbers(s string) []int {
+func parseSliceNumbers(s string) ([]int, bool) {
 	var out []int
+	ok := true
 	for _, f := range strings.FieldsFunc(s, func(r rune) bool { return r == ',' || r == ' ' }) {
 		f = strings.TrimPrefix(strings.ToLower(f), "slice")
 		if n, err := strconv.Atoi(strings.TrimSpace(f)); err == nil {
 			out = append(out, n)
+		} else {
+			ok = false
 		}
 	}
-	return out
+	return out, ok && len(out) > 0
 }
 
 // Get returns the slice numbered n.
@@ -109,7 +124,7 @@ func (p SlicePlan) Validate() []string {
 	if len(p.Slices) == 0 {
 		return nil
 	}
-	var issues []string
+	issues := append([]string(nil), p.Problems...)
 	seen := map[int]bool{}
 	var nums []int
 	for _, s := range p.Slices {
@@ -202,15 +217,45 @@ func (p SlicePlan) cycle() []int {
 }
 
 // SliceBinding records the branch and worktree `slice start` created for a
-// slice. It is local state under the change's .specsync/ folder, never committed.
+// slice. It is local state in the repository's git dir, never committed.
 type SliceBinding struct {
 	Branch   string `json:"branch"`
 	Worktree string `json:"worktree,omitempty"`
 	Base     string `json:"base,omitempty"`
 }
 
+// sliceBindingsPath is where a change's bindings live: under the repository's
+// common git dir, so every worktree of the change reads the same file and no
+// worktree holds a copy. Outside a git repository it falls back to the change
+// folder's own .specsync/.
 func sliceBindingsPath(changeDir string) string {
+	if common := gitCommonDir(changeDir); common != "" {
+		return filepath.Join(common, "specsync", "slices", filepath.Base(changeDir)+".json")
+	}
 	return filepath.Join(changeDir, ".specsync", "slices.json")
+}
+
+func gitCommonDir(dir string) string {
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+		return ""
+	}
+	out, err := gitIn(context.Background(), dir, "rev-parse", "--git-common-dir")
+	if err != nil || out == "" {
+		return ""
+	}
+	if !filepath.IsAbs(out) {
+		out = filepath.Join(dir, out)
+	}
+	return filepath.Clean(out)
+}
+
+// mainCheckout is the root of the repository's main checkout, whichever of its
+// worktrees dir is.
+func mainCheckout(dir string) string {
+	if common := gitCommonDir(dir); common != "" && filepath.Base(common) == ".git" {
+		return filepath.Dir(common)
+	}
+	return dir
 }
 
 // LoadSliceBindings reads the recorded bindings, keyed by slice number.
@@ -275,16 +320,19 @@ func SliceStatuses(plan SlicePlan, bindings map[int]SliceBinding, branchExists f
 	out := make([]SliceStatus, 0, len(slices))
 	for _, s := range slices {
 		st := SliceStatus{Slice: s, State: "not started"}
-		if b, ok := bindings[s.N]; ok && b.Branch != "" && branchExists(b.Branch) {
+		if b, ok := bindings[s.N]; ok && b.Branch != "" {
 			b := b
-			st.Binding, st.Branch, st.State = &b, b.Branch, "branch exists"
+			exists := branchExists(b.Branch)
+			var cr *ChangeRequest
 			if requests != nil {
-				if cr := requests.ForBranch(b.Branch); cr != nil {
-					st.PR = cr
-					if cr.State == "open" || cr.State == "merged" || cr.State == "closed" {
-						st.State = cr.State
-					}
-				}
+				cr = requests.ForBranch(b.Branch)
+			}
+			switch {
+			case cr != nil && (cr.State == "open" || cr.State == "merged" || cr.State == "closed"):
+				st.PR, st.State = cr, cr.State
+				st.Binding, st.Branch = &b, b.Branch
+			case exists:
+				st.Binding, st.Branch, st.State = &b, b.Branch, "branch exists"
 			}
 		}
 		out = append(out, st)
@@ -313,19 +361,25 @@ type StartSliceResult struct {
 	Created  bool
 }
 
-func localBranchExists(ctx context.Context, repoDir, branch string) bool {
-	for _, ref := range []string{"refs/heads/" + branch, "refs/remotes/origin/" + branch} {
-		if _, err := gitIn(ctx, repoDir, "rev-parse", "--verify", "--quiet", ref); err == nil {
-			return true
-		}
+// BranchRef returns the ref a branch can be based on: the local branch, else
+// origin/<branch>, else "" when neither exists.
+func BranchRef(ctx context.Context, repoDir, branch string) string {
+	if _, err := gitIn(ctx, repoDir, "rev-parse", "--verify", "--quiet", "refs/heads/"+branch); err == nil {
+		return branch
 	}
-	return false
+	if _, err := gitIn(ctx, repoDir, "rev-parse", "--verify", "--quiet", "refs/remotes/origin/"+branch); err == nil {
+		return "origin/" + branch
+	}
+	return ""
 }
 
 // StartSlice creates slice N's branch and worktree and records the binding. A
-// slice with `after` is based on the branch of the last slice it names, so
-// slices form a stack; otherwise on Base (default origin/HEAD). It never creates
-// a change request, and starting an already started slice changes nothing.
+// slice with `after` is based on the branch of the last slice it names (the
+// local branch, else its remote), so slices form a stack; when that branch no
+// longer exists, because the slice merged and its branch was deleted, or when
+// the slice has no `after`, it is based on Base (default origin/HEAD). It never
+// creates a change request, and starting an already started slice changes
+// nothing.
 func StartSlice(ctx context.Context, opts StartSliceOptions) (*StartSliceResult, error) {
 	tasks, err := os.ReadFile(filepath.Join(opts.ChangeDir, "tasks.md"))
 	if err != nil {
@@ -341,7 +395,7 @@ func StartSlice(ctx context.Context, opts StartSliceOptions) (*StartSliceResult,
 		return nil, err
 	}
 
-	repoName := filepath.Base(opts.RepoDir)
+	root := mainCheckout(opts.RepoDir)
 	name := opts.Slug
 	if opts.IssueID != "" {
 		name = opts.IssueID + "-" + opts.Slug
@@ -349,11 +403,11 @@ func StartSlice(ctx context.Context, opts StartSliceOptions) (*StartSliceResult,
 	res := &StartSliceResult{Branch: fmt.Sprintf("feat/%s-slice-%d", name, s.N)}
 	wtDir := opts.WorktreeDir
 	if wtDir == "" {
-		wtDir = filepath.Join(filepath.Dir(opts.RepoDir), "worktrees")
+		wtDir = filepath.Join(filepath.Dir(root), "worktrees")
 	}
-	res.Worktree = filepath.Join(wtDir, fmt.Sprintf("%s-%s-slice-%d", repoName, name, s.N))
+	res.Worktree = filepath.Join(wtDir, fmt.Sprintf("%s-%s-slice-%d", filepath.Base(root), name, s.N))
 
-	if b, ok := bindings[s.N]; ok && b.Branch != "" && localBranchExists(ctx, opts.RepoDir, b.Branch) {
+	if b, ok := bindings[s.N]; ok && b.Branch != "" && BranchRef(ctx, opts.RepoDir, b.Branch) != "" {
 		if _, err := os.Stat(b.Worktree); err == nil {
 			return &StartSliceResult{Branch: b.Branch, Worktree: b.Worktree, Base: b.Base, Stacked: len(s.After) > 0}, nil
 		}
@@ -362,11 +416,14 @@ func StartSlice(ctx context.Context, opts StartSliceOptions) (*StartSliceResult,
 	if len(s.After) > 0 {
 		prev := s.After[len(s.After)-1]
 		pb, ok := bindings[prev]
-		if !ok || pb.Branch == "" || !localBranchExists(ctx, opts.RepoDir, pb.Branch) {
-			return nil, fmt.Errorf("slice %d comes after slice %d, which has no branch yet: run `specsync slice start %d` first", s.N, prev, prev)
+		if !ok || pb.Branch == "" {
+			return nil, fmt.Errorf("slice %d comes after slice %d, which has not been started: run `specsync slice start %d` first", s.N, prev, prev)
 		}
-		res.Base, res.Stacked = pb.Branch, true
-	} else {
+		if ref := BranchRef(ctx, opts.RepoDir, pb.Branch); ref != "" {
+			res.Base, res.Stacked = ref, true
+		}
+	}
+	if res.Base == "" {
 		res.Base = opts.Base
 		if res.Base == "" {
 			if res.Base, err = DefaultBase(ctx, opts.RepoDir); err != nil {
@@ -382,7 +439,7 @@ func StartSlice(ctx context.Context, opts StartSliceOptions) (*StartSliceResult,
 		return nil, fmt.Errorf("create worktree folder: %w", err)
 	}
 	args := []string{"worktree", "add", "-b", res.Branch, res.Worktree, res.Base}
-	if localBranchExists(ctx, opts.RepoDir, res.Branch) {
+	if _, err := gitIn(ctx, opts.RepoDir, "rev-parse", "--verify", "--quiet", "refs/heads/"+res.Branch); err == nil {
 		args = []string{"worktree", "add", res.Worktree, res.Branch}
 	}
 	if _, err := gitIn(ctx, opts.RepoDir, args...); err != nil {
