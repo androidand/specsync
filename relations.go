@@ -128,3 +128,97 @@ func (g *WorkGraph) Sources(kind WorkEdgeKind, to string) []string {
 	}
 	return out
 }
+
+// RelatedItem is one work item related to the current work. Row is nil when the
+// item is not in the discovered workspace: only its key is known.
+type RelatedItem struct {
+	Key string          `json:"key"`
+	Row *ChangeTopology `json:"row,omitempty"`
+}
+
+// RelatedEpic is the epic above the current work, with every known child.
+// Done and Total count the known children, not the epic's whole list.
+type RelatedEpic struct {
+	Key   string        `json:"key"`
+	Above []string      `json:"above,omitempty"`
+	Items []RelatedItem `json:"items"`
+	Done  int           `json:"done"`
+	Total int           `json:"total"`
+}
+
+// RelatedWork is the current work and everything asserted to relate to it.
+type RelatedWork struct {
+	Current    string        `json:"current"`
+	Epic       *RelatedEpic  `json:"epic,omitempty"`
+	BlockedBy  []RelatedItem `json:"blockedBy,omitempty"`
+	Blocks     []RelatedItem `json:"blocks,omitempty"`
+	Linked     []RelatedItem `json:"linked,omitempty"`
+	Incomplete []string      `json:"incomplete,omitempty"`
+}
+
+// RelatedTo derives what relates to current from every known row. It returns
+// nil when nothing is asserted, so the caller shows the work alone. incomplete
+// carries the reasons a source was unavailable.
+func RelatedTo(current ChangeTopology, all []ChangeTopology, incomplete []string) *RelatedWork {
+	g := BuildWorkGraph(all)
+	key := RowKey(current)
+	rows := map[string]*ChangeTopology{}
+	for i := range all {
+		rows[RowKey(all[i])] = &all[i]
+	}
+	item := func(k string) RelatedItem { return RelatedItem{Key: k, Row: rows[k]} }
+	items := func(keys []string) []RelatedItem {
+		sort.Strings(keys)
+		var out []RelatedItem
+		for i, k := range keys {
+			if i > 0 && keys[i-1] == k {
+				continue
+			}
+			out = append(out, item(k))
+		}
+		return out
+	}
+
+	rel := &RelatedWork{Current: key, Incomplete: incomplete}
+	rel.BlockedBy = items(g.Targets(WorkEdgeBlockedBy, key))
+	rel.Blocks = items(g.Sources(WorkEdgeBlockedBy, key))
+	rel.Linked = items(append(g.Targets(WorkEdgeLinked, key), g.Sources(WorkEdgeLinked, key)...))
+
+	if epics := g.Targets(WorkEdgeEpic, key); len(epics) > 0 {
+		epic := &RelatedEpic{Key: epics[0]}
+		seen := map[string]bool{key: true, epic.Key: true}
+		for top := epic.Key; ; {
+			up := g.Targets(WorkEdgeEpic, top)
+			if len(up) == 0 || seen[up[0]] {
+				break
+			}
+			seen[up[0]] = true
+			epic.Above = append(epic.Above, up[0])
+			top = up[0]
+		}
+		epic.Items = items(g.Sources(WorkEdgeEpic, epic.Key))
+		for _, it := range epic.Items {
+			epic.Total++
+			if it.Row != nil && rowDone(*it.Row) {
+				epic.Done++
+			}
+		}
+		rel.Epic = epic
+	}
+	if rel.Epic == nil && len(rel.BlockedBy) == 0 && len(rel.Blocks) == 0 && len(rel.Linked) == 0 {
+		return nil
+	}
+	return rel
+}
+
+// rowDone reports whether a row's work is finished: its issue is closed, its
+// request merged, or every task checked.
+func rowDone(r ChangeTopology) bool {
+	if r.Issue != nil && r.Issue.State == "closed" {
+		return true
+	}
+	if r.PR != nil && r.PR.State == "merged" {
+		return true
+	}
+	return r.Tasks != nil && r.Tasks.Total > 0 && r.Tasks.Done == r.Tasks.Total
+}

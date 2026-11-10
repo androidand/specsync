@@ -14,6 +14,7 @@ type ChangeRequest struct {
 	State          string              `json:"state"` // open, closed, merged
 	Draft          bool                `json:"draft"`
 	Branch         string              `json:"branch"` // head branch
+	Author         string              `json:"author,omitempty"`
 	Base           string              `json:"base,omitempty"`
 	ReviewDecision string              `json:"reviewDecision,omitempty"` // approved, changes_requested, review_required
 	Mergeable      string              `json:"mergeable,omitempty"`      // mergeable, conflicting, unknown
