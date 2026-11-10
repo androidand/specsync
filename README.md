@@ -727,8 +727,7 @@ written to `<git-dir>/specsync/gates-passed`. `specsync doctor config` validates
 line numbers. Commands defined in the file run only after `specsync trust` records its hash for
 you and this repository: `specsync trust` prints them and records nothing, `specsync trust -yes`
 records trust, and a changed file needs trust again. Until then `next` and `flow` point at
-`specsync trust` instead of the commands. `cleanup.remote_branch` is reserved for
-`worktree-cleanup`: accepted, noted by `doctor config`, not used yet.
+`specsync trust` instead of the commands.
 
 ### Start, check and open work the same way every time
 
