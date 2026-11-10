@@ -127,7 +127,7 @@ func (p *GitHubProvider) unresolvedThreads(ctx context.Context) (map[int]int, er
 	if !ok {
 		return nil, fmt.Errorf("repo %q is not owner/name", repo)
 	}
-	out, err := p.run(ctx, "api", "graphql", "-f", "query="+unresolvedThreadsQuery, "-F", "owner="+owner, "-F", "name="+name)
+	out, err := p.run(ctx, "api", "graphql", "-f", "query="+unresolvedThreadsQuery, "-f", "owner="+owner, "-f", "name="+name)
 	if err != nil {
 		return nil, err
 	}
@@ -214,6 +214,8 @@ func (c ghCheck) outcome() (name, outcome string) {
 	switch c.Conclusion {
 	case "SUCCESS", "NEUTRAL", "SKIPPED":
 		return c.Name, "pass"
+	case "STALE", "ACTION_REQUIRED":
+		return c.Name, "pending"
 	}
 	return c.Name, "fail"
 }

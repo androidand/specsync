@@ -168,7 +168,8 @@ func TestChangeRequestsByBranch_PrefersOpenThenNewest(t *testing.T) {
 func TestRowAttention_RequestFlags(t *testing.T) {
 	clean := &LocalState{Upstream: "origin/x"}
 	open := func(f func(*ChangeRequest)) *ChangeRequest {
-		cr := &ChangeRequest{State: "open", ReviewDecision: "approved", Mergeable: "mergeable"}
+		zero := 0
+		cr := &ChangeRequest{State: "open", ReviewDecision: "approved", Mergeable: "mergeable", UnresolvedThreads: &zero}
 		if f != nil {
 			f(cr)
 		}
@@ -181,6 +182,7 @@ func TestRowAttention_RequestFlags(t *testing.T) {
 		want []string
 	}{
 		{"ready to merge", clean, open(nil), []string{"ready-to-merge"}},
+		{"unknown thread count is not ready", clean, open(func(c *ChangeRequest) { c.UnresolvedThreads = nil }), nil},
 		{"ci failing blocks ready", clean, open(func(c *ChangeRequest) { c.Checks.Fail = 1 }), []string{"ci-failing"}},
 		{"pending checks block ready", clean, open(func(c *ChangeRequest) { c.Checks.Pending = 1 }), nil},
 		{"changes requested", clean, open(func(c *ChangeRequest) { c.ReviewDecision = "changes_requested" }), []string{"changes-requested"}},

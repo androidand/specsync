@@ -121,7 +121,7 @@ var attentionRules = []struct {
 	{"ready-to-merge", func(_ *LocalState, cr *ChangeRequest) bool {
 		return isOpen(cr) && !cr.Draft && cr.ReviewDecision == "approved" && cr.Checks.Fail == 0 &&
 			cr.Checks.Pending == 0 && cr.Mergeable == "mergeable" &&
-			(cr.UnresolvedThreads == nil || *cr.UnresolvedThreads == 0)
+			cr.UnresolvedThreads != nil && *cr.UnresolvedThreads == 0
 	}},
 }
 

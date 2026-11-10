@@ -1,10 +1,11 @@
 package specsync
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 )
 
@@ -53,14 +54,8 @@ func (c *FileRequestCache) clock() time.Time {
 
 // path maps a repo to a file name that cannot leave Dir.
 func (c *FileRequestCache) path(repo string) string {
-	safe := strings.Map(func(r rune) rune {
-		switch {
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '.', r == '-', r == '_':
-			return r
-		}
-		return '_'
-	}, repo)
-	return filepath.Join(c.Dir, "requests-"+safe+".json")
+	sum := sha256.Sum256([]byte(repo))
+	return filepath.Join(c.Dir, "requests-"+hex.EncodeToString(sum[:8])+".json")
 }
 
 // Get returns the cached listing when it is younger than the TTL.

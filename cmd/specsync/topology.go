@@ -31,7 +31,7 @@ func (*statusCmd) Spec() Spec {
 		Group:    GroupOverview,
 		Summary:  "Show where your current work stands, or every change with -everything.",
 		Workflow: AgentCommandWorkflow{Position: "planning", RelatedAfter: []string{"changes", "relate"}},
-		Safety:   []string{"Read-only: never writes to disk or the tracker"},
+		Safety:   []string{"Never modifies your worktree, index, refs or the tracker; it may write a short-lived request cache outside the repo, and git merge-tree may add unreferenced objects"},
 		Examples: []string{
 			"specsync status",
 			"specsync status -everything",

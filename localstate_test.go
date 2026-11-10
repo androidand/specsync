@@ -260,3 +260,26 @@ func TestCollectLocalState_ErrorCarriesGitsOwnMessage(t *testing.T) {
 		t.Fatalf("expected git's reason in the error, got %v", err)
 	}
 }
+
+func TestCollectLocalState_GoneUpstreamIsNotNoUpstream(t *testing.T) {
+	dir := t.TempDir()
+	for _, args := range [][]string{
+		{"init", "-q", "-b", "feat/x"},
+		{"-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "--allow-empty", "-m", "init"},
+		{"config", "branch.feat/x.remote", "origin"},
+		{"config", "branch.feat/x.merge", "refs/heads/feat/x"},
+	} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	ls, err := CollectLocalState(context.Background(), dir, LocalStateOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ls.Upstream != "origin/feat/x" || !ls.UpstreamGone {
+		t.Fatalf("a configured but missing upstream must be reported as gone, got %+v", ls)
+	}
+}

@@ -1451,7 +1451,7 @@
         }
       ],
       "safety_rules": [
-        "Read-only: never writes to disk or the tracker"
+        "Never modifies your worktree, index, refs or the tracker; it may write a short-lived request cache outside the repo, and git merge-tree may add unreferenced objects"
       ],
       "examples": [
         "specsync status",

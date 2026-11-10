@@ -495,7 +495,7 @@ func requestFixture(t *testing.T, calls *[]string) TopologyOptions {
 		*calls = append(*calls, repo)
 		return &ChangeRequestSet{Requests: []ChangeRequest{{
 			Number: 7, State: "open", Branch: "feat/4231-add-field-forms",
-			ReviewDecision: "approved", Mergeable: "mergeable",
+			ReviewDecision: "approved", Mergeable: "mergeable", UnresolvedThreads: new(int),
 			Checks: ChangeRequestChecks{Pass: 4},
 		}}}, nil
 	}

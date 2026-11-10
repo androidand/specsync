@@ -21,6 +21,7 @@ type LocalState struct {
 	Modified       int         `json:"modified"`
 	Untracked      int         `json:"untracked"`
 	Upstream       string      `json:"upstream,omitempty"`
+	UpstreamGone   bool        `json:"upstreamGone,omitempty"`
 	Ahead          int         `json:"ahead"`
 	UpstreamBehind int         `json:"upstreamBehind"`
 	Base           string      `json:"base,omitempty"`
@@ -83,6 +84,9 @@ func CollectLocalState(ctx context.Context, dir string, opts LocalStateOptions) 
 		if out, err := gitIn(ctx, dir, "rev-list", "--left-right", "--count", "HEAD...@{u}"); err == nil {
 			ls.Ahead, ls.UpstreamBehind = twoInts(out)
 		}
+	} else if remote, merge := gitConfigOf(ctx, dir, "remote"), gitConfigOf(ctx, dir, "merge"); remote != "" && merge != "" {
+		ls.Upstream = remote + "/" + strings.TrimPrefix(merge, "refs/heads/")
+		ls.UpstreamGone = true
 	}
 
 	// The base is the override when it resolves (for example a pull request's
@@ -286,3 +290,16 @@ func resolved(p string) string {
 
 // LocalAttention returns the attention flags that git facts alone decide.
 func LocalAttention(ls LocalState) []string { return RowAttention(&ls, nil) }
+
+// gitConfigOf reads branch.<current>.<key>, or "" when unset.
+func gitConfigOf(ctx context.Context, dir, key string) string {
+	branch, err := gitIn(ctx, dir, "rev-parse", "--abbrev-ref", "HEAD")
+	if err != nil || strings.TrimSpace(branch) == "" || strings.TrimSpace(branch) == "HEAD" {
+		return ""
+	}
+	out, err := gitIn(ctx, dir, "config", "--get", "branch."+strings.TrimSpace(branch)+"."+key)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(out)
+}
