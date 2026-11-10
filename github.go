@@ -410,7 +410,7 @@ func (p *GitHubProvider) Push(ctx context.Context, item WorkItem, existing *Ref)
 	// (!ManageClosed). A plain content/task sync has no reason to touch a
 	// closed issue, so a closed state there is the strongest available
 	// signal that the ref is stale: this is what let a sync go on writing to
-	// FusionHub's closed duplicate #3692 and report success while updating
+	// api's closed duplicate #3692 and report success while updating
 	// something nobody reads. When ManageClosed is true, the three-way merge
 	// below already decides reopen-vs-defer deliberately and safely; gating
 	// that on -force too would just make -close-completed unusable.
@@ -484,7 +484,7 @@ func boolPtr(b bool) *bool { return &b }
 
 // AmbiguousMarkerError reports that marker search matched more than one
 // issue for a change's slug. This is the exact shape of the observed
-// FusionHub failure: a hand-added marker raced GitHub's search index, a sync
+// api failure: a hand-added marker raced GitHub's search index, a sync
 // found nothing and created a duplicate, and a *later* sync's marker search
 // then had two candidates to choose between — silently taking the first was
 // how it kept writing to the wrong one. Find refuses to pick; the caller

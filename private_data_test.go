@@ -28,6 +28,11 @@ var (
 	privateIP = regexp.MustCompile(
 		`\b(?:10\.[0-9]{1,3}|192\.168|172\.(?:1[6-9]|2[0-9]|3[01]))\.[0-9]{1,3}\.[0-9]{1,3}\b`)
 
+	// Names of private organisations and repositories. Written as a
+	// concatenation so this file does not match its own pattern. Use
+	// placeholders such as acme/app in examples, specs and fixtures.
+	internalName = regexp.MustCompile(`(?i)ex` + `open|fusion` + `hub`)
+
 	// Credential prefixes. Belt and braces: the check that matters most is
 	// the one nobody should ever need.
 	credential = regexp.MustCompile(
@@ -75,6 +80,7 @@ func TestNoPrivateDataInPublicRepo(t *testing.T) {
 				{"home path", homePath},
 				{"private IP", privateIP},
 				{"credential", credential},
+				{"internal name", internalName},
 			} {
 				if re.re.FindString(line) != "" {
 					offenders = append(offenders, fmt.Sprintf("%s:%d: %s: %s",

@@ -211,7 +211,7 @@ func reorderFlagsFirst(args []string) []string {
 // elsewhere (e.g. link, scan, set-stage, set-priority, note, epic).
 //
 // This is the fix for the 2026-09-24 incident: `specsync -repo
-// ExopenGitHub/portal <issue-url> -dry-run` silently discarded the URL
+// acme/app <issue-url> -dry-run` silently discarded the URL
 // (leaving -change unset, meaning "sync everything") and never even parsed
 // -dry-run (shadowed by the URL), turning a mistyped single-issue command
 // into a full live sync with zero warning.
@@ -468,7 +468,7 @@ func runSync(args []string) {
 
 	// Pre-flight summary before any real (non-dry-run) write: a human
 	// skimming this line should be able to catch a mismatched target the
-	// way "target: ExopenGitHub/portal — spec source: ~/dev/specsync/openspec
+	// way "target: acme/app — spec source: ~/dev/specsync/openspec
 	// (81 changes)" would have caught the 2026-09-24 incident. Best-effort
 	// and openspec-source only (no board/API calls beyond what's already
 	// resolved above); a beads spec source or a preflight read failure

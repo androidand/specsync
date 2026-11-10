@@ -19,7 +19,7 @@ func TestSlugify(t *testing.T) {
 			want:  "multi-entity-integrations-create-all-has-no",
 		},
 		{
-			name:  "regression case from the report (portal#4331, 103 chars)",
+			name:  "regression case from the report (app#4331, 103 chars)",
 			title: `Multi-entity integrations: "Create all" has no selection UI, and company-name display is inconsistent across pages`,
 			want:  "multi-entity-integrations-create-all-has-no",
 		},

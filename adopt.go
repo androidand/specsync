@@ -53,7 +53,7 @@ func resolveAdoptSlug() (string, error) {
 // Adopt binds an existing change to an existing issue: it writes
 // .specsync/refs.json *before* touching the issue body, so the link holds
 // immediately and does not depend on marker-search indexing catching up (the
-// race that produced FusionHub's duplicate #3692). The marker is then added
+// race that produced api's duplicate #3692). The marker is then added
 // to the issue body for durability and for other worktrees/clones.
 func Adopt(ctx context.Context, opts AdoptOptions) (AdoptResult, error) {
 	if opts.Provider == nil {
