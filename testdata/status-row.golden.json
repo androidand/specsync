@@ -1,0 +1,100 @@
+{
+  "changes": [
+    {
+      "slug": "add-thing",
+      "title": "Add thing",
+      "stage": "active",
+      "store": "/repo",
+      "repo": "acme/portal",
+      "issue": {
+        "provider": "github:acme/portal",
+        "id": "42",
+        "url": "https://github.com/acme/portal/issues/42",
+        "state": "open"
+      },
+      "branch": "feat/42-add-thing",
+      "worktree": "/work/add-thing",
+      "epic": "https://github.com/acme/planning/issues/1",
+      "linked": [
+        "other"
+      ],
+      "local": {
+        "head": "abc123",
+        "modified": 1,
+        "untracked": 2,
+        "upstream": "origin/feat/42-add-thing",
+        "ahead": 1,
+        "upstreamBehind": 0,
+        "base": "origin/main",
+        "behindBase": 3,
+        "size": {
+          "files": 4,
+          "additions": 50,
+          "deletions": 6,
+          "commits": 2
+        },
+        "lastCommit": "2026-01-02T03:04:05Z",
+        "volatilePath": true,
+        "baseMovedAt": "2026-01-02T03:00:00Z",
+        "baseTouchesYourFiles": [
+          "a.go"
+        ],
+        "conflicts": [
+          "a.go"
+        ],
+        "conflictCheckUnavailable": true,
+        "sharedBranch": true
+      },
+      "attention": [
+        "unpushed",
+        "conflicts-with-base"
+      ],
+      "sync": {
+        "action": "merge-base",
+        "summary": "merge origin/main",
+        "commands": [
+          "git merge origin/main"
+        ],
+        "forcePush": false
+      },
+      "tasks": {
+        "done": 2,
+        "total": 5
+      },
+      "pr": {
+        "number": 7,
+        "url": "https://github.com/acme/portal/pull/7",
+        "state": "open",
+        "draft": true,
+        "branch": "feat/42-add-thing",
+        "base": "main",
+        "reviewDecision": "approved",
+        "mergeable": "mergeable",
+        "checks": {
+          "pass": 3,
+          "fail": 1,
+          "pending": 0,
+          "failing": [
+            "unit"
+          ]
+        },
+        "size": {
+          "files": 4,
+          "additions": 50,
+          "deletions": 6,
+          "commits": 2
+        },
+        "closes": [
+          "42"
+        ],
+        "headSha": "abc123",
+        "fork": true,
+        "unresolvedThreads": 2
+      }
+    }
+  ],
+  "status": [
+    "a status line"
+  ],
+  "requestState": "ok"
+}

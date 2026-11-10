@@ -3,6 +3,7 @@ package specsync
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -19,6 +20,10 @@ import (
 type Topology struct {
 	Changes []ChangeTopology `json:"changes"`
 	Status  []string         `json:"status,omitempty"`
+	// RequestState says whether request lookups happened: "ok", "omitted"
+	// (a provider failed) or "off" (-state=off). Empty when none was needed.
+	// An absent pr block only means "no request" when this is "ok".
+	RequestState string `json:"requestState,omitempty"`
 }
 
 // ChangeTopology is one row of the join.
@@ -33,6 +38,71 @@ type ChangeTopology struct {
 	Worktree string         `json:"worktree,omitempty"`
 	Epic     string         `json:"epic,omitempty"`
 	Linked   []string       `json:"linked,omitempty"`
+	// BlockedBy and Blocks are issue keys (owner/repo#N) from the change's
+	// links.md; the relations graph also reads Blocks as the inverse.
+	BlockedBy []string `json:"blockedBy,omitempty"`
+	Blocks    []string `json:"blocks,omitempty"`
+	// LinkedRefs are related issues (owner/repo#N) that are not changes in this
+	// store and not the epic; the graph resolves them across clones.
+	LinkedRefs []string `json:"linkedRefs,omitempty"`
+	// Local and Attention come from git alone, for the row's worktree.
+	Local     *LocalState `json:"local,omitempty"`
+	Attention []string    `json:"attention,omitempty"`
+	// Sync is advice for bringing the branch up to date. It is never executed.
+	Sync *SyncAdvice `json:"sync,omitempty"`
+	// NoChange marks the row for a branch that belongs to no change (Slug is empty).
+	NoChange bool `json:"noChange,omitempty"`
+	// Tasks counts the change's checklist items.
+	Tasks *TaskCount `json:"tasks,omitempty"`
+	// Slice is the slice a `slice start` bound this row's branch to.
+	Slice *SliceRef `json:"slice,omitempty"`
+	// dir is the change folder, used to read its slice declarations.
+	dir string
+	// PR is the change request on the row's branch, from the work provider.
+	PR *ChangeRequest `json:"pr,omitempty"`
+	// LastNote is the last line of the change's discoveries.md.
+	LastNote string `json:"lastNote,omitempty"`
+	// Sessions are the provider's sessions whose cwd is inside Worktree, most
+	// recent first. Resume is how to pick the work up again.
+	Sessions []SessionEntry `json:"sessions,omitempty"`
+	Resume   string         `json:"resume,omitempty"`
+}
+
+// SliceRef names a slice of a change.
+type SliceRef struct {
+	N     int    `json:"n"`
+	Title string `json:"title"`
+}
+
+// sliceForBranch returns the slice whose recorded binding names branch. Only a
+// recorded binding counts; a branch name is never read for a slice number.
+func sliceForBranch(changeDir, branch string) *Slice {
+	if changeDir == "" || branch == "" {
+		return nil
+	}
+	bindings, err := LoadSliceBindings(changeDir)
+	if err != nil || len(bindings) == 0 {
+		return nil
+	}
+	md, err := os.ReadFile(filepath.Join(changeDir, "tasks.md"))
+	if err != nil {
+		return nil
+	}
+	plan := ParseSlices(string(md))
+	for n, b := range bindings {
+		if b.Branch == branch {
+			if s, ok := plan.Get(n); ok {
+				return &s
+			}
+		}
+	}
+	return nil
+}
+
+// TaskCount is how many checklist items are done of the total.
+type TaskCount struct {
+	Done  int `json:"done"`
+	Total int `json:"total"`
 }
 
 // TopologyIssue is the tracker reference for one change. State is set only
@@ -58,6 +128,45 @@ type TopologyOptions struct {
 	gitWorktreeList  func(ctx context.Context, repoDir string) (string, error)
 	gitRemoteOrigin  func(ctx context.Context, repoDir string) (string, error)
 	run              func(ctx context.Context, args ...string) (string, error) // gh
+	localState       func(ctx context.Context, worktree string, lo LocalStateOptions) (*LocalState, error)
+
+	// Dir, when set and Slug is empty, scopes the result to the worktree that
+	// contains it: the current work. A branch that belongs to no change gets a
+	// row with NoChange set. Outside a git worktree everything is returned.
+	Dir        string
+	gitCurrent func(ctx context.Context, dir string) (toplevel, branch string, err error)
+
+	// LocalOnly (-state=off) skips every gh call and the provider: local git
+	// facts only, instant and offline.
+	LocalOnly bool
+
+	// Cache, when set, serves a repo's request listing for a short time.
+	// RefreshRequests skips reading it (the fresh listing is still stored).
+	Cache           RequestCache
+	RefreshRequests bool
+
+	// changeRequests lists one repo's requests. nil set means the provider
+	// cannot list them, which is silent. The default asks the GitHub provider.
+	changeRequests func(ctx context.Context, repo string) (*ChangeRequestSet, error)
+
+	// Sync is the `sync:` config for suggestions; zero means the defaults.
+	Sync SyncConfig
+
+	// Budget is the -budget flag value and Exclude the -exclude globs for the
+	// advisory size flags; the slice budget line, SPECSYNC_BUDGET and the
+	// defaults fill in what they leave unset.
+	Budget  string
+	Exclude []string
+
+	// NoConflictCheck skips the merge prediction, which writes git objects.
+	NoConflictCheck bool
+
+	// NoCoordination skips the coordinated sibling stores: the caller walks
+	// the workspace itself and asks one store at a time.
+	NoCoordination bool
+	// IncludeUnlinked adds rows for worktrees and open requests that belong to
+	// no change, and tolerates a store that has no openspec/ directory.
+	IncludeUnlinked bool
 }
 
 // storeEntry is one coordinated store to scan: its repo root (for git
@@ -73,6 +182,9 @@ type storeEntry struct {
 // are recorded in Topology.Status instead. The CLI decides what a fully
 // empty result means (see cmd/specsync topology.go).
 func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error) {
+	if _, err := ResolveBudget(opts.Budget, "", os.Getenv(BudgetEnv)); err != nil {
+		return nil, fmt.Errorf("size budget: %w", err)
+	}
 	if opts.readCoordination == nil {
 		opts.readCoordination = ReadCoordination
 	}
@@ -91,6 +203,23 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 	if opts.run == nil {
 		opts.run = runGH
 	}
+	if opts.changeRequests == nil {
+		run := opts.run
+		opts.changeRequests = func(ctx context.Context, repo string) (*ChangeRequestSet, error) {
+			var src ChangeRequestSource = NewGitHubProviderFuncWithRepo(repo, run)
+			set, err := src.ChangeRequests(ctx)
+			if err != nil {
+				return nil, err
+			}
+			return &set, nil
+		}
+	}
+	if opts.localState == nil {
+		opts.localState = CollectLocalState
+	}
+	if opts.gitCurrent == nil {
+		opts.gitCurrent = gitCurrentReal
+	}
 
 	var status []string
 	addStatus := func(format string, args ...any) {
@@ -98,9 +227,17 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 	}
 
 	repoRoot := filepath.Dir(opts.OpenSpecDir)
+	if opts.Sync == (SyncConfig{}) {
+		ways, _ := LoadWays(repoRoot)
+		opts.Sync = ways.Sync
+	}
 	stores := []storeEntry{{path: repoRoot, openspecDir: opts.OpenSpecDir}}
 
-	coord, cerr := opts.readCoordination(ctx)
+	var coord *Coordination
+	var cerr error
+	if !opts.NoCoordination {
+		coord, cerr = opts.readCoordination(ctx)
+	}
 	if cerr != nil {
 		addStatus("openspec context unavailable: %v", cerr)
 	} else if coord != nil {
@@ -118,6 +255,11 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 	var all []loadedChange
 	urlToSlug := map[string]string{}
 	for _, st := range stores {
+		if opts.IncludeUnlinked {
+			if info, err := os.Stat(st.openspecDir); err != nil || !info.IsDir() {
+				continue
+			}
+		}
 		changes, err := opts.loadChanges(st.openspecDir)
 		if err != nil {
 			addStatus("could not load changes from %s: %v", st.openspecDir, err)
@@ -147,7 +289,159 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 	repos := map[string]string{}
 	repoFailed := map[string]bool{}
 	epicLabel := map[string]bool{}
-	ghDown := false
+	ghDown := opts.LocalOnly
+	requestSets := map[string]*ChangeRequestSet{}
+	requestState := ""
+	if opts.LocalOnly {
+		requestState = "off"
+	}
+	requestsFailed := map[string]bool{}
+
+	worktreesOf := func(storePath string) []worktreeEntry {
+		if entries, have := worktrees[storePath]; have {
+			return entries
+		}
+		if worktreeFailed[storePath] {
+			return nil
+		}
+		es, err := listWorktrees(ctx, opts.gitWorktreeList, storePath)
+		if err != nil {
+			worktreeFailed[storePath] = true
+			addStatus("git worktree list failed in %s: %v", storePath, err)
+			return nil
+		}
+		worktrees[storePath] = es
+		return es
+	}
+
+	repoOf := func(storePath string) string {
+		if repo, ok := repos[storePath]; ok {
+			return repo
+		}
+		if repoFailed[storePath] {
+			return ""
+		}
+		repo, err := opts.gitRemoteOrigin(ctx, storePath)
+		if err != nil || repo == "" {
+			repoFailed[storePath] = true
+			addStatus("no git remote in store %s", storePath)
+			return ""
+		}
+		repos[storePath] = repo
+		return repo
+	}
+
+	// resolveWorktree finds a change's worktree: by slug, then by the issue
+	// number in the branch name (feat/<issue>-<name>).
+	resolveWorktree := func(storePath, slug, issueID string) (branch, path string, ok bool) {
+		entries := worktreesOf(storePath)
+		if entries == nil {
+			return "", "", false
+		}
+		if b, p, m := matchWorktree(entries, slug); m {
+			return b, p, true
+		}
+		return matchWorktreeByIssue(entries, issueID)
+	}
+
+	// requestsFor returns a repo's request listing, once per run. nil means it
+	// is unavailable, which narrows rows and never fails the run.
+	requestsFor := func(repo string) *ChangeRequestSet {
+		if opts.LocalOnly || repo == "" || requestsFailed[repo] {
+			return nil
+		}
+		if set, seen := requestSets[repo]; seen {
+			return set
+		}
+		var got *ChangeRequestSet
+		var err error
+		if opts.Cache != nil && !opts.RefreshRequests {
+			if cached, ok := opts.Cache.Get(repo); ok {
+				got = &cached
+			}
+		}
+		if got == nil {
+			got, err = opts.changeRequests(ctx, repo)
+			if err == nil && got != nil && opts.Cache != nil {
+				opts.Cache.Put(repo, *got)
+			}
+		}
+		if err != nil {
+			requestsFailed[repo] = true
+			requestState = "omitted"
+			addStatus("request state omitted for %s: %s", repo, errReason(err))
+			return nil
+		}
+		if requestState == "" {
+			requestState = "ok"
+		}
+		if got != nil && got.Repo == "" {
+			got.Repo = repo
+		}
+		requestSets[repo] = got
+		if got != nil && got.Truncated {
+			addStatus("request listing for %s may be truncated; older requests can be missing", repo)
+		}
+		return got
+	}
+
+	// enrich adds everything that needs the row's branch and worktree: the
+	// request, local git state, attention flags and the sync suggestion.
+	warnedBudget := false
+	enrich := func(row *ChangeTopology) {
+		var cr *ChangeRequest
+		if row.Branch != "" {
+			if set := requestsFor(row.Repo); set != nil {
+				cr = set.ForBranch(row.Branch)
+				row.PR = cr
+			}
+		}
+
+		// An open request's base is the branch this work is measured against.
+		base := ""
+		if cr != nil && cr.State == "open" && cr.Base != "" {
+			base = "origin/" + cr.Base
+		}
+		sliceLine := BudgetLineForBranch(row.dir, row.Branch)
+		if s := sliceForBranch(row.dir, row.Branch); s != nil {
+			row.Slice = &SliceRef{N: s.N, Title: s.Title}
+		}
+		var ls *LocalState
+		if row.Worktree != "" {
+			budget, err := ResolveBudget(opts.Budget, sliceLine, os.Getenv(BudgetEnv))
+			if err != nil {
+				if !warnedBudget {
+					warnedBudget = true
+					addStatus("budget line of change %s ignored: %v", row.Slug, err)
+				}
+				budget, _ = ResolveBudget(opts.Budget, "", os.Getenv(BudgetEnv))
+			}
+			if got, err := opts.localState(ctx, row.Worktree, LocalStateOptions{Base: base, Budget: budget, Exclude: opts.Exclude, NoConflictCheck: opts.NoConflictCheck}); err != nil {
+				addStatus("local state unavailable for %s: %v", rowLabel(*row), err)
+			} else {
+				ls = got
+				row.Local = ls
+				ls.NoSlicePlan = row.dir != "" && !HasSlices(row.dir)
+			}
+		}
+
+		row.Attention = RowAttention(ls, cr)
+		if ls != nil {
+			row.Sync = SuggestSync(*ls, SyncInput{UnderReview: cr != nil && cr.State == "open" && !cr.Draft}, opts.Sync)
+		}
+	}
+
+	// Scope to the current worktree: decided up front so other changes are
+	// skipped before any per-change lookup.
+	scoped, curTop, curBranch := false, "", ""
+	if opts.Dir != "" && opts.Slug == "" {
+		top, branch, err := opts.gitCurrent(ctx, opts.Dir)
+		if err != nil {
+			addStatus("not inside a git worktree (%s): showing every change", errReason(err))
+		} else {
+			scoped, curTop, curBranch = true, top, branch
+		}
+	}
 
 	var rows []ChangeTopology
 	for _, l := range all {
@@ -155,26 +449,25 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 		if opts.Slug != "" && c.Slug != opts.Slug {
 			continue
 		}
+		if scoped {
+			if _, path, ok := resolveWorktree(l.store.path, c.Slug, refIssueID(l.refs)); !ok || resolved(path) != resolved(curTop) {
+				continue
+			}
+		}
 
 		row := ChangeTopology{
 			Slug:  c.Slug,
 			Title: c.Title,
 			Stage: string(c.Stage),
 			Store: l.store.path,
+			dir:   c.Dir,
+		}
+		row.LastNote = LastNote(c.Dir)
+		if total, done := CountCheckboxes(c.TasksMarkdown); total > 0 {
+			row.Tasks = &TaskCount{Done: done, Total: total}
 		}
 
-		if repo, ok := repos[l.store.path]; ok {
-			row.Repo = repo
-		} else if !repoFailed[l.store.path] {
-			repo, err := opts.gitRemoteOrigin(ctx, l.store.path)
-			if err != nil || repo == "" {
-				repoFailed[l.store.path] = true
-				addStatus("no git remote in store %s", l.store.path)
-			} else {
-				repos[l.store.path] = repo
-				row.Repo = repo
-			}
-		}
+		row.Repo = repoOf(l.store.path)
 
 		if len(l.refs) > 0 {
 			key, ref := firstRef(l.refs)
@@ -191,23 +484,31 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 			}
 		}
 
-		entries, ok := worktrees[l.store.path]
-		if !ok && !worktreeFailed[l.store.path] {
-			es, err := listWorktrees(ctx, opts.gitWorktreeList, l.store.path)
-			if err != nil {
-				worktreeFailed[l.store.path] = true
-				addStatus("git worktree list failed in %s: %v", l.store.path, err)
-			} else {
-				worktrees[l.store.path] = es
-				entries = es
-				ok = true
+		for _, r := range c.BlockedBy {
+			row.BlockedBy = append(row.BlockedBy, refKey(r))
+		}
+		for _, r := range c.Blocks {
+			row.Blocks = append(row.Blocks, refKey(r))
+		}
+
+		if branch, path, matched := resolveWorktree(l.store.path, c.Slug, refIssueID(l.refs)); matched {
+			row.Branch = branch
+			row.Worktree = path
+		} else if row.Issue != nil {
+			if set := requestsFor(row.Repo); set != nil {
+				if cr := set.ForIssue(repoFromKey(row.Issue.Provider), row.Issue.ID); cr != nil {
+					row.Branch = cr.Branch
+					for _, e := range worktreesOf(l.store.path) {
+						if e.branch == cr.Branch {
+							row.Worktree = e.path
+							break
+						}
+					}
+				}
 			}
 		}
-		if ok {
-			if branch, path, matched := matchWorktree(entries, c.Slug); matched {
-				row.Branch = branch
-				row.Worktree = path
-			}
+		if row.Branch != "" {
+			enrich(&row)
 		}
 
 		for _, link := range c.Links {
@@ -215,7 +516,11 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 				row.Linked = append(row.Linked, slug)
 				continue
 			}
+			ref := refFromURL(link.URL)
 			if row.Epic != "" || ghDown {
+				if ref != nil && refKey(*ref) != "" && link.URL != row.Epic {
+					row.LinkedRefs = append(row.LinkedRefs, refKey(*ref))
+				}
 				continue
 			}
 			// An unresolved related URL might be the change's coordination
@@ -223,7 +528,6 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 			// child, only a remote "## Related" edit — see epic.go). Confirm
 			// via the epic's "type:epic" label rather than guessing from
 			// text, since a sibling link renders identically.
-			ref := refFromURL(link.URL)
 			if ref == nil || ref.ID == "" || ref.Provider == "" {
 				continue
 			}
@@ -241,15 +545,41 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 			}
 			if isEpic {
 				row.Epic = link.URL
+			} else if k := refKey(*ref); k != "" {
+				row.LinkedRefs = append(row.LinkedRefs, k)
 			}
 		}
 
 		rows = append(rows, row)
 	}
 
-	sort.Slice(rows, func(i, j int) bool { return rows[i].Slug < rows[j].Slug })
+	if opts.IncludeUnlinked && !scoped {
+		for _, st := range stores {
+			rows = append(rows, unlinkedRows(st, rows, repoOf(st.path), worktreesOf(st.path), requestsFor, enrich)...)
+		}
+	}
 
-	return &Topology{Changes: rows, Status: status}, nil
+	if scoped && len(rows) == 0 {
+		row := ChangeTopology{NoChange: true, Branch: curBranch, Worktree: curTop}
+		if repo, err := opts.gitRemoteOrigin(ctx, curTop); err == nil {
+			row.Repo = repo
+		}
+		enrich(&row)
+		rows = append(rows, row)
+	}
+
+	sort.SliceStable(rows, func(i, j int) bool {
+		a, b := rows[i], rows[j]
+		if (a.Slug == "") != (b.Slug == "") {
+			return b.Slug == ""
+		}
+		if a.Slug == "" {
+			return a.Repo+"\x00"+a.Branch < b.Repo+"\x00"+b.Branch
+		}
+		return a.Slug < b.Slug
+	})
+
+	return &Topology{Changes: rows, Status: status, RequestState: requestState}, nil
 }
 
 // fetchIssueState returns an issue's open/closed state via gh.
@@ -347,4 +677,129 @@ func matchWorktree(entries []worktreeEntry, slug string) (branch, path string, o
 		}
 	}
 	return "", "", false
+}
+
+// errReason returns the last non-empty line of an error: for a failed gh call
+// that is gh's own message, without the echoed command line.
+func errReason(err error) string {
+	lines := strings.Split(strings.TrimSpace(err.Error()), "\n")
+	return strings.TrimSpace(lines[len(lines)-1])
+}
+
+// rowLabel names a row in messages: its slug, or its branch for a branch with no change.
+func rowLabel(r ChangeTopology) string {
+	if r.Slug != "" {
+		return r.Slug
+	}
+	return r.Branch
+}
+
+// gitCurrentReal returns the top level of the worktree containing dir and its
+// current branch ("" when HEAD is detached).
+func gitCurrentReal(ctx context.Context, dir string) (string, string, error) {
+	top, err := gitIn(ctx, dir, "rev-parse", "--show-toplevel")
+	if err != nil {
+		return "", "", err
+	}
+	branch, err := gitIn(ctx, dir, "rev-parse", "--abbrev-ref", "HEAD")
+	if err != nil {
+		return top, "", nil // a repo with no commits yet has no branch name
+	}
+	if branch == "HEAD" {
+		branch = ""
+	}
+	return top, branch, nil
+}
+
+// refIssueID returns the issue number from a change's first ref, or "".
+func refIssueID(refs map[string]Ref) string {
+	if len(refs) == 0 {
+		return ""
+	}
+	_, ref := firstRef(refs)
+	return ref.ID
+}
+
+// issueInBranch matches a leading issue number: feat/186-name or 186-name.
+var issueInBranch = regexp.MustCompile(`^(?:[^/]+/)?(\d+)-`)
+
+// matchWorktreeByIssue finds the worktree whose branch starts with the issue
+// number, comparing whole numbers (18 does not match 186).
+func matchWorktreeByIssue(entries []worktreeEntry, issueID string) (branch, path string, ok bool) {
+	if issueID == "" {
+		return "", "", false
+	}
+	for _, e := range entries {
+		if m := issueInBranch.FindStringSubmatch(e.branch); m != nil && m[1] == issueID {
+			return e.branch, e.path, true
+		}
+	}
+	return "", "", false
+}
+
+// unlinkedRows returns rows for the store's worktrees and open requests that
+// no change claims: work with a branch and no change. The main worktree on a
+// branch with no open request is not work and is left out.
+func unlinkedRows(st storeEntry, existing []ChangeTopology, repo string, entries []worktreeEntry,
+	requestsFor func(string) *ChangeRequestSet, enrich func(*ChangeTopology)) []ChangeTopology {
+	claimedPath, claimedBranch := map[string]bool{}, map[string]bool{}
+	for _, r := range existing {
+		if r.Store != st.path {
+			continue
+		}
+		if r.Worktree != "" {
+			claimedPath[resolved(r.Worktree)] = true
+		}
+		if r.Branch != "" {
+			claimedBranch[r.Branch] = true
+		}
+	}
+	set := requestsFor(repo)
+	hasOpen := func(branch string) bool {
+		if set == nil || branch == "" {
+			return false
+		}
+		cr := set.ForBranch(branch)
+		return cr != nil && cr.State == "open"
+	}
+
+	var out []ChangeTopology
+	seen := map[string]bool{}
+	for _, e := range entries {
+		if e.branch == "" {
+			continue
+		}
+		seen[e.branch] = true
+		if claimedPath[resolved(e.path)] || (e.branch != "" && claimedBranch[e.branch]) {
+			continue
+		}
+		if resolved(e.path) == resolved(st.path) && !hasOpen(e.branch) {
+			continue
+		}
+		row := ChangeTopology{NoChange: true, Store: st.path, Repo: repo, Branch: e.branch, Worktree: e.path}
+		enrich(&row)
+		out = append(out, row)
+	}
+	if set != nil {
+		for _, cr := range set.Requests {
+			if cr.State != "open" || cr.Fork || seen[cr.Branch] || claimedBranch[cr.Branch] {
+				continue
+			}
+			seen[cr.Branch] = true
+			row := ChangeTopology{NoChange: true, Store: st.path, Repo: repo, Branch: cr.Branch}
+			enrich(&row)
+			out = append(out, row)
+		}
+	}
+	return out
+}
+
+// refKey names an issue reference as owner/repo#N, or "" when the provider is
+// not a repository.
+func refKey(r Ref) string {
+	repo := repoFromKey(r.Provider)
+	if repo == "" || r.ID == "" {
+		return ""
+	}
+	return repo + "#" + r.ID
 }

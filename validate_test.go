@@ -3,6 +3,7 @@ package specsync
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -170,5 +171,22 @@ func TestValidateChanges_MultipleIssues(t *testing.T) {
 	result := ValidateChanges(openspecDir)
 	if len(result.Issues) != 2 {
 		t.Fatalf("expected 2 issues, got %d: %v", len(result.Issues), result.Issues)
+	}
+}
+
+func TestValidateChanges_ReportsSliceProblemsForActiveChangesOnly(t *testing.T) {
+	openspecDir := filepath.Join(t.TempDir(), "openspec")
+	cyc := "# Tasks\n\n## Slice 1: A\ncontract: x\nafter: 2\n- [ ] a\n\n## Slice 2: B\ncontract: y\nafter: 1\n- [ ] b\n"
+	for _, dir := range []string{"changes/active", "changes/archive/2026-01-01-old"} {
+		if err := os.MkdirAll(filepath.Join(openspecDir, dir), 0755); err != nil {
+			t.Fatal(err)
+		}
+		mustWrite(t, filepath.Join(openspecDir, dir, "proposal.md"), "# P")
+		mustWrite(t, filepath.Join(openspecDir, dir, "tasks.md"), cyc)
+	}
+	result := ValidateChanges(openspecDir)
+	if len(result.Issues) != 1 || result.Issues[0].Slug != "active" || result.Issues[0].Field != "tasks.md" ||
+		!strings.Contains(result.Issues[0].Error, "slices 1 and 2 form a cycle") {
+		t.Fatalf("want one cycle issue for the active change only, got %+v", result.Issues)
 	}
 }

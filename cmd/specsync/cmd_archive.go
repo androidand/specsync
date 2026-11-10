@@ -1,0 +1,128 @@
+package main
+
+import (
+	"context"
+	"flag"
+	"fmt"
+	"os"
+
+	"github.com/androidand/specsync"
+)
+
+// archiveCmd archives a completed change: final push, close + spec:archived
+// label, then retention (move or prune). Refuses without -force when tasks
+// are unchecked.
+type archiveCmd struct {
+	openspec  *string
+	storeFlag *string
+	change    *string
+	repo      *string
+	retain    *string
+	force     *bool
+	dryRun    *bool
+
+	reason      *string
+	duplicateOf *string
+	comment     *string
+}
+
+func init() { Register(&archiveCmd{}) }
+
+func (*archiveCmd) Spec() Spec {
+	return Spec{
+		Name:     "archive",
+		Group:    GroupReview,
+		Summary:  "Archive a completed change: final push, close, then retention.",
+		Mutates:  true,
+		Workflow: AgentCommandWorkflow{Position: "after-complete", RelatedBefore: []string{"changes", "sync"}, RelatedAfter: []string{"verify"}},
+		Safety: []string{
+			"Use -dry-run to preview before archiving",
+			"Without -change, archives the change the current branch names; on the default branch nothing resolves",
+			"Refuses unchecked-task changes unless -force is set, except with -reason not-planned or duplicate",
+			"-reason duplicate needs -duplicate-of; -comment is posted in the same call as the close, so if the close fails nothing is posted; a reason or comment cannot be recorded on an issue that is already closed",
+		},
+		Examples: []string{
+			"specsync archive -change my-change -dry-run",
+			"specsync archive -change my-change -retain move",
+			"specsync archive -change my-change -reason not-planned -comment 'dropped: superseded'",
+			"specsync archive -change my-change -reason duplicate -duplicate-of 42",
+		},
+	}
+}
+
+func (cm *archiveCmd) Flags(fs *flag.FlagSet) {
+	cm.openspec, cm.storeFlag = addRootFlags(fs)
+	cm.change = fs.String("change", "", "change to archive (default: the one the current branch names)")
+	cm.repo = fs.String("repo", "", "target repo as owner/name (default: auto-detect)")
+	cm.retain = fs.String("retain", "", "retention policy: move (keep) or prune (delete)")
+	cm.force = fs.Bool("force", false, "archive even when tasks are unchecked")
+	cm.dryRun = fs.Bool("dry-run", false, "print the plan without making changes")
+	cm.reason = fs.String("reason", "completed", "why the issue closes: completed, not-planned or duplicate (the last two need no -force)")
+	cm.duplicateOf = fs.String("duplicate-of", "", "original issue number or URL, required with -reason duplicate")
+	cm.comment = fs.String("comment", "", "closing comment, posted with the close")
+}
+
+func (cm *archiveCmd) Run(_ context.Context, args []string) error {
+	cm.run(args)
+	return nil
+}
+
+func (cm *archiveCmd) run(args []string) {
+	fs := flagSetFor(cm)
+	openspec, storeFlag, change, repo, retain, force, dryRun := cm.openspec, cm.storeFlag, cm.change, cm.repo, cm.retain, cm.force, cm.dryRun
+	if err := fs.Parse(args); err != nil {
+		fail(err)
+	}
+	checkArgs(fs, args, 0)
+
+	abs := resolveRoot(fs, openspec, storeFlag).Dir
+	if *change == "" {
+		slug, err := inferChange("archive", abs)
+		if err != nil {
+			fail(fmt.Errorf("%w; pass -change <slug>", err))
+		}
+		*change = slug
+	}
+
+	// Build provider.
+	var provider specsync.WorkProvider
+	if *dryRun {
+		provider = specsync.NewGitHubProviderFunc(dryRunner)
+	} else {
+		p := specsync.NewGitHubProvider()
+		if *repo != "" {
+			p = specsync.NewGitHubProviderWithRepo(*repo)
+		}
+		provider = p
+	}
+
+	retainPolicy := specsync.RetentionPolicy(*retain)
+
+	result, err := specsync.Archive(context.Background(), specsync.ArchiveOptions{
+		OpenSpecDir: abs,
+		Slug:        *change,
+		Provider:    provider,
+		Retain:      retainPolicy,
+		Force:       *force,
+		DryRun:      *dryRun,
+		Reason:      *cm.reason,
+		DuplicateOf: *cm.duplicateOf,
+		Comment:     *cm.comment,
+	})
+	if err != nil {
+		fail(err)
+	}
+
+	for _, line := range result.Plan {
+		fmt.Println(line)
+	}
+
+	if result.UncheckedTasks > 0 && !*force && (*cm.reason == "" || *cm.reason == specsync.CloseReasonCompleted) {
+		fmt.Fprintln(os.Stderr, "specsync: archive refused — use -force to override")
+		os.Exit(1)
+	}
+
+	if *dryRun {
+		fmt.Println("\nDRY RUN — no files or GitHub calls were modified")
+	}
+}

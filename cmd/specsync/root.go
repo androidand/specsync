@@ -4,6 +4,9 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 
 	specsync "github.com/androidand/specsync"
 )
@@ -19,21 +22,52 @@ func addRootFlags(fs *flag.FlagSet) (openspec, store *string) {
 // resolveRoot applies the spec-root resolution order and fails loudly rather
 // than letting a command print an empty result against a root that isn't there.
 func resolveRoot(fs *flag.FlagSet, openspec, store *string) specsync.ResolvedRoot {
-	flagSet := false
+	root := resolveRootUnchecked(fs, openspec, store)
+	if err := root.Validate(); err != nil {
+		fail(err)
+	}
+	return root
+}
+
+// resolveRootInit is resolveRoot for commands that accept -init: when the
+// repo-local spec root is missing it creates a scratch one (specsync init),
+// and only when initFlag is set. A dry run reports the plan and creates nothing.
+func resolveRootInit(fs *flag.FlagSet, openspec, store *string, initFlag, dryRun bool) specsync.ResolvedRoot {
+	if initFlag && !flagVisited(fs, "openspec") && *store == "" {
+		cwd, err := os.Getwd()
+		if err != nil {
+			fail(err)
+		}
+		if info, err := os.Stat(filepath.Join(cwd, "openspec")); err != nil || !info.IsDir() {
+			res, err := specsync.InitScratch(cwd, dryRun)
+			if err != nil {
+				fail(err)
+			}
+			printInit(res, dryRun, false)
+			return specsync.ResolvedRoot{Dir: res.Dir, Rule: specsync.RootRuleLocal}
+		}
+	}
+	return resolveRoot(fs, openspec, store)
+}
+
+func flagVisited(fs *flag.FlagSet, name string) bool {
+	seen := false
 	fs.Visit(func(f *flag.Flag) {
-		if f.Name == "openspec" {
-			flagSet = true
+		if f.Name == name {
+			seen = true
 		}
 	})
+	return seen
+}
+
+func resolveRootUnchecked(fs *flag.FlagSet, openspec, store *string) specsync.ResolvedRoot {
+	flagSet := flagVisited(fs, "openspec")
 	cwd, err := os.Getwd()
 	if err != nil {
 		fail(err)
 	}
 	root, err := specsync.ResolveSpecRoot(*openspec, flagSet, *store, cwd)
 	if err != nil {
-		fail(err)
-	}
-	if err := root.Validate(); err != nil {
 		fail(err)
 	}
 	return root
@@ -70,4 +104,28 @@ func scopedTargetRepos(openspecDir, slug, explicitRepo string) []string {
 		}
 	}
 	return nil
+}
+
+// repoTop is the top of the git work tree containing dir, or dir itself when
+// it is not in one.
+func repoTop(dir string) string {
+	out, err := exec.Command("git", "-C", dir, "rev-parse", "--show-toplevel").Output()
+	if err != nil {
+		return dir
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// textRepoRoot is the repository whose openspec/specsync.yml holds the text
+// standard: the one containing a change's own spec root, and for a store (which
+// spans repositories) the one the command runs in.
+func textRepoRoot(resolved *specsync.ResolvedRoot) string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		cwd = "."
+	}
+	if resolved != nil && !resolved.IsStore() {
+		return repoTop(filepath.Dir(resolved.Dir))
+	}
+	return repoTop(cwd)
 }

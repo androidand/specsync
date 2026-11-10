@@ -71,10 +71,10 @@ func TestGitHubProvider_ReferenceLine(t *testing.T) {
 	p := NewGitHubProvider()
 
 	tests := []struct {
-		name            string
-		ref             Ref
-		allComplete     bool
-		want            string
+		name        string
+		ref         Ref
+		allComplete bool
+		want        string
 	}{
 		{
 			name:        "part of incomplete",

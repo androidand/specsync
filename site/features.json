@@ -8,6 +8,12 @@
   {
     "group": "plan",
     "icon": "flow",
+    "title": "Works in repos with no openspec/",
+    "body": "<code>specsync init</code> (or <code>pull -init</code>) makes a scratch <code>openspec/</code> that git never sees, so an agent can pull an issue and sync in any repo. Nothing is created unless you ask; a user-level default store is also supported."
+  },
+  {
+    "group": "plan",
+    "icon": "flow",
     "title": "Design notes survive the worktree",
     "body": "A <code>design.md</code> renders as <code>## Design notes</code> in the synced issue, so decisions made while planning aren't lost if the local worktree is force-removed. Oversized notes overflow to a linked issue comment instead of getting truncated."
   },
@@ -21,7 +27,13 @@
     "group": "plan",
     "icon": "flow",
     "title": "See who's already working what",
-    "body": "<code>specsync topology</code> joins every change with its tracker issue, git branch, and worktree across coordinated stores — a read-only check before an agent starts, so it doesn't duplicate work already in flight."
+    "body": "<code>specsync status</code> shows where your work stands: pull request, checks, review, unpushed and uncommitted work, how far the base has moved and whether a merge would conflict — with the commands to catch up. Under an epic or with blockers it also lists every related item across your repos, and how to pick each piece up again, including its agent session through an optional provider. Read-only, and <code>-json</code> gives agents the same facts."
+  },
+  {
+    "group": "plan",
+    "icon": "flow",
+    "title": "All your work, across repos",
+    "body": "<code>specsync overview</code> lists every change, worktree and open request in the clones under your workspace, grouped by epic, then work under no epic, then branches with no change. Scope it with <code>-repo</code>, <code>-epic</code>, <code>-mine</code>, <code>-attention</code>, <code>-stage</code> or <code>-unattached</code>. Read-only; <code>-json</code> for agents."
   },
   {
     "group": "plan",
@@ -124,5 +136,47 @@
     "icon": "state",
     "title": "A clean issue, not a wall of text",
     "body": "A synced issue shows title and task checklist first — Proposal, Original ask, and Discoveries render inside collapsed <code>&lt;details&gt;</code> blocks, one click away, nothing removed."
+  },
+  {
+    "group": "collaborate",
+    "icon": "state",
+    "title": "Catch stale references in your docs",
+    "body": "<code>specsync verify -refs</code> finds commit hashes and issue or PR references in change documents that no longer resolve after a rebase. Read-only and advisory; it never guesses a replacement."
+  },
+  {
+    "group": "review",
+    "icon": "state",
+    "title": "Warns before a pull request is too big",
+    "body": "<code>specsync status</code> and <code>verify -size</code> flag a branch that is over a files, lines or commits budget, or that mixes commit scopes, before review starts. Advisory by default; <code>-fail-on-oversized</code> makes it a gate."
+  },
+  {
+    "group": "plan",
+    "icon": "flow",
+    "title": "Define your flow once, get the next step",
+    "body": "Declare gates and steps in <code>openspec/specsync.yml</code>; <code>specsync next</code> reads the work's state and prints the next step and its command, <code>specsync flow</code> marks where you are. Commands from the repo run only after <code>specsync trust</code>."
+  },
+  {
+    "group": "review",
+    "icon": "state",
+    "title": "A map for reviewing a big pull request",
+    "body": "<code>specsync review-map</code> turns a branch into a checklist: the paths the author declared as needing judgement first, then each commit with its files and sizes, then totals by category. <code>-equivalent</code> proves a rewritten branch holds the same content."
+  },
+  {
+    "title": "Short, consistent issues and PRs",
+    "body": "<code>specsync lint</code> checks titles, headers, sentences and length against a short standard, advisory unless <code>-fail</code>. <code>pr-body -template</code> writes a brief PR body from the change and your repo's template. Never rewrites your text."
+  },
+  {
+    "title": "Plan a big change as slices",
+    "body": "Declare reviewable slices in <code>tasks.md</code>, each with a contract, an order and a size budget. <code>specsync slices</code> shows each slice's branch and pull request, <code>slice start</code> opens the next one stacked on the last, and <code>sync -slices</code> mirrors them as child issues."
+  },
+  {
+    "title": "Clean up finished work safely",
+    "body": "<code>specsync cleanup</code> lists worktrees whose work is provably merged and, with <code>-apply</code>, removes them and their branches. It never touches dirty trees, ignored files, protected or shared branches, unpushed commits, open requests or live sessions, and re-checks each one just before removal; hooks run only after <code>specsync trust</code>."
+  },
+  {
+    "group": "collaborate",
+    "icon": "flow",
+    "title": "The same steps every time",
+    "body": "<code>new</code>, <code>start</code>, <code>save</code>, <code>gates</code>, <code>update</code> and <code>pr prep</code>/<code>open</code> do the mechanical parts of starting, checking and opening work, each with a dry run. They refuse secrets, forbidden trailers, unsafe pushes and unconfirmed PRs; the conventions come from <code>openspec/specsync.yml</code>."
   }
 ]

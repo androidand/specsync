@@ -14,7 +14,8 @@ layer.
   tracker offers it, is that tracker's concern — e.g. Beads' own `bd prime`
   session hook handles its memory; specsync never reads or writes it), not a
   control plane (it owns no orchestration), and it runs invoke-and-exit (no
-  daemon, no background state).
+  daemon, no background state). It does provide mechanical verbs and a next-step
+  oracle for the work itself (`next`, `flow`), and never orchestrates agents.
 - Trackers/issues are projections and the collaboration surface; `specsync` keeps
   them aligned with the spec.
 
@@ -84,10 +85,18 @@ changelog entry as a real bug in this project, same severity as a failing test.
   (`links.md` locally, "## Related" in both issues). Use it instead of
   hand-editing issue bodies with `gh`.
 
+- Clean-up after issues were closed elsewhere: `specsync changes -drift` lists
+  changes whose issue is closed but not archived, or whose tasks are all checked
+  while the issue is open (it needs the local ref cache, so run it where the
+  changes were synced). Archive or close each by hand; nothing is automatic.
+
 ## Completion Rule
 
 - When work is complete, ensure tasks are checked, sync once more, and archive
   the completed OpenSpec change.
+- An abandoned or duplicate change is archived with the matching reason, not left behind:
+  `specsync archive -change <slug> -reason not-planned` or
+  `-reason duplicate -duplicate-of <issue>` (no `-force` needed; add `-comment` to say why).
 
 ## Branches, Worktrees & PRs
 

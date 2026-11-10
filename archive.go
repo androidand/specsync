@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -23,6 +24,9 @@ type ArchiveOptions struct {
 	Provider    WorkProvider    // tracker provider for close + label
 	Retain      RetentionPolicy // retention policy: move or prune
 	Force       bool            // allow archiving with unchecked tasks
+	Reason      string          // completed (default), not-planned or duplicate
+	DuplicateOf string          // original issue (number or URL) for a duplicate
+	Comment     string          // optional closing comment
 	DryRun      bool            // print plan without mutations
 }
 
@@ -37,6 +41,12 @@ type ArchiveResult struct {
 // archive performs the full archive lifecycle: final push, unchecked-task check,
 // close + spec:archived label, then retention (move or prune).
 func Archive(ctx context.Context, opts ArchiveOptions) (*ArchiveResult, error) {
+	reason, duplicateOf, err := ValidateCloseReason(opts.Reason, opts.DuplicateOf)
+	if err != nil {
+		return nil, err
+	}
+	opts.Reason, opts.DuplicateOf = reason, duplicateOf
+
 	// Load the change.
 	c, err := LoadChangeBySlug(opts.OpenSpecDir, opts.Slug)
 	if err != nil {
@@ -55,7 +65,7 @@ func Archive(ctx context.Context, opts ArchiveOptions) (*ArchiveResult, error) {
 	var plan []string
 	plan = append(plan, fmt.Sprintf("archive: %s (%s)", opts.Slug, c.Title))
 
-	if unchecked > 0 && !opts.Force {
+	if unchecked > 0 && !opts.Force && reason == CloseReasonCompleted {
 		plan = append(plan, fmt.Sprintf("  ✗ %d unchecked task(s) — use -force to override", unchecked))
 		return &ArchiveResult{
 			Slug:           opts.Slug,
@@ -67,19 +77,39 @@ func Archive(ctx context.Context, opts ArchiveOptions) (*ArchiveResult, error) {
 
 	// Final push: reconcile and push to tracker.
 	plan = append(plan, "  → final push")
+	if reason != CloseReasonCompleted {
+		line := "  → close as " + strings.ReplaceAll(reason, "-", " ")
+		if duplicateOf != "" {
+			line += " of " + duplicateOf
+		}
+		plan = append(plan, line)
+		if cr, ok := opts.Provider.(CloseReasoner); !ok || !cr.SupportsCloseReason() {
+			plan = append(plan, "  note: this provider has no close reasons or closing comments; the issue closes as completed and -comment is not posted")
+		}
+	}
 	if opts.DryRun {
 		plan = append(plan, "  (dry-run: would push and reconcile)")
 	} else {
 		// Sync the change to ensure the issue is current.
-		_, err := Sync(ctx, Options{
+		res, err := Sync(ctx, Options{
 			OpenSpecDir:    opts.OpenSpecDir,
 			Provider:       opts.Provider,
 			Slug:           opts.Slug,
 			DryRun:         false,
 			CloseCompleted: true,
+			CloseReason:    opts.Reason,
+			DuplicateOf:    opts.DuplicateOf,
+			CloseComment:   opts.Comment,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("final push: %w", err)
+		}
+		for _, item := range res.Items {
+			for _, pr := range item.Providers {
+				if pr.Error != nil {
+					return nil, fmt.Errorf("final push: %w", pr.Error)
+				}
+			}
 		}
 	}
 
@@ -291,4 +321,48 @@ func confirmClosedAndPrune(ctx context.Context, provider WorkProvider, ref Ref) 
 		return fmt.Errorf("issue #%s is not closed; cannot prune", ref.ID)
 	}
 	return nil
+}
+
+// ValidateCloseReason normalises and checks the reason options: the reason
+// defaults to completed, duplicate needs an original, and only duplicate may
+// name one. The original may be an issue number (with or without #) or a URL.
+func ValidateCloseReason(reason, duplicateOf string) (string, string, error) {
+	reason = strings.ReplaceAll(strings.ReplaceAll(strings.ToLower(strings.TrimSpace(reason)), " ", "-"), "_", "-")
+	if reason == "" {
+		reason = CloseReasonCompleted
+	}
+	switch reason {
+	case CloseReasonCompleted, CloseReasonNotPlanned, CloseReasonDuplicate:
+	default:
+		return "", "", fmt.Errorf("archive: unknown -reason %q: use completed, not-planned or duplicate", reason)
+	}
+	duplicateOf = strings.TrimSpace(duplicateOf)
+	if reason != CloseReasonDuplicate {
+		if duplicateOf != "" {
+			return "", "", fmt.Errorf("archive: -duplicate-of is only valid with -reason duplicate")
+		}
+		return reason, "", nil
+	}
+	if duplicateOf == "" {
+		return "", "", fmt.Errorf("archive: -reason duplicate needs -duplicate-of <issue number or URL>")
+	}
+	duplicateOf = strings.TrimPrefix(duplicateOf, "#")
+	if !isIssueNumber(duplicateOf) && !issueURL.MatchString(duplicateOf) {
+		return "", "", fmt.Errorf("archive: -duplicate-of %q must be an issue number or an issue URL (https://github.com/<owner>/<repo>/issues/<n>)", duplicateOf)
+	}
+	return reason, duplicateOf, nil
+}
+
+var issueURL = regexp.MustCompile(`^https?://[^/\s]+/[^/\s]+/[^/\s]+/issues/[0-9]+/?$`)
+
+func isIssueNumber(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }

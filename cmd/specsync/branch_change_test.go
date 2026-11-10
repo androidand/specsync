@@ -32,18 +32,18 @@ func changeRepo(t *testing.T) string {
 			t.Fatal(err)
 		}
 	}
-	gitIn(t, repo, "init", "-q", "-b", "main")
+	branchGit(t, repo, "init", "-q", "-b", "main")
 	return repo
 }
 
-func gitIn(t *testing.T, dir string, args ...string) {
+func branchGit(t *testing.T, dir string, args ...string) {
 	t.Helper()
 	if out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput(); err != nil {
 		t.Fatalf("git %v: %v\n%s", args, err, out)
 	}
 }
 
-func runIn(dir, bin string, args ...string) (string, error) {
+func branchRun(dir, bin string, args ...string) (string, error) {
 	cmd := exec.Command(bin, args...)
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
@@ -60,9 +60,9 @@ func TestSetStageInfersChangeFromBranch(t *testing.T) {
 	for _, branch := range []string{"feat/42-fix-login-race", "someuser/fix-login-race"} {
 		t.Run(branch, func(t *testing.T) {
 			repo := changeRepo(t)
-			gitIn(t, repo, "checkout", "-q", "-b", branch)
+			branchGit(t, repo, "checkout", "-q", "-b", branch)
 
-			out, err := runIn(repo, bin, "set-stage", "active")
+			out, err := branchRun(repo, bin, "set-stage", "active")
 			if err != nil {
 				t.Fatalf("set-stage active: %v\n%s", err, out)
 			}
@@ -84,7 +84,7 @@ func TestSetStageOnDefaultBranchFails(t *testing.T) {
 	bin := buildSpecsync(t)
 	repo := changeRepo(t)
 
-	out, err := runIn(repo, bin, "set-stage", "active")
+	out, err := branchRun(repo, bin, "set-stage", "active")
 	if err == nil {
 		t.Fatalf("set-stage on main succeeded:\n%s", out)
 	}
@@ -101,9 +101,9 @@ func TestSetStageOnDefaultBranchFails(t *testing.T) {
 func TestExplicitChangeBeatsBranch(t *testing.T) {
 	bin := buildSpecsync(t)
 	repo := changeRepo(t)
-	gitIn(t, repo, "checkout", "-q", "-b", "feat/42-fix-login-race")
+	branchGit(t, repo, "checkout", "-q", "-b", "feat/42-fix-login-race")
 
-	if out, err := runIn(repo, bin, "set-stage", "other", "blocked"); err != nil {
+	if out, err := branchRun(repo, bin, "set-stage", "other", "blocked"); err != nil {
 		t.Fatalf("set-stage other blocked: %v\n%s", err, out)
 	}
 	if _, err := os.Stat(stageFile(repo, "fix-login-race")); err == nil {
@@ -117,9 +117,9 @@ func TestExplicitChangeBeatsBranch(t *testing.T) {
 func TestNoteInfersChangeFromBranch(t *testing.T) {
 	bin := buildSpecsync(t)
 	repo := changeRepo(t)
-	gitIn(t, repo, "checkout", "-q", "-b", "feat/42-fix-login-race")
+	branchGit(t, repo, "checkout", "-q", "-b", "feat/42-fix-login-race")
 
-	if out, err := runIn(repo, bin, "note", "found an edge case"); err != nil {
+	if out, err := branchRun(repo, bin, "note", "found an edge case"); err != nil {
 		t.Fatalf("note: %v\n%s", err, out)
 	}
 	got, err := os.ReadFile(filepath.Join(repo, "openspec", "changes", "fix-login-race", "discoveries.md"))
@@ -132,7 +132,7 @@ func TestArchiveWithoutChangeOnDefaultBranchFails(t *testing.T) {
 	bin := buildSpecsync(t)
 	repo := changeRepo(t)
 
-	out, err := runIn(repo, bin, "archive", "-dry-run")
+	out, err := branchRun(repo, bin, "archive", "-dry-run")
 	if err == nil {
 		t.Fatalf("archive on main succeeded:\n%s", out)
 	}

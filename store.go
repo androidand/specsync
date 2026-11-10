@@ -22,11 +22,43 @@ const StoreMarkerPath = ".openspec-store/store.yaml"
 type RootRule string
 
 const (
-	RootRuleFlag    RootRule = "flag"         // -openspec
-	RootRuleStore   RootRule = "store-flag"   // -store
-	RootRuleDeclare RootRule = "config-store" // openspec/config.yaml store:
-	RootRuleLocal   RootRule = "repo-local"   // ./openspec
+	RootRuleFlag    RootRule = "flag"          // -openspec
+	RootRuleStore   RootRule = "store-flag"    // -store
+	RootRuleDeclare RootRule = "config-store"  // openspec/config.yaml store:
+	RootRuleLocal   RootRule = "repo-local"    // ./openspec
+	RootRuleDefault RootRule = "default-store" // user-level default store
 )
+
+// DefaultStoreEnv names the environment variable that selects a default store.
+const DefaultStoreEnv = "SPECSYNC_DEFAULT_STORE"
+
+// UserConfigPath is the user-level config file, relative to the home directory.
+const UserConfigPath = ".config/specsync/config.yaml"
+
+// DefaultStore returns the user's default store id: $SPECSYNC_DEFAULT_STORE,
+// else `default-store:` in ~/.config/specsync/config.yaml, else "".
+func DefaultStore() string {
+	if v := strings.TrimSpace(os.Getenv(DefaultStoreEnv)); v != "" {
+		return v
+	}
+	path := ""
+	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+		path = filepath.Join(xdg, "specsync", "config.yaml")
+	} else if home, err := os.UserHomeDir(); err == nil {
+		path = filepath.Join(home, UserConfigPath)
+	} else {
+		return ""
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	v := scalarField(string(data), "default-store")
+	if i := strings.Index(v, " #"); i >= 0 {
+		v = v[:i]
+	}
+	return strings.TrimSpace(v)
+}
 
 // ResolvedRoot is a spec root and how it was found.
 type ResolvedRoot struct {
@@ -39,7 +71,9 @@ type ResolvedRoot struct {
 func (r ResolvedRoot) IsStore() bool { return r.StoreID != "" }
 
 // ResolveSpecRoot locates the openspec/ directory to operate on.
-// Order: -openspec flag → -store id → config.yaml store: → ./openspec.
+// Order: -openspec flag → -store id → config.yaml store: → ./openspec → default
+// store. The default store applies only when ./openspec does not exist, so a
+// repo that keeps its own specs always wins.
 //
 // flagSet distinguishes "-openspec was passed" from "-openspec defaulted",
 // because the default value is itself a valid relative path.
@@ -70,6 +104,15 @@ func ResolveSpecRoot(flagPath string, flagSet bool, storeID, cwd string) (Resolv
 	if err != nil {
 		return ResolvedRoot{}, err
 	}
+	if !openspecAbove(cwd) {
+		if def := DefaultStore(); def != "" {
+			dir, err := StoreLocation(def)
+			if err != nil {
+				return ResolvedRoot{}, fmt.Errorf("default store %q: %w", def, err)
+			}
+			return ResolvedRoot{Dir: filepath.Join(dir, "openspec"), Rule: RootRuleDefault, StoreID: def}, nil
+		}
+	}
 	return ResolvedRoot{Dir: abs, Rule: RootRuleLocal, StoreID: storeIDAt(abs)}, nil
 }
 
@@ -80,7 +123,11 @@ func (r ResolvedRoot) Validate() error {
 		if r.IsStore() {
 			return fmt.Errorf("store %q has no openspec/ directory at %s", r.StoreID, r.Dir)
 		}
-		return fmt.Errorf("no openspec/ directory at %s (pass -openspec, -store, or declare `store:` in openspec/config.yaml)", r.Dir)
+		return fmt.Errorf("no openspec/ directory at %s.\n"+
+			"A repo with no specs is normal; nothing is created unless you ask.\n"+
+			"For a scratch spec in this worktree (kept out of git): specsync init\n"+
+			"For a shared store: -store <id>, or set a default store (%s or default-store: in ~/%s)",
+			r.Dir, DefaultStoreEnv, UserConfigPath)
 	}
 	changes := filepath.Join(r.Dir, "changes")
 	if info, err := os.Stat(changes); err != nil || !info.IsDir() {
@@ -296,4 +343,20 @@ func scalarField(src, key string) string {
 		return strings.Trim(strings.TrimSpace(v), `"'`)
 	}
 	return ""
+}
+
+// openspecAbove reports whether dir or any parent holds an openspec/ directory,
+// so running from a subdirectory of a repo with specs never falls back to the
+// default store.
+func openspecAbove(dir string) bool {
+	for {
+		if info, err := os.Stat(filepath.Join(dir, "openspec")); err == nil && info.IsDir() {
+			return true
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return false
+		}
+		dir = parent
+	}
 }

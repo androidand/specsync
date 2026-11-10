@@ -23,7 +23,7 @@ the feature branch, and runs the operation inside it — all in one command.
   1. Resolves the target repo from `git remote` (or `-repo` override).
   2. Creates a worktree in a configurable directory (`--worktree-dir`, default
      `../worktrees` or `$SPECSYNC_WORKTREE_DIR`).
-  3. Names the worktree `<repo>-<issue>` (e.g. `FusionHub-3538`).
+  3. Names the worktree `<repo>-<issue>` (e.g. `api-3538`).
   4. Creates or checks out a feature branch (`feat/<issue>-<slug>`).
   5. `cd`s into the worktree and runs `pull` there.
 - The worktree path is **configurable**, not hardcoded — agents follow their
@@ -55,5 +55,5 @@ the feature branch, and runs the operation inside it — all in one command.
   infrastructure.
 - The specsync skill file gains a one-liner: `specsync pull -issue <n> --worktree`
   replaces the three-step manual sequence.
-- The backlog MCP skill (Exopen-specific) references this flag in its worktree
+- The backlog MCP skill (org-specific) references this flag in its worktree
   workflow so agents always create worktrees in the right place.

@@ -1,0 +1,41 @@
+# Tasks
+
+## Slice 0: Config parser
+- contract: `openspec/specsync.yml` parses nested sections and reports bad input with line numbers. Existing keys read as before.
+- budget: files<=6, lines<=350
+
+- [x] 0.1 Tests first: today's top-level keys, nested maps and lists, inline maps and lists, quoting, comments, a nested `board:` that must not override the top-level one, unsupported constructs with line numbers
+- [x] 0.2 Hand-written parser for the documented subset; stdlib only
+- [x] 0.3 Route the existing reader (`parseSpecSyncConfig`) through it; confirm `board` and other current callers are unchanged
+- [x] 0.4 Document the supported subset
+
+## Slice 1: Config and validation
+- after: 0
+- contract: A repo can declare its flow and gates, and `doctor` rejects a bad config.
+- budget: files<=10, lines<=400
+
+- [x] 1.1 Define the `flow`, `gates`, `worktrees`, `text` and `cleanup` sections and a schema
+- [x] 1.2 Parse `openspec/specsync.yml` with defaults; keep the existing board setting working
+- [x] 1.3 `doctor` validates the schema: unknown keys, wrong types, missing gate commands, with line numbers
+- [x] 1.4 Presets `minimal`, `pr-review`, `strict`
+- [x] 1.5 `sync:` section: strategy, after_review, force; documented defaults
+- [x] 1.6 `specsync trust`: record the config hash per user and repo; refuse repo-defined commands without it; tests for fresh clone and changed config
+
+## Slice 2: Next and flow
+- after: 1
+- contract: `next` and `flow` report the right step from asserted facts, and change nothing.
+- budget: files<=10, lines<=400
+
+- [x] 2.1 Express the flow as steps with a precondition over status facts
+- [x] 2.2 `specsync next` with `-json`; read-only
+- [x] 2.3 `specsync flow` with the current-step marker
+- [x] 2.4 Fixture tests: no change, tasks open, gates missing, PR in review, merged and clean
+- [x] 2.5 Read-only guarantee test
+
+## Slice 3: Docs
+- after: 2
+- contract: The flow is documented and discoverable.
+
+- [x] 3.1 Declare `next` and `flow` once as `Command` types; docs are generated
+- [x] 3.2 Add the principle line to the agent guide; update `site/features.json`
+- [x] 3.3 Run `specsync changelog -fail-on-unlinked-commits` (locally it needs -resolve-refs because a fresh worktree has no refs cache; CI runs that form)

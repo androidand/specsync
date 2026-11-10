@@ -59,10 +59,10 @@ change is archived:
 
 ### How this was found
 
-Discovered while closing out `portal-resource-select-ui` (portal#4212 /
-FusionHub#3565, both merged): after archiving the change locally with
-`openspec archive portal-resource-select-ui -y`, the tracked GitHub issues
-(portal#4210, FusionHub#3538) never reflected the terminal `archived` stage —
+Discovered while closing out `app-resource-select-ui` (app#4212 /
+api#3565, both merged): after archiving the change locally with
+`openspec archive app-resource-select-ui -y`, the tracked GitHub issues
+(app#4210, api#3538) never reflected the terminal `archived` stage —
 board Status stayed at "Ready for development" indefinitely on the Backlog
 project, well after the underlying work had shipped. The board fix was done
 by hand via direct API calls rather than through specsync, since the

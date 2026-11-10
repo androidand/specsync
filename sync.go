@@ -80,11 +80,21 @@ type Options struct {
 	// Force overrides provider stale-ref guards (e.g. refusing to write to a
 	// closed issue). Off by default; see WorkItem.Force.
 	Force bool
+	// CloseReason, DuplicateOf and CloseComment apply when the change closes.
+	// A reason other than completed closes the issue even when the change is
+	// not complete.
+	CloseReason  string
+	DuplicateOf  string
+	CloseComment string
 	// Labels controls whether synced issues get the decorative "specsync"
 	// and "stage:<stage>" labels. Off by default (neither is read back by
 	// specsync itself); pass true (the -labels flag) to restore them for
 	// repos that want native-label triage. priority:<n> is unaffected.
 	Labels bool
+	// Slices projects each declared slice of a change as a child issue of the
+	// change's issue (blocked-by per `after`), or lists the slices in the issue
+	// body when the provider cannot nest issues. Off by default.
+	Slices bool
 }
 
 // Result reports what a sync run did.
@@ -124,6 +134,10 @@ type ItemResult struct {
 	Providers []ProviderResult
 	// ClosedDeferred carries the deferral reason when no provider fan-out is used.
 	ClosedDeferred string
+	// Slices lists what projecting the change's slices did (or would do);
+	// SliceFailures names each step that failed, to be retried by the next run.
+	Slices        []string
+	SliceFailures []string
 }
 
 // Sync projects every change into the provider(s), idempotently. When
@@ -178,6 +192,7 @@ func Sync(ctx context.Context, opts Options) (Result, error) {
 		var firstClosedDeferred string
 		var boardPlan BoardPlan
 		providerResults := make([]ProviderResult, 0, len(providers))
+		var sliceActions, sliceFailed []string
 
 		for _, prov := range providers {
 			refs, err := LoadRefs(c.Dir)
@@ -245,6 +260,17 @@ func Sync(ctx context.Context, opts Options) (Result, error) {
 			item := WorkItemFor(c, opts.CloseCompleted)
 			item.ManagedLabels = opts.Labels
 			item.Force = opts.Force
+			item.CloseReason, item.DuplicateOf, item.CloseComment = opts.CloseReason, opts.DuplicateOf, opts.CloseComment
+			if opts.CloseReason != "" && opts.CloseReason != CloseReasonCompleted {
+				item.Closed, item.ManageClosed = true, true
+			}
+			if opts.Slices {
+				if _, nests := prov.(SliceProjector); !nests {
+					if sec := SlicesSection(ParseSlices(c.TasksMarkdown)); sec != "" {
+						item.Body = strings.TrimRight(item.Body, "\n") + "\n\n" + sec
+					}
+				}
+			}
 			ref, perr := prov.Push(ctx, item, existingPtr)
 			if perr != nil {
 				providerResults = append(providerResults, ProviderResult{
@@ -328,6 +354,12 @@ func Sync(ctx context.Context, opts Options) (Result, error) {
 				}
 			}
 
+			if opts.Slices {
+				proj, _ := ProjectSlices(ctx, c, ref, prov, opts.DryRun)
+				sliceActions = append(sliceActions, proj.Actions...)
+				sliceFailed = append(sliceFailed, proj.Failed...)
+			}
+
 			// Reconcile dependency edges with GitHub.
 			if gp, ok := prov.(*GitHubProvider); ok && (len(c.BlockedBy) > 0 || len(c.Blocks) > 0) {
 				if _, err := DepSync(ctx, DepSyncOptions{
@@ -360,6 +392,8 @@ func Sync(ctx context.Context, opts Options) (Result, error) {
 			Board:           boardPlan,
 			ClosedDeferred:  firstClosedDeferred,
 			Providers:       providerResults,
+			Slices:          sliceActions,
+			SliceFailures:   sliceFailed,
 		})
 	}
 
