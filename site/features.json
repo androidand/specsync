@@ -74,6 +74,12 @@
   {
     "group": "collaborate",
     "icon": "flow",
+    "title": "Start work as an Orca workspace",
+    "body": "With <code>worktrees.launcher: orca</code>, <code>specsync start my-change</code> creates the change's worktree through Orca, linked to its issue, so Orca's agent gets the spec as its brief. It checks Orca kept the branch and leaves it unpublished until you push."
+  },
+  {
+    "group": "collaborate",
+    "icon": "flow",
     "title": "Orca workspaces stay in step",
     "body": "Run <code>specsync workspace setup</code> and <code>workspace archive</code> from <code>orca.yaml</code> hooks: a workspace started from an issue becomes a change, its stage goes active, and it goes back to derived when the workspace is archived."
   },

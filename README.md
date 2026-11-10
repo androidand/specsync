@@ -715,6 +715,7 @@ worktrees:
   dir: "../worktrees"
   branch: "{type}/{issue}-{slug}"
   hooks: ["make setup"]       # run in a new worktree, after trust
+  launcher: git               # git (default), orca, or auto: Orca when installed
 save: {forbid_trailers: [Co-Authored-By], forbid_files: ["*.sql"]}
 pr: {confirm: [tests-run, manual-test]}
 cleanup: {remote_branch: keep, archive: true}
@@ -740,6 +741,7 @@ change nothing then. See `docs/flow-verbs.md` for moving a personal script onto 
   changes and open issues; the tracker issue is created only with `-yes`, and only once the template placeholders have been edited away.
 - `specsync start <slug|issue>` reuses the change's worktree or creates one from `worktrees:`,
   runs the start hooks there (after trust) and refuses when the session provider reports a live session.
+  With `worktrees.launcher: orca` (or `-launcher orca`) Orca creates it, linked to the change's issue; see Working with Orca.
 - `specsync save -m <msg>` commits tracked changes (untracked files only with `-add`), refuses
   secret-looking files and forbidden trailers, pushes only with `-push` (by explicit refspec to the
   branch's own name), and not onto a branch with an open pull request without `-push-to-request`.
@@ -895,6 +897,15 @@ back to `auto`, derived from the tasks, so an abandoned workspace doesn't leave
 the change stuck as active; it needs `-sync` to reach the tracker, because the
 stage is kept per checkout and Orca removes the worktree. A workspace that names
 no change is left alone and the hook exits 0. Both accept `-dry-run`.
+
+To have `specsync start` create the worktree as an Orca workspace, set
+`worktrees.launcher: orca` (or `auto`, to use Orca only where it is installed),
+or pass `-launcher orca`. `start` then runs `orca worktree create` with the
+change's branch and issue, and `-agent` / `-prompt` start an agent in it. It
+fails if Orca put the workspace on another branch (Orca renames a taken one),
+and removes any upstream Orca set, so the branch is not published until you
+push it. Orca is found through `$ORCA_CLI_COMMAND`, then `orca-ide` on Linux
+(where a bare `orca` is the screen reader), then `orca`.
 
 Let one tool move issue status. Orca's Linear status sync and specsync's stage
 projection (`-status-map` on a Projects board) both change it; turn on one, not

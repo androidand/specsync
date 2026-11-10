@@ -22,6 +22,9 @@ type Gate struct {
 type WorktreeConfig struct {
 	Dir, Branch string
 	Hooks       []string
+	// Launcher creates new worktrees: "git" (default), "orca", or "auto"
+	// (Orca when it is installed).
+	Launcher string
 }
 
 // SaveConfig is the `save:` section: what `specsync save` refuses.
@@ -80,7 +83,7 @@ func presetNames() string { return "minimal, pr-review, strict" }
 var topLevelKeys = []string{"board", "ideas_repo", "flow", "gates", "worktrees", "text", "cleanup", "sync", "save", "pr"}
 
 var sectionKeys = map[string][]string{
-	"worktrees": {"dir", "branch", "hooks"},
+	"worktrees": {"dir", "branch", "hooks", "launcher"},
 	"save":      {"forbid_trailers", "forbid_files"},
 	"pr":        {"confirm"},
 	"text":      append([]string{"profile", "headers", "filler", "template"}, textIntKeys...),
@@ -262,7 +265,7 @@ func (w *Ways) readSection(sec string, n *YNode, add addIssue) {
 	}
 	switch sec {
 	case "worktrees":
-		w.Worktrees = WorktreeConfig{Dir: n.Str("dir"), Branch: n.Str("branch"), Hooks: stringList("hooks")}
+		w.Worktrees = WorktreeConfig{Dir: n.Str("dir"), Branch: n.Str("branch"), Hooks: stringList("hooks"), Launcher: enum("launcher", "git", "orca", "auto")}
 	case "save":
 		w.Save = SaveConfig{ForbidTrailers: stringList("forbid_trailers"), ForbidFiles: stringList("forbid_files")}
 	case "pr":

@@ -2585,6 +2585,13 @@
       },
       "flags": [
         {
+          "name": "agent",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "Orca only: agent to launch in the new workspace, e.g. claude or codex"
+        },
+        {
           "name": "base",
           "type": "string",
           "required": false,
@@ -2606,11 +2613,25 @@
           "description": "output as JSON"
         },
         {
+          "name": "launcher",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "git, orca or auto (Orca when installed) to create a new worktree (default: worktrees.launcher, else git)"
+        },
+        {
           "name": "openspec",
           "type": "string",
           "required": false,
           "default": "openspec",
           "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "prompt",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "Orca only: initial prompt for that agent"
         },
         {
           "name": "sessions-cmd",
@@ -2645,12 +2666,15 @@
         "Reuses the change's worktree when it exists and creates nothing; otherwise creates one from the worktrees: directory and branch pattern in openspec/specsync.yml",
         "Start hooks run only in a newly created worktree, and only after `specsync trust -yes`",
         "Refuses when the session provider reports a live session in the worktree, or cannot be asked while one is configured",
-        "Records the branch-to-change link in the repository's git config; -dry-run changes nothing"
+        "Records the branch-to-change link in the repository's git config; -dry-run changes nothing",
+        "With the orca launcher (worktrees.launcher or -launcher), Orca creates the worktree linked to the change's issue; start fails if Orca put it on a different branch, and removes any upstream it set",
+        "Orca is found via $ORCA_CLI_COMMAND, then orca-ide on Linux (a bare orca there is the screen reader), then orca"
       ],
       "examples": [
         "specsync start add-retry -dry-run",
         "specsync start add-retry",
-        "specsync start 42"
+        "specsync start 42",
+        "specsync start -launcher orca -agent claude add-retry"
       ]
     },
     "status": {
