@@ -110,6 +110,7 @@ specsync agent-help                # overview
 - `slice` — Start a slice: create its branch and worktree, stacked on the previous slice.
 - `slices` — List a change's slices with progress, order, budget and state.
 - `spinoff` — Spin off emergent work from a discovery.
+- `update` — Bring your branch up to date with its base or upstream: a plan first, then -apply.
 
 **Sync with the tracker** (start: `specsync -dry-run -change <slug>`)
 - `sync` — Synchronize an OpenSpec change with GitHub Issues.

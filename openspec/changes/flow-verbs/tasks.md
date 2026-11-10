@@ -45,10 +45,10 @@ Depends on `ways-of-working-and-next` slices 0 and 1 for config. Slice 4 also ne
 - contract: Update brings a branch current by the configured strategy, with a plan first and no unsafe rewrites.
 - budget: files<=8, lines<=350
 
-- [ ] 5.1 `specsync update [-apply] [-push]` using the sync suggestion and `sync:` config
-- [ ] 5.2 Refuse on dirty trees; never force a shared branch; push only with `-push`, with a lease
-- [ ] 5.3 Stop cleanly at a conflict and say which files
-- [ ] 5.4 Tests: fast-forward, rebase, merge, conflict stop, shared branch, dirty tree
+- [x] 5.1 `specsync update [-apply] [-push]` using the sync suggestion and `sync:` config
+- [x] 5.2 Refuse on dirty trees; never force a shared branch; push only with `-push`, with a lease
+- [x] 5.3 Stop cleanly at a conflict and say which files
+- [x] 5.4 Tests: fast-forward, rebase, merge, conflict stop, shared branch, dirty tree
 
 ## Slice 6: Docs
 - after: 2, 3, 4, 5

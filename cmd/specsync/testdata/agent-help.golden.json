@@ -38,6 +38,7 @@
     "sync",
     "trace",
     "trust",
+    "update",
     "validate",
     "verify",
     "version"
@@ -2699,6 +2700,69 @@
         "specsync trust",
         "specsync trust -yes",
         "specsync trust -revoke"
+      ]
+    },
+    "update": {
+      "command": "update",
+      "description": "Bring your branch up to date with its base or upstream: a plan first, then -apply.",
+      "mutates": true,
+      "workflow": {
+        "position": "implementation",
+        "related_before": [
+          "status"
+        ],
+        "related_after": [
+          "gates"
+        ]
+      },
+      "flags": [
+        {
+          "name": "apply",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "run the plan (without it nothing changes)"
+        },
+        {
+          "name": "fetch",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "run git fetch first so the plan sees current remote branches"
+        },
+        {
+          "name": "json",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "output the plan as JSON"
+        },
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "push",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "with -apply, push afterwards (with a lease after a rebase)"
+        }
+      ],
+      "safety_rules": [
+        "Without -apply it prints the plan and changes nothing",
+        "Refuses a dirty working tree; never force-pushes a shared branch (those are merged)",
+        "Pushes only with -push, and after a rebase of a pushed branch only with --force-with-lease",
+        "Stops at a conflict, names the files and leaves git's own merge or rebase state for you to resolve or abort",
+        "The plan uses the sync: strategy from openspec/specsync.yml; run with -fetch to refresh remote branches first"
+      ],
+      "examples": [
+        "specsync update",
+        "specsync update -fetch -apply",
+        "specsync update -apply -push"
       ]
     },
     "validate": {

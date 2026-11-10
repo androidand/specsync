@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -163,5 +164,64 @@ func TestSaveSyncNeedsAKnownChangeAndCommitsNothingWithoutOne(t *testing.T) {
 	}
 	if st := gitStatus(t, repo); !strings.Contains(st, "M openspec/specsync.yml") {
 		t.Fatalf("nothing may be committed when -sync cannot run: %q", st)
+	}
+}
+
+func updateRepo(t *testing.T) (clone string, env []string, advance func()) {
+	t.Helper()
+	root := t.TempDir()
+	origin := filepath.Join(root, "origin.git")
+	gitIn(t, root, "init", "-q", "--bare", "-b", "main", origin)
+	clone = filepath.Join(root, "clone")
+	gitIn(t, root, "clone", "-q", origin, clone)
+	_, env = firstUseEnv(t)
+	env = withIdentity(env)
+	gitIn(t, clone, "checkout", "-q", "-b", "main")
+	os.WriteFile(filepath.Join(clone, "a.txt"), []byte("a\n"), 0o644)
+	commitAll(t, clone, "a")
+	gitIn(t, clone, "push", "-q", "-u", "origin", "main")
+	gitIn(t, clone, "remote", "set-head", "origin", "main")
+	gitIn(t, clone, "checkout", "-q", "-b", "feature")
+	os.WriteFile(filepath.Join(clone, "mine.txt"), []byte("mine\n"), 0o644)
+	commitAll(t, clone, "mine")
+	advance = func() {
+		other := filepath.Join(root, "other")
+		gitIn(t, root, "clone", "-q", origin, other)
+		os.WriteFile(filepath.Join(other, "m.txt"), []byte("m\n"), 0o644)
+		commitAll(t, other, "m")
+		gitIn(t, other, "push", "-q", "origin", "main")
+	}
+	return clone, env, advance
+}
+
+func TestUpdatePlansWithoutApplyAndAppliesWithIt(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	clone, env, advance := updateRepo(t)
+	advance()
+	head := func() string {
+		out, _ := runIn(t, bin, clone, env, "version")
+		_ = out
+		cmd := exec.Command("git", "rev-parse", "HEAD")
+		cmd.Dir = clone
+		b, _ := cmd.Output()
+		return string(b)
+	}
+	before := head()
+	out, err := runIn(t, bin, clone, env, "update", "-fetch")
+	if err != nil || !strings.Contains(out, "nothing changed") || !strings.Contains(out, "git rebase") {
+		t.Fatalf("err=%v\n%s", err, out)
+	}
+	if head() != before {
+		t.Fatal("a plan must not move HEAD")
+	}
+	out, err = runIn(t, bin, clone, env, "update", "-apply")
+	if err != nil || !strings.Contains(out, "not pushed") {
+		t.Fatalf("err=%v\n%s", err, out)
+	}
+	if head() == before {
+		t.Fatal("-apply must rebase")
+	}
+	if out, err := runIn(t, bin, clone, env, "update", "-push"); err == nil || !strings.Contains(out, "-push needs -apply") {
+		t.Fatalf("err=%v\n%s", err, out)
 	}
 }
