@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -87,5 +89,98 @@ func TestTrustRefusesABrokenConfig(t *testing.T) {
 	out, err := runIn(t, bin, repo, env, "trust")
 	if err == nil || !strings.Contains(out, "fix the config first") {
 		t.Fatalf("err=%v\n%s", err, out)
+	}
+}
+
+func gitSnapshot(t *testing.T, repo string) string {
+	t.Helper()
+	var b strings.Builder
+	for _, args := range [][]string{
+		{"status", "--porcelain", "-uall"},
+		{"for-each-ref"},
+		{"config", "--list", "--local"},
+		{"stash", "list"},
+		{"worktree", "list"},
+	} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = repo
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+		b.WriteString(strings.Join(args, " ") + "\n" + string(out))
+	}
+	idx, _ := os.ReadFile(filepath.Join(repo, ".git", "index"))
+	b.WriteString(string(idx))
+	filepath.WalkDir(repo, func(p string, d os.DirEntry, err error) error {
+		if err == nil && d.IsDir() && d.Name() == ".git" {
+			return filepath.SkipDir
+		}
+		if err == nil {
+			info, _ := d.Info()
+			b.WriteString(fmt.Sprintf("%s %d %d\n", p, info.Size(), info.ModTime().UnixNano()))
+		}
+		return nil
+	})
+	return b.String()
+}
+
+func gitIn(t *testing.T, repo string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = repo
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+}
+
+func TestNextAndFlowOnWorkWithOpenTasks(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env := waysRepo(t, "gates:\n  - {name: t, run: make test}\n")
+	change := filepath.Join(repo, "openspec", "changes", "add-x")
+	if err := os.MkdirAll(change, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(change, "proposal.md"), []byte("# Add x\n"), 0o644)
+	os.WriteFile(filepath.Join(change, "tasks.md"), []byte("- [x] 1.1 a\n- [ ] 1.2 b\n"), 0o644)
+	gitIn(t, repo, "checkout", "-q", "-b", "feat/7-add-x")
+
+	out, err := runIn(t, bin, repo, env, "next", "-state=off")
+	if err != nil || !strings.Contains(out, "Next: build") || !strings.Contains(out, "1/2") {
+		t.Fatalf("next: err=%v\n%s", err, out)
+	}
+	out, err = runIn(t, bin, repo, env, "flow", "-state=off")
+	if err != nil || !strings.Contains(out, "[>] build") || !strings.Contains(out, "[x] new") || !strings.Contains(out, "[ ] gate") {
+		t.Fatalf("flow: err=%v\n%s", err, out)
+	}
+	out, err = runIn(t, bin, repo, env, "next", "-json", "-state=off")
+	if err != nil || !strings.Contains(out, `"step": "build"`) {
+		t.Fatalf("next -json: err=%v\n%s", err, out)
+	}
+}
+
+func TestNextWithNoWorkSuggestsStarting(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env := waysRepo(t, "")
+	out, err := runIn(t, bin, repo, env, "next", "-state=off")
+	if err != nil || !strings.Contains(out, "Next: new") || !strings.Contains(out, "specsync pull -issue") {
+		t.Fatalf("err=%v\n%s", err, out)
+	}
+}
+
+func TestNextAndFlowChangeNothing(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env := waysRepo(t, "gates:\n  - {name: t, run: make test}\n")
+	gitIn(t, repo, "add", "-A")
+	gitIn(t, repo, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "-m", "config")
+	os.WriteFile(filepath.Join(repo, "wip.txt"), []byte("x"), 0o644)
+	before := gitSnapshot(t, repo)
+	for _, args := range [][]string{{"next"}, {"next", "-json"}, {"flow"}, {"flow", "-json"}, {"next", "-state=off"}} {
+		if out, err := runIn(t, bin, repo, env, args...); err != nil {
+			t.Fatalf("%v: %v\n%s", args, err, out)
+		}
+	}
+	if after := gitSnapshot(t, repo); after != before {
+		t.Fatalf("next and flow must not change the worktree, index, refs or config:\n--- before\n%s\n--- after\n%s", before, after)
 	}
 }

@@ -9,11 +9,13 @@
     "changes",
     "doctor",
     "epic",
+    "flow",
     "idea",
     "ideas",
     "init",
     "install-skill",
     "link",
+    "next",
     "note",
     "overview",
     "pr-body",
@@ -625,6 +627,47 @@
         "specsync epic 'Q3 auth rework' --child my-change"
       ]
     },
+    "flow": {
+      "command": "flow",
+      "description": "Show this repo's flow and mark where your current work is in it.",
+      "mutates": false,
+      "workflow": {
+        "position": "any",
+        "related_before": [
+          "next"
+        ]
+      },
+      "flags": [
+        {
+          "name": "json",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "output as JSON"
+        },
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "state",
+          "type": "string",
+          "required": false,
+          "default": "on",
+          "description": "on (default) reuses pull request data for up to a minute; fresh refetches it; off skips the tracker and pull request lookups: local facts only, offline"
+        }
+      ],
+      "safety_rules": [
+        "Read-only: reports the configured steps and the current one; it may write status's short-lived request cache outside the repo"
+      ],
+      "examples": [
+        "specsync flow",
+        "specsync flow -json"
+      ]
+    },
     "idea": {
       "command": "idea",
       "description": "Capture a free-text idea as a stage:intake issue.",
@@ -857,6 +900,51 @@
         "specsync link my-change other-change -dry-run",
         "specsync link my-change other-change",
         "specsync link change-a change-b change-c"
+      ]
+    },
+    "next": {
+      "command": "next",
+      "description": "Say the next step for your current work, and the command for it.",
+      "mutates": false,
+      "workflow": {
+        "position": "any",
+        "related_before": [
+          "status"
+        ],
+        "related_after": [
+          "flow"
+        ]
+      },
+      "flags": [
+        {
+          "name": "json",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "output as JSON"
+        },
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "state",
+          "type": "string",
+          "required": false,
+          "default": "on",
+          "description": "on (default) reuses pull request data for up to a minute; fresh refetches it; off skips the tracker and pull request lookups: local facts only, offline"
+        }
+      ],
+      "safety_rules": [
+        "Suggests only: never runs the step, creates a file, branch or tracker item, or starts a process; it may write status's short-lived request cache outside the repo"
+      ],
+      "examples": [
+        "specsync next",
+        "specsync next -json",
+        "specsync next -state=off"
       ]
     },
     "note": {

@@ -26,16 +26,16 @@
 - contract: `next` and `flow` report the right step from asserted facts, and change nothing.
 - budget: files<=10, lines<=400
 
-- [ ] 2.1 Express the flow as steps with a precondition over status facts
-- [ ] 2.2 `specsync next` with `-json`; read-only
-- [ ] 2.3 `specsync flow` with the current-step marker
-- [ ] 2.4 Fixture tests: no change, tasks open, gates missing, PR in review, merged and clean
-- [ ] 2.5 Read-only guarantee test
+- [x] 2.1 Express the flow as steps with a precondition over status facts
+- [x] 2.2 `specsync next` with `-json`; read-only
+- [x] 2.3 `specsync flow` with the current-step marker
+- [x] 2.4 Fixture tests: no change, tasks open, gates missing, PR in review, merged and clean
+- [x] 2.5 Read-only guarantee test
 
 ## Slice 3: Docs
 - after: 2
 - contract: The flow is documented and discoverable.
 
-- [ ] 3.1 Declare `next` and `flow` once as `Command` types; docs are generated
+- [x] 3.1 Declare `next` and `flow` once as `Command` types; docs are generated
 - [ ] 3.2 Add the principle line to the agent guide; update `site/features.json`
 - [ ] 3.3 Run `specsync changelog -fail-on-unlinked-commits`
