@@ -390,7 +390,7 @@ func (p *GitHubProvider) Push(ctx context.Context, item WorkItem, existing *Ref)
 		}
 		if item.Closed {
 			ref.BaseClosed = boolPtr(true)
-			return ref, p.close(ctx, ref.ID)
+			return ref, p.close(ctx, ref.ID, item)
 		}
 		if item.ManageClosed {
 			ref.BaseClosed = boolPtr(false)
@@ -449,7 +449,10 @@ func (p *GitHubProvider) Push(ctx context.Context, item WorkItem, existing *Ref)
 	switch {
 	case item.Closed && !currentlyClosed:
 		ref.BaseClosed = boolPtr(true)
-		return ref, p.close(ctx, num)
+		return ref, p.close(ctx, num, item)
+
+	case item.Closed && currentlyClosed && (item.CloseComment != "" || (item.CloseReason != "" && item.CloseReason != CloseReasonCompleted)):
+		return ref, fmt.Errorf("issue #%s is already closed, so the close reason and comment cannot be recorded; reopen it (gh issue reopen %s) and archive again", num, num)
 
 	case !item.Closed && currentlyClosed:
 		// Three-way merge on open/closed state, mirroring the board's human-move
@@ -632,8 +635,22 @@ func (p *GitHubProvider) ListRecentMergedPRs(ctx context.Context) ([]PRState, er
 	return items, nil
 }
 
-func (p *GitHubProvider) close(ctx context.Context, num string) error {
+// SupportsCloseReason reports that GitHub closes with a reason.
+func (p *GitHubProvider) SupportsCloseReason() bool { return true }
+
+// close closes the issue with the item's reason and optional comment in one
+// call, so a failure posts nothing and a retry cannot duplicate the comment.
+func (p *GitHubProvider) close(ctx context.Context, num string, item WorkItem) error {
 	args := append([]string{"issue", "close", num}, p.repoFlag()...)
+	if item.CloseComment != "" {
+		args = append(args, "--comment", item.CloseComment)
+	}
+	switch item.CloseReason {
+	case CloseReasonNotPlanned:
+		args = append(args, "--reason", "not planned")
+	case CloseReasonDuplicate:
+		args = append(args, "--reason", "duplicate", "--duplicate-of", item.DuplicateOf)
+	}
 	_, err := p.run(ctx, args...)
 	return err
 }

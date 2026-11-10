@@ -43,9 +43,16 @@ type WorkItem struct {
 	Body         string // proposal plus rendered tasks; the provider prepends identity
 	Stage        Stage
 	Priority     int
-	Closed       bool     // desired state when ManageClosed is true
-	ManageClosed bool     // provider must enforce the desired open/closed state
-	Labels       []string // explicit labels (when non-nil, overrides Stage/Priority)
+	Closed       bool // desired state when ManageClosed is true
+	ManageClosed bool // provider must enforce the desired open/closed state
+
+	// CloseReason, DuplicateOf and CloseComment shape the close when one
+	// happens. Providers without close reasons ignore them.
+	CloseReason  string
+	DuplicateOf  string
+	CloseComment string
+
+	Labels []string // explicit labels (when non-nil, overrides Stage/Priority)
 
 	// Force overrides a provider's stale-ref guards (e.g. GitHubProvider's
 	// refusal to write to a closed issue). Off by default: those guards exist
@@ -297,4 +304,16 @@ type OpenSpecSource interface {
 	// HasBaseline reports whether any accepted spec exists yet; when false, all
 	// deltas are necessarily ADDED.
 	HasBaseline(ctx context.Context) (bool, error)
+}
+
+// Close reasons accepted by archive.
+const (
+	CloseReasonCompleted  = "completed"
+	CloseReasonNotPlanned = "not-planned"
+	CloseReasonDuplicate  = "duplicate"
+)
+
+// CloseReasoner marks a provider that can close an issue with a reason.
+type CloseReasoner interface {
+	SupportsCloseReason() bool
 }
