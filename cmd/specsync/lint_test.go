@@ -187,3 +187,16 @@ func TestPRBodyWithoutTemplateFlagIsUnchanged(t *testing.T) {
 		t.Fatalf("-template and -body-file conflict: %v\n%s", err, out)
 	}
 }
+
+func TestDoctorConfigValidatesTheTextSection(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	dir, env := lintRepo(t, "", "text:\n  profile: strict\n  pr_title: many\n")
+	out, err := runIn(t, bin, dir, env, "doctor", "config")
+	if err == nil || !strings.Contains(out, "profile must be conventional or plain") || !strings.Contains(out, "pr_title must be a whole number") {
+		t.Fatalf("doctor config must report text problems with lines: err=%v\n%s", err, out)
+	}
+	dir, env = lintRepo(t, "", "text:\n  profile: plain\n  headers: [Non-goals]\n")
+	if out, err := runIn(t, bin, dir, env, "doctor", "config"); err != nil || !strings.Contains(out, "config is valid") {
+		t.Fatalf("a valid text section: err=%v\n%s", err, out)
+	}
+}

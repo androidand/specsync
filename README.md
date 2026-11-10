@@ -650,6 +650,31 @@ records trust, and a changed file needs trust again. Until then `next` and `flow
 `specsync trust` instead of the commands. `worktrees.dir`, `worktrees.branch` and
 `cleanup.remote_branch` are reserved for later changes: accepted, noted by `doctor config`, not used.
 
+### Keep issue and PR text short
+
+```bash
+specsync lint -change my-change          # title and proposal, as an issue
+specsync lint -title 'fix(sync): keep links out of sections' -fail
+specsync lint -pr 42                     # a pull request's title and body
+specsync pr-body -change my-change -template   # a short body from the change
+```
+
+`lint` checks titles (Conventional Commits for PRs, sentence case for issues), headers, sentence and
+paragraph length and a word budget, then reports the line, rule and a suggestion. It exits 0 unless
+`-fail` is given and never edits text. `pr-body -template` fills Summary, Changes, Review focus, Size,
+Verification and Closes from the change, each within a word budget, or fills the sections of your
+`.github/pull_request_template.md`. Change the standard in `openspec/specsync.yml`:
+
+```yaml
+text:
+  profile: conventional   # or plain: titles need not be Conventional Commits
+  pr_title: 72            # limits; 0 turns one off
+  issue_words: 150
+  headers: [Non-goals]    # added to the allowed headers
+  filler: [leverage]      # added to the phrases to avoid
+  template: docs/pr.md    # default: the usual .github locations
+```
+
 ### `ideas` — list open intake issues
 
 See what you've captured that nobody has triaged yet:

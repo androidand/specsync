@@ -24,9 +24,9 @@
 - after: 1
 - contract: A repo can choose its profile and limits.
 
-- [ ] 3.1 `text:` section in `openspec/specsync.yml`; validated by `doctor`
+- [x] 3.1 `text:` section in `openspec/specsync.yml`; validated by `doctor`
 - [x] 3.2 Declare `lint` once as a `Command` type; docs are generated
-- [ ] 3.3 Update `site/features.json`; run `specsync changelog -fail-on-unlinked-commits`
+- [x] 3.3 Update `site/features.json`; run `specsync changelog -fail-on-unlinked-commits` (passes with -resolve-refs, which CI uses; a fresh worktree has no refs cache)
 
 ## Slice 4: Dogfood
 - after: 1
