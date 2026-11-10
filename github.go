@@ -951,3 +951,36 @@ func (p *GitHubProvider) RemoveBlockedBy(ctx context.Context, issueNum, blockedB
 		"-f", "blockedById="+blockedByNodeID,
 	)
 }
+
+// LinkSubIssue nests child under parent as a native GitHub sub-issue.
+func (p *GitHubProvider) LinkSubIssue(ctx context.Context, parent, child Ref) error {
+	parentID, err := p.ResolveNodeID(ctx, parent.URL)
+	if err != nil {
+		return err
+	}
+	childID, err := p.ResolveNodeID(ctx, child.URL)
+	if err != nil {
+		return err
+	}
+	mutation := `
+		mutation($issueId: ID!, $subIssueId: ID!) {
+			addSubIssue(input: {issueId: $issueId, subIssueId: $subIssueId}) {
+				clientMutationId
+			}
+		}
+	`
+	return p.graphql(ctx, "addSubIssue", mutation, nil, "-f", "issueId="+parentID, "-f", "subIssueId="+childID)
+}
+
+// AddBlockedByRef records that issue is blocked by blocker.
+func (p *GitHubProvider) AddBlockedByRef(ctx context.Context, issue, blocker Ref) error {
+	issueID, err := p.ResolveNodeID(ctx, issue.URL)
+	if err != nil {
+		return err
+	}
+	blockerID, err := p.ResolveNodeID(ctx, blocker.URL)
+	if err != nil {
+		return err
+	}
+	return p.AddBlockedBy(ctx, issueID, blockerID)
+}

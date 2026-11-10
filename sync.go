@@ -91,6 +91,10 @@ type Options struct {
 	// specsync itself); pass true (the -labels flag) to restore them for
 	// repos that want native-label triage. priority:<n> is unaffected.
 	Labels bool
+	// Slices projects each declared slice of a change as a child issue of the
+	// change's issue (blocked-by per `after`), or lists the slices in the issue
+	// body when the provider cannot nest issues. Off by default.
+	Slices bool
 }
 
 // Result reports what a sync run did.
@@ -130,6 +134,8 @@ type ItemResult struct {
 	Providers []ProviderResult
 	// ClosedDeferred carries the deferral reason when no provider fan-out is used.
 	ClosedDeferred string
+	// Slices lists what projecting the change's slices did (or would do).
+	Slices []string
 }
 
 // Sync projects every change into the provider(s), idempotently. When
@@ -184,6 +190,7 @@ func Sync(ctx context.Context, opts Options) (Result, error) {
 		var firstClosedDeferred string
 		var boardPlan BoardPlan
 		providerResults := make([]ProviderResult, 0, len(providers))
+		var sliceActions []string
 
 		for _, prov := range providers {
 			refs, err := LoadRefs(c.Dir)
@@ -254,6 +261,13 @@ func Sync(ctx context.Context, opts Options) (Result, error) {
 			item.CloseReason, item.DuplicateOf, item.CloseComment = opts.CloseReason, opts.DuplicateOf, opts.CloseComment
 			if opts.CloseReason != "" && opts.CloseReason != CloseReasonCompleted {
 				item.Closed, item.ManageClosed = true, true
+			}
+			if opts.Slices {
+				if _, nests := prov.(SliceProjector); !nests {
+					if sec := SlicesSection(ParseSlices(c.TasksMarkdown)); sec != "" {
+						item.Body = strings.TrimRight(item.Body, "\n") + "\n\n" + sec
+					}
+				}
 			}
 			ref, perr := prov.Push(ctx, item, existingPtr)
 			if perr != nil {
@@ -338,6 +352,14 @@ func Sync(ctx context.Context, opts Options) (Result, error) {
 				}
 			}
 
+			if opts.Slices {
+				proj, serr := ProjectSlices(ctx, c, ref, prov, opts.DryRun)
+				sliceActions = append(sliceActions, proj.Actions...)
+				if serr != nil {
+					fmt.Fprintf(os.Stderr, "specsync: warning: slice projection for %s failed: %v\n", c.Slug, serr)
+				}
+			}
+
 			// Reconcile dependency edges with GitHub.
 			if gp, ok := prov.(*GitHubProvider); ok && (len(c.BlockedBy) > 0 || len(c.Blocks) > 0) {
 				if _, err := DepSync(ctx, DepSyncOptions{
@@ -370,6 +392,7 @@ func Sync(ctx context.Context, opts Options) (Result, error) {
 			Board:           boardPlan,
 			ClosedDeferred:  firstClosedDeferred,
 			Providers:       providerResults,
+			Slices:          sliceActions,
 		})
 	}
 

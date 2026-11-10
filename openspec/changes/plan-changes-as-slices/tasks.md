@@ -14,15 +14,15 @@
 
 ## 3. Projection
 
-- [ ] 3.1 `sync -slices`: one child item per slice and a blocked-by per `after`, through the provider
-- [ ] 3.2 Fallback for providers without hierarchy: list slices in the issue body
-- [ ] 3.3 `-dry-run` shows exactly what would be created
+- [x] 3.1 `sync -slices`: one child item per slice and a blocked-by per `after`, through the provider
+- [x] 3.2 Fallback for providers without hierarchy: list slices in the issue body
+- [x] 3.3 `-dry-run` shows exactly what would be created
 
 ## 4. Tests
 
 - [x] 4.1 Grammar fixtures: valid plan, missing contract, cycle, orphan task, no slices
 - [x] 4.2 `slice start` in a fixture repo: stacked and unstacked, binding recorded
-- [ ] 4.3 Projection with a mocked provider, with and without hierarchy support
+- [x] 4.3 Projection with a mocked provider, with and without hierarchy support
 - [x] 4.4 Property: specsync never emits a slice that the author did not declare
 
 ## 5. Docs

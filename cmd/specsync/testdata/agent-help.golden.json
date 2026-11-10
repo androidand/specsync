@@ -2188,6 +2188,13 @@
           "description": "target repo as owner/name (default: auto-detect from git remote)"
         },
         {
+          "name": "slices",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "project each declared slice as a child issue of the change's issue, blocked by the slices it comes after; list them in the issue body when the provider cannot nest issues"
+        },
+        {
           "name": "spec",
           "type": "string",
           "required": false,
@@ -2217,7 +2224,8 @@
       "examples": [
         "specsync -dry-run -change my-change",
         "specsync -change my-change",
-        "specsync sync -dry-run -change my-change"
+        "specsync sync -dry-run -change my-change",
+        "specsync -dry-run -change my-change -slices"
       ]
     },
     "trace": {
