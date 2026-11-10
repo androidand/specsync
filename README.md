@@ -573,25 +573,30 @@ specsync cleanup -root ~/dev     # every repo under a folder
 
 A worktree is finished only when its work is provably in the base: its request merged with this
 head into the base branch (a request merged into another feature branch proves nothing), or the
-head is already in the base and the branch's reflog shows commits made on it (so an empty branch
-is never "finished"), and the tree is clean. A request closed without merging is never a
+head is already in the base, the branch's reflog shows commits made on it and no reset (a reset can
+discard commits, so a reset branch needs a merged request), and the tree is clean. A request closed without merging is never a
 candidate, and old work with unpushed commits is listed as needing attention, never removed.
 
 Skipped, with the reason shown: dirty trees or a `git status` that cannot be read, worktrees with
-ignored files (build output such as `node_modules`, `dist`, `build`, `target`, `.next`, `vendor` and
-`__pycache__` alone does not block; `-include-ignored` overrides), open requests, protected
+ignored files (a top-level `node_modules`, `dist`, `build`, `target`, `.next`, `vendor` or
+`__pycache__` alone does not block; a nested one does; `-include-ignored` overrides), open requests, protected
 branches (`main`, `master`, `develop`, `trunk`, `staging`, `production`, `prod`, `gh-pages`,
-`release/*`, `hotfix/*`, `cleanup.protect` globs, the base and default branch, the one checked out
-in the main checkout), branches with commits from several authors, the current worktree, the
+`release/*`, `hotfix/*`, `cleanup.protect` globs where a trailing `/*` covers every depth, the base
+and default branch on any remote, the one checked out in the main checkout), branches with commits
+from several authors (or whose authors cannot be told), a config with problems (`fix
+openspec/specsync.yml: ...`, never silently defaulted), the current worktree, the
 main checkout, worktrees with a live session, and items whose hooks cannot run because the config
 is not trusted. Live sessions are checked only when a session provider is configured
 (`-sessions-cmd`): without one a dry run warns, and `-apply` refuses unless `-assume-no-sessions`
 is given.
 
 Each candidate is checked again from fresh facts just before it is touched, then done in this
-order: hooks (in the worktree, only when trusted), remove the worktree, delete the local branch
-(only if its tip is still the verified head), delete the remote branch (only when its upstream has
-the same name and its tip, read now, is still this head). A failed hook leaves the worktree and
+order: hooks (in the main checkout, never the worktree, with `SPECSYNC_WORKTREE` set, a 60 s limit
+and capped output; they must not rely on the working directory), remove the worktree, delete the
+local branch (only if its tip is still the verified head; the result says how to restore it and the
+branch's config is removed), delete the remote branch (only when its upstream has the same name, its
+tip, read now, is this head, and no open request targets it). A dry run writes nothing: no git
+objects and no request cache. A failed hook leaves the worktree and
 branch in place. Cleanup never archives: with `archive: true` and a closed issue it prints
 `specsync archive -change <slug>` as a follow-up. `specsync trust` lists every gate and cleanup
 hook, and `trust -yes` records them. Configure it in `openspec/specsync.yml`:

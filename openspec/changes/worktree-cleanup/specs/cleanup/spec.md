@@ -99,3 +99,6 @@ For each candidate `cleanup` SHALL re-verify it from fresh facts, then run hooks
 ### Requirement: Say when sessions were not checked
 When no session provider is configured, it failed, or `-state off` is used, `cleanup` SHALL say that live sessions were not checked, and `-apply` SHALL refuse unless `-assume-no-sessions` is given.
 
+### Requirement: History is not proof
+A branch whose head is in the base SHALL be a candidate only if its reflog shows commits made on it and no reset; a reset branch needs a merged request with this head. Deleting a branch SHALL record how to restore it and remove its branch configuration. Hooks SHALL run in the main checkout with the worktree path in `SPECSYNC_WORKTREE`, limited to 60 seconds with capped output. A config with problems SHALL make items skip with the problem shown. A dry run SHALL write no git objects and no request cache. The remote branch SHALL be kept while an open request targets it or when its tip is not the head being removed.
+
