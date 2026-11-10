@@ -4,10 +4,10 @@
 - contract: `openspec/specsync.yml` parses nested sections and reports bad input with line numbers. Existing keys read as before.
 - budget: files<=6, lines<=350
 
-- [ ] 0.1 Tests first: today's top-level keys, nested maps and lists, inline maps and lists, quoting, comments, a nested `board:` that must not override the top-level one, unsupported constructs with line numbers
-- [ ] 0.2 Hand-written parser for the documented subset; stdlib only
-- [ ] 0.3 Route the existing reader (`parseSpecSyncConfig`) through it; confirm `board` and other current callers are unchanged
-- [ ] 0.4 Document the supported subset
+- [x] 0.1 Tests first: today's top-level keys, nested maps and lists, inline maps and lists, quoting, comments, a nested `board:` that must not override the top-level one, unsupported constructs with line numbers
+- [x] 0.2 Hand-written parser for the documented subset; stdlib only
+- [x] 0.3 Route the existing reader (`parseSpecSyncConfig`) through it; confirm `board` and other current callers are unchanged
+- [x] 0.4 Document the supported subset
 
 ## Slice 1: Config and validation
 - after: 0

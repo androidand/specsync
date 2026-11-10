@@ -615,6 +615,14 @@ ideas_repo: my-org/ideas
 
 Or use the `SPECSYNC_IDEAS_REPO` environment variable.
 
+### `openspec/specsync.yml` format
+
+specsync reads this file with a small built-in parser for a YAML subset: block maps, block lists
+(`- item`, or `- key: value` for a map item), inline `{k: v}` maps and `[a, b]` lists of scalars,
+quoted and bare scalars, and `#` comments. Anchors, aliases, tags, multi-line scalars, nested
+inline collections, duplicate keys and tab indentation are errors reported with their line number.
+Nested keys never act as top-level ones, so `board:` inside a section does not change the board.
+
 ### `ideas` — list open intake issues
 
 See what you've captured that nobody has triaged yet:
