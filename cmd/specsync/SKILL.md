@@ -1,6 +1,6 @@
 ---
 name: specsync
-description: Plan and synchronize OpenSpec changes with GitHub Issues using the specsync CLI. Use when asked to create, update, or reconcile an OpenSpec change with a tracker issue, pull an issue into a local change, scan for related work, cross-link changes, or inspect release impact.
+description: Plan and synchronize OpenSpec changes with GitHub Issues using the specsync CLI. Use when asked to create, update, or reconcile an OpenSpec change with a tracker issue, pull an issue into a local change, scan for related work, cross-link changes, inspect release impact, or see where changes stand (issues, branches, worktrees).
 ---
 
 # SpecSync
@@ -71,6 +71,49 @@ specsync agent-help <command> --json  # machine-readable
 specsync agent-help                # overview
 ```
 
+## All Commands
+
+<!-- specsync:commands:start -->
+**See what is going on** (start: `specsync changes`)
+- `audit` — Audit OpenSpec changes for structural issues.
+- `audit-tasks` — Audit that task status matches code changes (dogfooding).
+- `changes` — List all OpenSpec changes with status.
+- `ideas` — List open stage:intake issues for the repo.
+- `relate` — Show the work connected to a change or a file path.
+- `scan` — Scan for existing work in a code area or topic.
+- `status` — Show each change with its issue, branch and worktree.
+- `trace` — Trace dependencies and relationships of a change.
+
+**Plan work** (start: `specsync pull -issue <n>`)
+- `adopt` — Bind an existing local change to an existing tracker issue, when neither one knows about the other.
+- `epic` — Create a coordination issue and wire children to it.
+- `idea` — Capture a free-text idea as a stage:intake issue.
+- `init` — Create a scratch openspec/ here and keep it out of git.
+- `link` — Cross-link two or more OpenSpec changes.
+- `note` — Append a discovery line to a change's discoveries.md.
+- `pull` — Pull an issue into a local OpenSpec change.
+- `set-priority` — Set or unset a change's numeric priority override.
+- `set-stage` — Set the workflow stage of a change.
+- `spinoff` — Spin off emergent work from a discovery.
+
+**Sync with the tracker** (start: `specsync -dry-run -change <slug>`)
+- `sync` — Synchronize an OpenSpec change with GitHub Issues.
+
+**Review and release** (start: `specsync verify`)
+- `archive` — Archive a completed change: final push, close, then retention.
+- `changelog` — Generate release notes from OpenSpec changes and commits.
+- `pr-body` — Generate the correct PR body fragment for a change.
+- `release-plan` — Inspect release impact and generate release notes.
+- `validate` — Validate OpenSpec change structure.
+- `verify` — Verify PR references to their change issues.
+
+**Housekeeping** (start: `specsync doctor`)
+- `agent-help` — Show how to use any specsync command, for people and agents.
+- `doctor` — Diagnose skill installation, environment, and context health.
+- `install-skill` — Install the specsync skill for your coding agent.
+- `version` — Print the specsync version.
+<!-- specsync:commands:end -->
+
 ## Key Safety Rules
 
 - **Always dry-run first**: `-dry-run` shows what will happen without writing
@@ -90,6 +133,6 @@ specsync install-skill --claude-code   # install for Claude Code
 specsync install-skill --all           # every known agent directory: --codex --opencode --copilot --agents
 ```
 
-This file is the entire installed skill — deliberately small so it costs little context by default. Detailed reference material lives in `specsync agent-help` (on-demand, per command) rather than in extra files bundled with the install.
+This file is the entire installed skill — kept compact so it costs little context; its command list is generated from the binary. Detailed reference material lives in `specsync agent-help` (on-demand, per command) rather than in extra files bundled with the install.
 
 For diagnostics: `specsync doctor`

@@ -1,35 +1,12 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
 
 	specsync "github.com/androidand/specsync"
 )
-
-// runInit creates a scratch openspec/ in the current worktree and keeps it out
-// of git. It is the only way (besides `pull -init`) specsync creates one.
-func runInit(args []string) {
-	fs := flag.NewFlagSet("init", flag.ExitOnError)
-	dryRun := fs.Bool("dry-run", false, "show what would be created without touching disk")
-	if err := deprecatedSlugFlag(args); err != nil {
-		fail(err)
-	}
-	_ = fs.Parse(args)
-	checkArgs(fs, args, 0)
-
-	cwd, err := os.Getwd()
-	if err != nil {
-		fail(err)
-	}
-	res, err := specsync.InitScratch(cwd, *dryRun)
-	if err != nil {
-		fail(err)
-	}
-	printInit(res, *dryRun, true)
-}
 
 func printInit(res specsync.InitResult, dryRun, hint bool) {
 	prefix, verb := "specsync: ", ""

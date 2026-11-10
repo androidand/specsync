@@ -1,0 +1,1769 @@
+{
+  "commands": [
+    "adopt",
+    "agent-help",
+    "archive",
+    "audit",
+    "audit-tasks",
+    "changelog",
+    "changes",
+    "doctor",
+    "epic",
+    "idea",
+    "ideas",
+    "init",
+    "install-skill",
+    "link",
+    "note",
+    "pr-body",
+    "pull",
+    "relate",
+    "release-plan",
+    "scan",
+    "set-priority",
+    "set-stage",
+    "spinoff",
+    "status",
+    "sync",
+    "trace",
+    "validate",
+    "verify",
+    "version"
+  ],
+  "help": {
+    "adopt": {
+      "command": "adopt",
+      "description": "Bind an existing local change to an existing tracker issue, when neither one knows about the other.",
+      "mutates": true,
+      "workflow": {
+        "position": "plan",
+        "related_before": [
+          "changes",
+          "scan"
+        ],
+        "related_after": [
+          "sync"
+        ]
+      },
+      "flags": [
+        {
+          "name": "change",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "change slug (default: derived from the current branch name, e.g. feat/42-change)"
+        },
+        {
+          "name": "dry-run",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "show what would be written without writing anything"
+        },
+        {
+          "name": "force",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "rebind despite an existing, conflicting binding on either side"
+        },
+        {
+          "name": "issue",
+          "type": "string",
+          "required": true,
+          "default": "",
+          "description": "issue number to bind the change to (required)"
+        },
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "repo",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "target repo as owner/name (default: auto-detect from git remote)"
+        },
+        {
+          "name": "store",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "registered OpenSpec store id to operate on (default: openspec/config.yaml `store:`, else ./openspec)"
+        }
+      ],
+      "safety_rules": [
+        "Never hand-edit the marker into an issue body and hope the next sync finds it — marker discovery goes through search indexing, which lags writes by seconds to minutes, and a sync inside that window creates a duplicate issue instead. Use adopt: it writes the ref cache before touching the issue body, so the link holds immediately.",
+        "Use -dry-run to preview before adopting",
+        "A change already bound to a different issue, or an issue already marked for a different change, is refused without -force"
+      ],
+      "examples": [
+        "specsync adopt -issue 3691 -dry-run",
+        "specsync adopt -issue 3691 -change my-change",
+        "specsync adopt -issue 3691 -change my-change -force"
+      ]
+    },
+    "agent-help": {
+      "command": "agent-help",
+      "description": "Show how to use any specsync command, for people and agents.",
+      "mutates": false,
+      "workflow": {
+        "position": "any"
+      },
+      "flags": [
+        {
+          "name": "json",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "emit machine-readable JSON output"
+        }
+      ],
+      "safety_rules": [
+        "Read-only"
+      ],
+      "examples": [
+        "specsync agent-help",
+        "specsync agent-help sync",
+        "specsync agent-help sync -json"
+      ]
+    },
+    "archive": {
+      "command": "archive",
+      "description": "Archive a completed change: final push, close, then retention.",
+      "mutates": true,
+      "workflow": {
+        "position": "after-complete",
+        "related_before": [
+          "changes",
+          "sync"
+        ],
+        "related_after": [
+          "verify"
+        ]
+      },
+      "flags": [
+        {
+          "name": "change",
+          "type": "string",
+          "required": true,
+          "default": "",
+          "description": "change to archive (required)"
+        },
+        {
+          "name": "dry-run",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "print the plan without making changes"
+        },
+        {
+          "name": "force",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "archive even when tasks are unchecked"
+        },
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "repo",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "target repo as owner/name (default: auto-detect)"
+        },
+        {
+          "name": "retain",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "retention policy: move (keep) or prune (delete)"
+        },
+        {
+          "name": "store",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "registered OpenSpec store id to operate on (default: openspec/config.yaml `store:`, else ./openspec)"
+        }
+      ],
+      "safety_rules": [
+        "Use -dry-run to preview before archiving",
+        "Refuses unchecked-task changes unless -force is set"
+      ],
+      "examples": [
+        "specsync archive -change my-change -dry-run",
+        "specsync archive -change my-change -retain move"
+      ]
+    },
+    "audit": {
+      "command": "audit",
+      "description": "Audit OpenSpec changes for structural issues.",
+      "mutates": false,
+      "workflow": {
+        "position": "validation"
+      },
+      "flags": [
+        {
+          "name": "fail-on-unmerged",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "exit non-zero when unmerged changes exist"
+        },
+        {
+          "name": "json",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "output as JSON"
+        },
+        {
+          "name": "mark-shipped",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "write shipped stage to .specsync/metadata.json for confirmed merges"
+        },
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "repo",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "target repo as owner/name (default: auto-detect from git remote)"
+        },
+        {
+          "name": "store",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "registered OpenSpec store id to operate on (default: openspec/config.yaml `store:`, else ./openspec)"
+        }
+      ],
+      "safety_rules": [
+        "Read-only unless -mark-shipped is given, which writes .specsync/metadata.json"
+      ],
+      "examples": [
+        "specsync audit",
+        "specsync audit -json"
+      ]
+    },
+    "audit-tasks": {
+      "command": "audit-tasks",
+      "description": "Audit that task status matches code changes (dogfooding).",
+      "mutates": false,
+      "workflow": {
+        "position": "validation"
+      },
+      "flags": [
+        {
+          "name": "fail-on-mismatch",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "exit non-zero when mismatches exist"
+        },
+        {
+          "name": "json",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "output as JSON"
+        },
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "store",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "registered OpenSpec store id to operate on (default: openspec/config.yaml `store:`, else ./openspec)"
+        }
+      ],
+      "safety_rules": [
+        "Enforced by CI",
+        "Keeps this repo's dogfooding honest"
+      ],
+      "examples": [
+        "specsync audit-tasks",
+        "specsync audit-tasks -json"
+      ]
+    },
+    "changelog": {
+      "command": "changelog",
+      "description": "Generate release notes from OpenSpec changes and commits.",
+      "mutates": true,
+      "workflow": {
+        "position": "release",
+        "related_before": [
+          "release-plan"
+        ]
+      },
+      "flags": [
+        {
+          "name": "apply",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "write the section into CHANGELOG.md (idempotent per version)"
+        },
+        {
+          "name": "changelog",
+          "type": "string",
+          "required": false,
+          "default": "CHANGELOG.md",
+          "description": "path of the changelog file -apply writes"
+        },
+        {
+          "name": "fail-on-unlinked-commits",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "exit non-zero when a conventional commit in range isn't linked to its change's issue (would otherwise render as a raw title+hash fallback)"
+        },
+        {
+          "name": "force",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "apply even when another release tool owns the changelog"
+        },
+        {
+          "name": "json",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "emit JSON"
+        },
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "provider",
+          "type": "string",
+          "required": false,
+          "default": "github",
+          "description": "work provider for -resolve-refs: github (default) or beads"
+        },
+        {
+          "name": "release-notes",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "emit the bare section body (for goreleaser --release-notes)"
+        },
+        {
+          "name": "repo",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "repo as owner/name for -resolve-refs (default: auto-detect from git remote)"
+        },
+        {
+          "name": "resolve-refs",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "look up a change's issue live (read-only) when its ref cache is missing, e.g. on a fresh CI checkout"
+        },
+        {
+          "name": "since",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "range start (default: latest tag)"
+        },
+        {
+          "name": "store",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "registered OpenSpec store id to operate on (default: openspec/config.yaml `store:`, else ./openspec)"
+        },
+        {
+          "name": "until",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "range end (default: HEAD)"
+        },
+        {
+          "name": "version",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "version label for the section (default: latest tag + advisory bump)"
+        }
+      ],
+      "safety_rules": [
+        "Read-only unless -apply is given, which writes CHANGELOG.md",
+        "Requires git history"
+      ],
+      "examples": [
+        "specsync changelog",
+        "specsync changelog -resolve-refs"
+      ]
+    },
+    "changes": {
+      "command": "changes",
+      "description": "List all OpenSpec changes with status.",
+      "mutates": false,
+      "workflow": {
+        "position": "planning",
+        "related_after": [
+          "pull",
+          "scan",
+          "link"
+        ]
+      },
+      "flags": [
+        {
+          "name": "json",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "output as JSON"
+        },
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "sort",
+          "type": "string",
+          "required": false,
+          "default": "stage",
+          "description": "sort order: stage (canonical), priority, or slug"
+        },
+        {
+          "name": "stage",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "filter by stages (comma-separated, e.g. backlog,blocked)"
+        },
+        {
+          "name": "store",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "registered OpenSpec store id to operate on (default: openspec/config.yaml `store:`, else ./openspec)"
+        }
+      ],
+      "safety_rules": [
+        "Read-only operation"
+      ],
+      "examples": [
+        "specsync changes",
+        "specsync changes --stage backlog",
+        "specsync changes -json"
+      ]
+    },
+    "doctor": {
+      "command": "doctor",
+      "description": "Diagnose skill installation, environment, and context health.",
+      "mutates": false,
+      "workflow": {
+        "position": "anytime",
+        "related_after": [
+          "install-skill"
+        ]
+      },
+      "flags": [
+        {
+          "name": "json",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "emit machine-readable JSON output"
+        },
+        {
+          "name": "skip-skill-update",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "skip auto-updating skill files"
+        }
+      ],
+      "safety_rules": [
+        "Read-only operation"
+      ],
+      "examples": [
+        "specsync doctor",
+        "specsync doctor install -json",
+        "specsync doctor context -json"
+      ]
+    },
+    "epic": {
+      "command": "epic",
+      "description": "Create a coordination issue and wire children to it.",
+      "mutates": true,
+      "workflow": {
+        "position": "plan",
+        "related_before": [
+          "changes"
+        ],
+        "related_after": [
+          "sync"
+        ]
+      },
+      "flags": [
+        {
+          "name": "child",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "a child to attach: local change slug, owner/repo#N, bare #N (resolved against --repo), or issue URL (repeatable)"
+        },
+        {
+          "name": "dry-run",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "print what would happen without creating or editing any issue"
+        },
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "repo",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "target repo for the epic issue, as owner/name (default: auto-detect from git remote)"
+        },
+        {
+          "name": "store",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "registered OpenSpec store id to operate on (default: openspec/config.yaml `store:`, else ./openspec)"
+        }
+      ],
+      "safety_rules": [
+        "Use -dry-run to preview before creating or editing issues",
+        "Re-running with the same title converges onto the existing epic instead of duplicating it"
+      ],
+      "examples": [
+        "specsync epic 'Q3 auth rework' --child my-change --child other-org/other-repo#42 --dry-run",
+        "specsync epic 'Q3 auth rework' --child my-change"
+      ]
+    },
+    "idea": {
+      "command": "idea",
+      "description": "Capture a free-text idea as a stage:intake issue.",
+      "mutates": true,
+      "workflow": {
+        "position": "capture",
+        "related_after": [
+          "ideas",
+          "pull"
+        ]
+      },
+      "flags": [
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "repo",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "repo as owner/name (default: config ideas_repo, $SPECSYNC_IDEAS_REPO, or current repo)"
+        },
+        {
+          "name": "store",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "registered OpenSpec store id to operate on (default: openspec/config.yaml `store:`, else ./openspec)"
+        }
+      ],
+      "safety_rules": [
+        "Creates a real GitHub issue — there is no -dry-run"
+      ],
+      "examples": [
+        "specsync idea 'Consider caching the trace graph'",
+        "echo 'Consider caching the trace graph' | specsync idea"
+      ]
+    },
+    "ideas": {
+      "command": "ideas",
+      "description": "List open stage:intake issues for the repo.",
+      "mutates": false,
+      "workflow": {
+        "position": "review",
+        "related_after": [
+          "pull"
+        ]
+      },
+      "flags": [
+        {
+          "name": "json",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "output as JSON"
+        },
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "repo",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "repo as owner/name (default: config ideas_repo, $SPECSYNC_IDEAS_REPO, or current repo)"
+        },
+        {
+          "name": "store",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "registered OpenSpec store id to operate on (default: openspec/config.yaml `store:`, else ./openspec)"
+        }
+      ],
+      "safety_rules": [
+        "Read-only operation"
+      ],
+      "examples": [
+        "specsync ideas",
+        "specsync ideas -json"
+      ]
+    },
+    "init": {
+      "command": "init",
+      "description": "Create a scratch openspec/ here and keep it out of git.",
+      "mutates": true,
+      "workflow": {
+        "position": "issue-first-start",
+        "related_after": [
+          "pull"
+        ]
+      },
+      "flags": [
+        {
+          "name": "dry-run",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "show what would be created without touching disk"
+        }
+      ],
+      "safety_rules": [
+        "Creates ./openspec/changes/ and adds /openspec/ to the local git exclude file (git rev-parse --git-path info/exclude); never edits a tracked .gitignore",
+        "Idempotent; refuses where openspec/ is already tracked",
+        "For repos that keep no specs (product repos): init, then `specsync pull -issue N`, work, `specsync -change \u003cslug\u003e`. Never commit the folder",
+        "Nothing creates openspec/ unless you run init or pass pull -init"
+      ],
+      "examples": [
+        "specsync init -dry-run",
+        "specsync init"
+      ]
+    },
+    "install-skill": {
+      "command": "install-skill",
+      "description": "Install the specsync skill for your coding agent.",
+      "mutates": true,
+      "workflow": {
+        "position": "setup"
+      },
+      "flags": [
+        {
+          "name": "agents",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "install to Generic (.agents) (~/.agents/skills/specsync)"
+        },
+        {
+          "name": "all",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "install to every known agent directory"
+        },
+        {
+          "name": "claude-code",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "install to Claude Code (~/.claude/skills/specsync)"
+        },
+        {
+          "name": "codex",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "install to Codex / Skein (~/.codex/skills/specsync)"
+        },
+        {
+          "name": "copilot",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "install to GitHub Copilot (~/.copilot/skills/specsync)"
+        },
+        {
+          "name": "opencode",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "install to OpenCode (~/.config/opencode/skills/specsync)"
+        }
+      ],
+      "safety_rules": [
+        "Writes SKILL.md under the agent's skills directory in your home directory"
+      ],
+      "examples": [
+        "specsync install-skill -claude-code",
+        "specsync install-skill -all"
+      ]
+    },
+    "link": {
+      "command": "link",
+      "description": "Cross-link two or more OpenSpec changes.",
+      "mutates": true,
+      "workflow": {
+        "position": "plan",
+        "related_before": [
+          "scan",
+          "changes"
+        ],
+        "related_after": [
+          "sync"
+        ]
+      },
+      "flags": [
+        {
+          "name": "dry-run",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "show what would change without writing files or calling GitHub"
+        },
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "repo",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "repo (owner/name) for bare issue refs"
+        },
+        {
+          "name": "store",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "registered OpenSpec store id to operate on (default: openspec/config.yaml `store:`, else ./openspec)"
+        }
+      ],
+      "safety_rules": [
+        "At least 2 changes required",
+        "Use -dry-run to preview",
+        "Links are append-only (existing links not removed)"
+      ],
+      "examples": [
+        "specsync link my-change other-change -dry-run",
+        "specsync link my-change other-change",
+        "specsync link change-a change-b change-c"
+      ]
+    },
+    "note": {
+      "command": "note",
+      "description": "Append a discovery line to a change's discoveries.md.",
+      "mutates": true,
+      "workflow": {
+        "position": "implementation",
+        "related_after": [
+          "spinoff"
+        ]
+      },
+      "flags": [
+        {
+          "name": "dry-run",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "show what would be written without modifying files"
+        },
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "store",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "registered OpenSpec store id to operate on (default: openspec/config.yaml `store:`, else ./openspec)"
+        }
+      ],
+      "safety_rules": [
+        "Takes positional args: \u003cchange\u003e \u003ctext\u003e, not a -text flag"
+      ],
+      "examples": [
+        "specsync note my-change 'Found edge case in X' -dry-run",
+        "specsync note my-change 'Found edge case in X'"
+      ]
+    },
+    "pr-body": {
+      "command": "pr-body",
+      "description": "Generate the correct PR body fragment for a change.",
+      "mutates": false,
+      "workflow": {
+        "position": "implementation",
+        "related_before": [
+          "changes"
+        ]
+      },
+      "flags": [
+        {
+          "name": "body-file",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "file whose contents are merged after the reference line"
+        },
+        {
+          "name": "change",
+          "type": "string",
+          "required": true,
+          "default": "",
+          "description": "change slug (required)"
+        },
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "repo",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "target repo as owner/name (default: auto-detect from git remote)"
+        },
+        {
+          "name": "store",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "registered OpenSpec store id to operate on (default: openspec/config.yaml `store:`, else ./openspec)"
+        }
+      ],
+      "safety_rules": [
+        "Always include the output in your PR body",
+        "Part of or Closes depends on task completion"
+      ],
+      "examples": [
+        "specsync pr-body -change my-change"
+      ]
+    },
+    "pull": {
+      "command": "pull",
+      "description": "Pull an issue into a local OpenSpec change.",
+      "mutates": true,
+      "workflow": {
+        "position": "issue-first-start",
+        "related_before": [
+          "changes",
+          "scan"
+        ],
+        "related_after": [
+          "sync",
+          "link"
+        ]
+      },
+      "flags": [
+        {
+          "name": "assignee",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "board assignee login (default: the acting viewer, \"me\")"
+        },
+        {
+          "name": "change",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "change name (default: derived from the issue title)"
+        },
+        {
+          "name": "dry-run",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "show what would be written without touching disk"
+        },
+        {
+          "name": "init",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "when the repo has no openspec/, create a scratch one first (same as `specsync init`). Without it, pull fails and creates nothing"
+        },
+        {
+          "name": "issue",
+          "type": "string",
+          "required": true,
+          "default": "",
+          "description": "issue number to pull into a local change (auto-resolved from branch name like feat/42-change when omitted)"
+        },
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "project",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "target GitHub Projects board as owner/number (default: openspec/specsync.yml board; unset = no board)"
+        },
+        {
+          "name": "repo",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "source repo as owner/name (default: auto-detect from git remote)"
+        },
+        {
+          "name": "status-map",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "stage→Status overrides as stage=Name pairs, e.g. \"active=In Progress,archived=Done\" (default: $SPECSYNC_STATUS_MAP)"
+        },
+        {
+          "name": "store",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "registered OpenSpec store id to operate on (default: openspec/config.yaml `store:`, else ./openspec)"
+        },
+        {
+          "name": "worktree",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "create or reuse a worktree and run pull inside it"
+        },
+        {
+          "name": "worktree-dir",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "worktree base directory (default: $SPECSYNC_WORKTREE_DIR or ../worktrees)"
+        }
+      ],
+      "safety_rules": [
+        "Use -dry-run to preview before pulling",
+        "Verify the issue number is correct",
+        "No openspec/ in the repo is normal, not a blocker: run `specsync init` (or pass -init) for a scratch spec kept out of git, then pull. Never commit the scratch openspec/",
+        "Work each issue in its own branch (feat/\u003cn\u003e-\u003cslug\u003e) and, ideally, its own worktree — pass -worktree to have pull set both up automatically, rather than accumulating unrelated changes on whatever branch happens to be checked out"
+      ],
+      "examples": [
+        "specsync pull -issue 42 -dry-run",
+        "specsync pull -issue 42",
+        "specsync pull -issue 42 -init"
+      ]
+    },
+    "relate": {
+      "command": "relate",
+      "description": "Show the work connected to a change or a file path.",
+      "mutates": false,
+      "workflow": {
+        "position": "planning",
+        "related_after": [
+          "link",
+          "trace"
+        ]
+      },
+      "flags": [
+        {
+          "name": "change",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "change slug to relate"
+        },
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "path",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "file path to find related changes (alternative to -change)"
+        },
+        {
+          "name": "repo",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "target repo as owner/name (default: auto-detect from git remote)"
+        },
+        {
+          "name": "store",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "registered OpenSpec store id to operate on (default: openspec/config.yaml `store:`, else ./openspec)"
+        }
+      ],
+      "safety_rules": [
+        "Read-only: never writes to disk or the tracker"
+      ],
+      "examples": [
+        "specsync relate -change my-change",
+        "specsync relate -path pkg/api/handler.go"
+      ]
+    },
+    "release-plan": {
+      "command": "release-plan",
+      "description": "Inspect release impact and generate release notes.",
+      "mutates": false,
+      "workflow": {
+        "position": "release",
+        "related_before": [
+          "changelog"
+        ]
+      },
+      "flags": [
+        {
+          "name": "apply",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "perform suggested spec actions (archive completed changes)"
+        },
+        {
+          "name": "archive-completed",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "move shipped completed changes from openspec/changes/ to openspec/changes/archive/"
+        },
+        {
+          "name": "fail-on-archive-candidates",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "exit non-zero when shipped completed changes remain unarchived"
+        },
+        {
+          "name": "json",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "emit JSON"
+        },
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "since",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "range start (default: latest tag)"
+        },
+        {
+          "name": "store",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "registered OpenSpec store id to operate on (default: openspec/config.yaml `store:`, else ./openspec)"
+        },
+        {
+          "name": "until",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "range end (default: HEAD)"
+        }
+      ],
+      "safety_rules": [
+        "Read-only unless -archive-completed or -apply is given, which move change directories"
+      ],
+      "examples": [
+        "specsync release-plan",
+        "specsync release-plan --since v0.9.0",
+        "specsync release-plan -json"
+      ]
+    },
+    "scan": {
+      "command": "scan",
+      "description": "Scan for existing work in a code area or topic.",
+      "mutates": false,
+      "workflow": {
+        "position": "plan",
+        "related_before": [
+          "changes"
+        ],
+        "related_after": [
+          "pull",
+          "link"
+        ]
+      },
+      "flags": [
+        {
+          "name": "json",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "emit JSON for a planning agent"
+        },
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "openspecs",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "comma-separated list of openspec directories for cross-repo scanning"
+        },
+        {
+          "name": "references",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "also show OpenSpec references and worksets"
+        },
+        {
+          "name": "store",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "registered OpenSpec store id to operate on (default: openspec/config.yaml `store:`, else ./openspec)"
+        }
+      ],
+      "safety_rules": [
+        "At least one path or topic word is required",
+        "Flags must come before positional arguments"
+      ],
+      "examples": [
+        "specsync scan cmd/specsync/ 'label creation'",
+        "specsync scan cmd/specsync/ -json",
+        "specsync scan openspec/changes/ reconcile"
+      ]
+    },
+    "set-priority": {
+      "command": "set-priority",
+      "description": "Set or unset a change's numeric priority override.",
+      "mutates": true,
+      "workflow": {
+        "position": "plan",
+        "related_before": [
+          "changes"
+        ],
+        "related_after": [
+          "changes"
+        ]
+      },
+      "flags": [
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "store",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "registered OpenSpec store id to operate on (default: openspec/config.yaml `store:`, else ./openspec)"
+        }
+      ],
+      "safety_rules": [
+        "Takes positional args: \u003cchange\u003e \u003c1-100|unset\u003e, not flags"
+      ],
+      "examples": [
+        "specsync set-priority my-change 80",
+        "specsync set-priority my-change unset"
+      ]
+    },
+    "set-stage": {
+      "command": "set-stage",
+      "description": "Set the workflow stage of a change.",
+      "mutates": true,
+      "args": [
+        {
+          "name": "change",
+          "description": "Change slug",
+          "required": true
+        },
+        {
+          "name": "stage",
+          "description": "New stage (backlog, active, blocked, in-review, complete, archived, auto)",
+          "required": true
+        }
+      ],
+      "workflow": {
+        "position": "workflow",
+        "related_before": [
+          "changes"
+        ],
+        "related_after": [
+          "sync"
+        ]
+      },
+      "flags": [
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "store",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "registered OpenSpec store id to operate on (default: openspec/config.yaml `store:`, else ./openspec)"
+        }
+      ],
+      "safety_rules": [
+        "Use 'auto' to let specsync derive stage from tasks"
+      ],
+      "examples": [
+        "specsync set-stage my-change active",
+        "specsync set-stage my-change blocked",
+        "specsync set-stage my-change complete"
+      ]
+    },
+    "spinoff": {
+      "command": "spinoff",
+      "description": "Spin off emergent work from a discovery.",
+      "mutates": true,
+      "workflow": {
+        "position": "implementation",
+        "related_before": [
+          "changes"
+        ],
+        "related_after": [
+          "sync",
+          "link"
+        ]
+      },
+      "flags": [
+        {
+          "name": "change",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "child change slug (default: derived from text)"
+        },
+        {
+          "name": "dry-run",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "show what would be written without modifying files"
+        },
+        {
+          "name": "from",
+          "type": "string",
+          "required": true,
+          "default": "",
+          "description": "parent change slug (required)"
+        },
+        {
+          "name": "kind",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "issue kind: bug, followup, or task (sets label)"
+        },
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "repo",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "target repo as owner/name (default: same as parent)"
+        },
+        {
+          "name": "store",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "registered OpenSpec store id to operate on (default: openspec/config.yaml `store:`, else ./openspec)"
+        },
+        {
+          "name": "task",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "task index to spin off (1-based); omit for free text mode"
+        },
+        {
+          "name": "text",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "discovery text (required when -task is not set)"
+        }
+      ],
+      "safety_rules": [
+        "Either -task or -text required",
+        "Creates a new change locally",
+        "Link the changes with specsync link after"
+      ],
+      "examples": [
+        "specsync spinoff -from my-change -task 3",
+        "specsync spinoff -from my-change -text 'Found edge case in X'"
+      ]
+    },
+    "status": {
+      "command": "status",
+      "description": "Show each change with its issue, branch and worktree.",
+      "mutates": false,
+      "workflow": {
+        "position": "planning",
+        "related_after": [
+          "changes",
+          "relate"
+        ]
+      },
+      "flags": [
+        {
+          "name": "all",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "include archived changes"
+        },
+        {
+          "name": "change",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "scope to one change (default: every change)"
+        },
+        {
+          "name": "json",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "output as JSON"
+        },
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        }
+      ],
+      "safety_rules": [
+        "Read-only: never writes to disk or the tracker"
+      ],
+      "examples": [
+        "specsync status",
+        "specsync status -change my-change -json"
+      ]
+    },
+    "sync": {
+      "command": "sync",
+      "description": "Synchronize an OpenSpec change with GitHub Issues.",
+      "mutates": true,
+      "workflow": {
+        "position": "after-implementation",
+        "related_before": [
+          "scan",
+          "pull",
+          "changes"
+        ],
+        "related_after": [
+          "changes",
+          "verify",
+          "release-plan"
+        ]
+      },
+      "flags": [
+        {
+          "name": "all",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "sync every change in the resolved root (required to sweep a store)"
+        },
+        {
+          "name": "assignee",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "board assignee login (default: the acting viewer, \"me\")"
+        },
+        {
+          "name": "change",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "sync only this change (default: all changes)"
+        },
+        {
+          "name": "close-completed",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "close the tracker item once every task in a change is checked"
+        },
+        {
+          "name": "dry-run",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "print the provider commands and rendered body without executing"
+        },
+        {
+          "name": "force",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "write to a closed issue instead of refusing (a closed issue is the strongest signal a cached ref is stale; an ambiguous marker match is never overridden here — use `specsync adopt` to disambiguate)"
+        },
+        {
+          "name": "labels",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "add specsync/stage:\u003cstage\u003e labels to synced issues (off by default: neither is read back by specsync; a sync without this flag also removes them from issues that already carry them)"
+        },
+        {
+          "name": "mcp-config",
+          "type": "string",
+          "required": false,
+          "default": ".specsync-mcp.json",
+          "description": "path to the MCP provider's config (used only with -provider mcp)"
+        },
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "project",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "target GitHub Projects board as owner/number (default: openspec/specsync.yml board; unset = no board)"
+        },
+        {
+          "name": "provider",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "work provider: github, beads, mcp (repeatable; auto-detect when absent)"
+        },
+        {
+          "name": "reconcile",
+          "type": "boolean",
+          "required": false,
+          "default": true,
+          "description": "merge external task state back into tasks.md before pushing"
+        },
+        {
+          "name": "repo",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "target repo as owner/name (default: auto-detect from git remote)"
+        },
+        {
+          "name": "spec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "spec source: openspec (default) or beads"
+        },
+        {
+          "name": "status-map",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "stage→Status overrides as stage=Name pairs, e.g. \"active=In Progress,archived=Done\" (default: $SPECSYNC_STATUS_MAP)"
+        },
+        {
+          "name": "store",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "registered OpenSpec store id to operate on (default: openspec/config.yaml `store:`, else ./openspec)"
+        }
+      ],
+      "safety_rules": [
+        "Always use -dry-run first to preview changes",
+        "Always pass -change when one change is in scope (without it, syncs every change)",
+        "Confirm git remote points to the right repo"
+      ],
+      "examples": [
+        "specsync -dry-run -change my-change",
+        "specsync -change my-change",
+        "specsync sync -dry-run -change my-change"
+      ]
+    },
+    "trace": {
+      "command": "trace",
+      "description": "Trace dependencies and relationships of a change.",
+      "mutates": false,
+      "workflow": {
+        "position": "debugging",
+        "related_before": [
+          "changes"
+        ]
+      },
+      "flags": [
+        {
+          "name": "change",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "scope to a single change slug"
+        },
+        {
+          "name": "json",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "emit JSON"
+        },
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "since",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "range start (default: latest tag)"
+        },
+        {
+          "name": "store",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "registered OpenSpec store id to operate on (default: openspec/config.yaml `store:`, else ./openspec)"
+        },
+        {
+          "name": "until",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "range end (default: HEAD)"
+        }
+      ],
+      "safety_rules": [
+        "Read-only operation"
+      ],
+      "examples": [
+        "specsync trace",
+        "specsync trace -change my-change",
+        "specsync trace -json"
+      ]
+    },
+    "validate": {
+      "command": "validate",
+      "description": "Validate OpenSpec change structure.",
+      "mutates": false,
+      "workflow": {
+        "position": "validation"
+      },
+      "flags": [
+        {
+          "name": "json",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "output as JSON"
+        },
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "store",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "registered OpenSpec store id to operate on (default: openspec/config.yaml `store:`, else ./openspec)"
+        }
+      ],
+      "safety_rules": [
+        "Read-only operation",
+        "Run before syncing"
+      ],
+      "examples": [
+        "specsync validate",
+        "specsync validate -json"
+      ]
+    },
+    "verify": {
+      "command": "verify",
+      "description": "Verify PR references to their change issues.",
+      "mutates": false,
+      "workflow": {
+        "position": "pre-merge",
+        "related_before": [
+          "pr-body"
+        ]
+      },
+      "flags": [
+        {
+          "name": "change",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "verify this change against its own spec deltas (OpenSpec's Verify phase)"
+        },
+        {
+          "name": "checklist",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "print only the acceptance checklist, for pasting into a PR"
+        },
+        {
+          "name": "json",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "output as JSON"
+        },
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "repo",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "target repo as owner/name (default: auto-detect from git remote)"
+        },
+        {
+          "name": "store",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "registered OpenSpec store id to operate on (default: openspec/config.yaml `store:`, else ./openspec)"
+        }
+      ],
+      "safety_rules": [
+        "Run before merging a PR",
+        "All open PRs should have issue references"
+      ],
+      "examples": [
+        "specsync verify"
+      ]
+    },
+    "version": {
+      "command": "version",
+      "description": "Print the specsync version.",
+      "mutates": false,
+      "workflow": {
+        "position": "any"
+      },
+      "flags": [],
+      "safety_rules": [
+        "Read-only"
+      ],
+      "examples": [
+        "specsync version"
+      ]
+    }
+  }
+}

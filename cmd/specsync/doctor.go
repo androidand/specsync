@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"flag"
 	"fmt"
 	"os"
 	"os/exec"
@@ -81,46 +80,6 @@ type TokenAnalysisInfo struct {
 	DefaultLoaded int `json:"default_loaded"`
 	EstimatedMin  int `json:"estimated_min"`
 	EstimatedMax  int `json:"estimated_max"`
-}
-
-// runDoctor handles the doctor command.
-func runDoctor(args []string) {
-	fs := flag.NewFlagSet("doctor", flag.ExitOnError)
-	jsonFlag := fs.Bool("json", false, "emit machine-readable JSON output")
-	skipUpdate := fs.Bool("skip-skill-update", false, "skip auto-updating skill files")
-	if err := fs.Parse(reorderFlagsFirst(args)); err != nil {
-		fail(err)
-	}
-
-	// Auto-update skills unless --skip-skill-update is set
-	if !*skipUpdate && version != "" && version != "dev" {
-		if updateSkillsIfNeeded(version) {
-			fmt.Fprintf(os.Stderr, "\n")
-		}
-	}
-
-	remaining := fs.Args()
-	subcommand := "default"
-	if len(remaining) > 0 {
-		subcommand = remaining[0]
-	}
-
-	switch subcommand {
-	case "default", "claude":
-		doctorClaude(*jsonFlag)
-	case "install":
-		doctorInstall(*jsonFlag)
-	case "context":
-		doctorContext(*jsonFlag)
-	case "skill":
-		doctorSkill(*jsonFlag)
-	case "store":
-		doctorStore(*jsonFlag)
-	default:
-		fmt.Fprintf(os.Stderr, "specsync doctor: unknown subcommand %q\n", subcommand)
-		fmt.Fprintf(os.Stderr, "Available: claude, install, context, skill, store\n")
-		os.Exit(2)
-	}
 }
 
 // doctorClaude provides Claude Code specific diagnostics.

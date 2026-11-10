@@ -49,8 +49,8 @@ type LinkResult struct {
 type linkEntryKind int
 
 const (
-	kindSlug linkEntryKind = iota
-	kindIssueRef // #N, owner/repo#N, URL
+	kindSlug     linkEntryKind = iota
+	kindIssueRef               // #N, owner/repo#N, URL
 )
 
 // linkEntry is a classified argument.

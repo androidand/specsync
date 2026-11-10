@@ -576,3 +576,20 @@ func TestMakeSpecSource(t *testing.T) {
 		t.Errorf("error = %q, should mention 'unknown spec source'", err.Error())
 	}
 }
+
+func TestTopologyIsADeprecatedAliasOfStatus(t *testing.T) {
+	cmd, rest, err := resolveSubcommand([]string{"topology", "-json"})
+	if err != nil || cmd != "status" || len(rest) != 1 || rest[0] != "-json" {
+		t.Fatalf("got cmd=%q rest=%v err=%v", cmd, rest, err)
+	}
+	if _, ok := lookupCommand("topology"); ok {
+		t.Fatal("the alias must not be a registered command, so it stays out of help and docs")
+	}
+}
+
+func TestVersionFlagIgnoresExtraArguments(t *testing.T) {
+	cmd, rest, err := resolveSubcommand([]string{"--version", "-x"})
+	if err != nil || cmd != "version" || len(rest) != 0 {
+		t.Fatalf("got cmd=%q rest=%v err=%v", cmd, rest, err)
+	}
+}
