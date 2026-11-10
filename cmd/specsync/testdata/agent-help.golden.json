@@ -155,11 +155,25 @@
           "description": "change to archive (required)"
         },
         {
+          "name": "comment",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "closing comment, posted before the close"
+        },
+        {
           "name": "dry-run",
           "type": "boolean",
           "required": false,
           "default": false,
           "description": "print the plan without making changes"
+        },
+        {
+          "name": "duplicate-of",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "original issue number or URL, required with -reason duplicate"
         },
         {
           "name": "force",
@@ -174,6 +188,13 @@
           "required": false,
           "default": "openspec",
           "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "reason",
+          "type": "string",
+          "required": false,
+          "default": "completed",
+          "description": "why the issue closes: completed, not-planned or duplicate (the last two need no -force)"
         },
         {
           "name": "repo",
@@ -199,11 +220,14 @@
       ],
       "safety_rules": [
         "Use -dry-run to preview before archiving",
-        "Refuses unchecked-task changes unless -force is set"
+        "Refuses unchecked-task changes unless -force is set, except with -reason not-planned or duplicate",
+        "-reason duplicate needs -duplicate-of; -comment is posted before the close and, if it fails, the issue stays open"
       ],
       "examples": [
         "specsync archive -change my-change -dry-run",
-        "specsync archive -change my-change -retain move"
+        "specsync archive -change my-change -retain move",
+        "specsync archive -change my-change -reason not-planned -comment 'dropped: superseded'",
+        "specsync archive -change my-change -reason duplicate -duplicate-of 42"
       ]
     },
     "audit": {

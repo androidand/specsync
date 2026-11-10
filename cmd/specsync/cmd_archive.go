@@ -20,6 +20,10 @@ type archiveCmd struct {
 	retain    *string
 	force     *bool
 	dryRun    *bool
+
+	reason      *string
+	duplicateOf *string
+	comment     *string
 }
 
 func init() { Register(&archiveCmd{}) }
@@ -34,11 +38,14 @@ func (*archiveCmd) Spec() Spec {
 		Required: []string{"change"},
 		Safety: []string{
 			"Use -dry-run to preview before archiving",
-			"Refuses unchecked-task changes unless -force is set",
+			"Refuses unchecked-task changes unless -force is set, except with -reason not-planned or duplicate",
+			"-reason duplicate needs -duplicate-of; -comment is posted before the close and, if it fails, the issue stays open",
 		},
 		Examples: []string{
 			"specsync archive -change my-change -dry-run",
 			"specsync archive -change my-change -retain move",
+			"specsync archive -change my-change -reason not-planned -comment 'dropped: superseded'",
+			"specsync archive -change my-change -reason duplicate -duplicate-of 42",
 		},
 	}
 }
@@ -50,6 +57,9 @@ func (cm *archiveCmd) Flags(fs *flag.FlagSet) {
 	cm.retain = fs.String("retain", "", "retention policy: move (keep) or prune (delete)")
 	cm.force = fs.Bool("force", false, "archive even when tasks are unchecked")
 	cm.dryRun = fs.Bool("dry-run", false, "print the plan without making changes")
+	cm.reason = fs.String("reason", "completed", "why the issue closes: completed, not-planned or duplicate (the last two need no -force)")
+	cm.duplicateOf = fs.String("duplicate-of", "", "original issue number or URL, required with -reason duplicate")
+	cm.comment = fs.String("comment", "", "closing comment, posted before the close")
 }
 
 func (cm *archiveCmd) Run(_ context.Context, args []string) error {
@@ -92,6 +102,9 @@ func (cm *archiveCmd) run(args []string) {
 		Retain:      retainPolicy,
 		Force:       *force,
 		DryRun:      *dryRun,
+		Reason:      *cm.reason,
+		DuplicateOf: *cm.duplicateOf,
+		Comment:     *cm.comment,
 	})
 	if err != nil {
 		fail(err)
@@ -101,7 +114,7 @@ func (cm *archiveCmd) run(args []string) {
 		fmt.Println(line)
 	}
 
-	if result.UncheckedTasks > 0 && !*force {
+	if result.UncheckedTasks > 0 && !*force && (*cm.reason == "" || *cm.reason == specsync.CloseReasonCompleted) {
 		fmt.Fprintln(os.Stderr, "specsync: archive refused — use -force to override")
 		os.Exit(1)
 	}

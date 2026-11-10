@@ -88,6 +88,9 @@ changelog entry as a real bug in this project, same severity as a failing test.
 
 - When work is complete, ensure tasks are checked, sync once more, and archive
   the completed OpenSpec change.
+- An abandoned or duplicate change is archived with the matching reason, not left behind:
+  `specsync archive -change <slug> -reason not-planned` or
+  `-reason duplicate -duplicate-of <issue>` (no `-force` needed; add `-comment` to say why).
 
 ## Branches, Worktrees & PRs
 
