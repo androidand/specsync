@@ -115,6 +115,7 @@ specsync agent-help                # overview
 - `changelog` — Generate release notes from OpenSpec changes and commits.
 - `pr-body` — Generate the correct PR body fragment for a change.
 - `release-plan` — Inspect release impact and generate release notes.
+- `review-map` — Turn a branch into a review checklist, or prove a rewritten branch has the same content.
 - `validate` — Validate OpenSpec change structure.
 - `verify` — Verify PR references to their change issues, or with -refs the commit and request references in change documents.
 
