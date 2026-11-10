@@ -1560,6 +1560,13 @@
           "description": "include archived changes"
         },
         {
+          "name": "budget",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "advisory size budget for the size flags, e.g. files=15,lines=400,commits=30 (default: the change's budget line, then $SPECSYNC_BUDGET, then built-in limits)"
+        },
+        {
           "name": "change",
           "type": "string",
           "required": false,
@@ -1572,6 +1579,13 @@
           "required": false,
           "default": false,
           "description": "list every change instead of the current work"
+        },
+        {
+          "name": "exclude",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "glob of paths left out of the size counts (repeatable), e.g. go.sum"
         },
         {
           "name": "json",
@@ -1603,7 +1617,8 @@
         "specsync status -everything",
         "specsync status -change my-change -json",
         "specsync status -state=off",
-        "specsync status -state=fresh"
+        "specsync status -state=fresh",
+        "specsync status -budget files=15,lines=400 -exclude go.sum"
       ]
     },
     "sync": {
@@ -1869,6 +1884,27 @@
       },
       "flags": [
         {
+          "name": "base",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "with -size, the base to measure against (default: origin/HEAD)"
+        },
+        {
+          "name": "branch",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "with -size, the branch to measure (default: the checked-out one)"
+        },
+        {
+          "name": "budget",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "with -size, the budget, e.g. files=15,lines=400,commits=30 (default: $SPECSYNC_BUDGET, then built-in limits)"
+        },
+        {
           "name": "change",
           "type": "string",
           "required": false,
@@ -1881,6 +1917,20 @@
           "required": false,
           "default": false,
           "description": "print only the acceptance checklist, for pasting into a PR"
+        },
+        {
+          "name": "exclude",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "with -size, a glob of paths left out of the counts (repeatable)"
+        },
+        {
+          "name": "fail-on-oversized",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "with -size, exit non-zero when a budget limit is exceeded"
         },
         {
           "name": "fail-on-stale",
@@ -1918,6 +1968,13 @@
           "description": "target repo as owner/name (default: auto-detect from git remote)"
         },
         {
+          "name": "size",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "report whether a branch is too large or mixes commit scopes (advisory; exits 0 unless -fail-on-oversized)"
+        },
+        {
           "name": "store",
           "type": "string",
           "required": false,
@@ -1933,7 +1990,9 @@
       "examples": [
         "specsync verify",
         "specsync verify -refs",
-        "specsync verify -refs -fail-on-stale docs/runbook.md"
+        "specsync verify -refs -fail-on-stale docs/runbook.md",
+        "specsync verify -size -branch feat/42-thing",
+        "specsync verify -size -fail-on-oversized -budget files=15,lines=400"
       ]
     },
     "version": {
