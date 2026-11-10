@@ -36,9 +36,9 @@ Depends on `ways-of-working-and-next` slices 0 and 1 for config. Slice 4 also ne
 - contract: PR prep fails with a reason. PR open needs confirmations and uses a short generated body.
 - budget: files<=12, lines<=450
 
-- [ ] 4.1 `pr prep`: tasks, freshness, stamp, size budget
-- [ ] 4.2 `pr open` with confirmations from config and the body from `concise-change-text`
-- [ ] 4.3 Tests: each failing check, missing confirmation, success
+- [x] 4.1 `pr prep`: tasks, freshness, stamp, size budget
+- [x] 4.2 `pr open` with confirmations from config and the body from `concise-change-text`
+- [x] 4.3 Tests: each failing check, missing confirmation, success
 
 ## Slice 5: Keep branches current
 - after: 1

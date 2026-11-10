@@ -225,3 +225,117 @@ func TestUpdatePlansWithoutApplyAndAppliesWithIt(t *testing.T) {
 		t.Fatalf("err=%v\n%s", err, out)
 	}
 }
+
+// prRepo is a feature branch with a spec, pushed, with gates trusted and
+// stamped, and a gh that records `pr create` calls.
+func prRepo(t *testing.T, cfg string) (repo string, env []string, ghLog string) {
+	t.Helper()
+	root := t.TempDir()
+	origin := filepath.Join(root, "origin.git")
+	gitIn(t, root, "init", "-q", "--bare", "-b", "main", origin)
+	repo = filepath.Join(root, "clone")
+	gitIn(t, root, "clone", "-q", origin, repo)
+	_, env = firstUseEnv(t)
+	env = withIdentity(env)
+	env = append(env, "SPECSYNC_TRUST_FILE="+filepath.Join(t.TempDir(), "trust.json"))
+	gitIn(t, repo, "checkout", "-q", "-b", "main")
+	os.MkdirAll(filepath.Join(repo, "openspec", "changes", "add-x"), 0o755)
+	os.WriteFile(filepath.Join(repo, "openspec", "specsync.yml"), []byte(cfg), 0o644)
+	os.WriteFile(filepath.Join(repo, "openspec", "changes", "add-x", "proposal.md"), []byte("# Add x\n\n## Why\n\nBecause.\n"), 0o644)
+	os.WriteFile(filepath.Join(repo, "openspec", "changes", "add-x", "tasks.md"), []byte("- [x] 1.1 a\n"), 0o644)
+	commitAll(t, repo, "base")
+	gitIn(t, repo, "push", "-q", "-u", "origin", "main")
+	gitIn(t, repo, "remote", "set-head", "origin", "main")
+	gitIn(t, repo, "checkout", "-q", "-b", "feat/add-x")
+	os.WriteFile(filepath.Join(repo, "x.txt"), []byte("x\n"), 0o644)
+	commitAll(t, repo, "work")
+	gitIn(t, repo, "push", "-q", "-u", "origin", "feat/add-x")
+
+	ghLog = filepath.Join(t.TempDir(), "gh.log")
+	bin := t.TempDir()
+	stub := "#!/bin/sh\necho \"$@\" >> " + ghLog + "\ncase \"$1 $2\" in\n  \"pr create\") cat >/dev/null; echo https://github.com/acme/app/pull/9 ;;\n  \"pr list\") echo '[]' ;;\n  *) echo '[]' ;;\nesac\n"
+	os.WriteFile(filepath.Join(bin, "gh"), []byte(stub), 0o755)
+	env = append(env, "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	return repo, env, ghLog
+}
+
+func TestPrPrepFailsNamingTheGatesStep(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env, _ := prRepo(t, "gates:\n  - {name: t, run: \"true\"}\n")
+	out, err := runIn(t, bin, repo, env, "pr", "prep")
+	if err == nil || !strings.Contains(out, "gates") || !strings.Contains(out, "specsync gates") {
+		t.Fatalf("err=%v\n%s", err, out)
+	}
+	runIn(t, bin, repo, env, "trust", "-yes")
+	if out, err := runIn(t, bin, repo, env, "gates"); err != nil {
+		t.Fatalf("gates: %v\n%s", err, out)
+	}
+	out, err = runIn(t, bin, repo, env, "pr", "prep")
+	if err != nil || !strings.Contains(out, "ready") {
+		t.Fatalf("err=%v\n%s", err, out)
+	}
+}
+
+func TestPrOpenRefusesMissingConfirmationsAndListsThem(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env, ghLog := prRepo(t, "pr:\n  confirm: [tests-run, manual-test]\n")
+	out, err := runIn(t, bin, repo, env, "pr", "open", "-confirm", "tests-run")
+	if err == nil || !strings.Contains(out, "manual-test") || strings.Contains(out, "missing confirmation: tests-run") {
+		t.Fatalf("err=%v\n%s", err, out)
+	}
+	if b, _ := os.ReadFile(ghLog); strings.Contains(string(b), "pr create") {
+		t.Fatal("nothing may be created without every confirmation")
+	}
+}
+
+func TestPrOpenDryRunShowsTheBodyAndCreatesNothing(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env, ghLog := prRepo(t, "flow: minimal\n")
+	out, err := runIn(t, bin, repo, env, "pr", "open", "-dry-run")
+	if err != nil || !strings.Contains(out, "DRY RUN") || !strings.Contains(out, "Add x") {
+		t.Fatalf("err=%v\n%s", err, out)
+	}
+	if b, _ := os.ReadFile(ghLog); strings.Contains(string(b), "pr create") {
+		t.Fatal("a dry run must not create anything")
+	}
+}
+
+func TestPrOpenCreatesOnceEverythingHoldsAndRefusesWhenPrepFails(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env, ghLog := prRepo(t, "pr:\n  confirm: [tests-run]\n")
+	out, err := runIn(t, bin, repo, env, "pr", "open", "-confirm", "tests-run")
+	if err != nil || !strings.Contains(out, "pull/9") {
+		t.Fatalf("err=%v\n%s", err, out)
+	}
+	b, _ := os.ReadFile(ghLog)
+	if !strings.Contains(string(b), "pr create") || !strings.Contains(string(b), "--head feat/add-x") || !strings.Contains(string(b), "--base main") {
+		t.Fatalf("gh calls: %s", b)
+	}
+	os.WriteFile(filepath.Join(repo, "dirty.txt"), []byte("d\n"), 0o644)
+	out, err = runIn(t, bin, repo, env, "pr", "open", "-confirm", "tests-run")
+	if err == nil || !strings.Contains(out, "uncommitted") {
+		t.Fatalf("a failing prep must stop open: err=%v\n%s", err, out)
+	}
+}
+
+func TestPrOpenRefusesAnUnpushedBranch(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env, ghLog := prRepo(t, "flow: minimal\n")
+	os.WriteFile(filepath.Join(repo, "y.txt"), []byte("y\n"), 0o644)
+	commitAll(t, repo, "more")
+	out, err := runIn(t, bin, repo, env, "pr", "open")
+	if err == nil || !strings.Contains(out, "push") {
+		t.Fatalf("err=%v\n%s", err, out)
+	}
+	if b, _ := os.ReadFile(ghLog); strings.Contains(string(b), "pr create") {
+		t.Fatal("an unpushed branch must not be opened")
+	}
+}
+
+func TestPrNeedsAKnownVerb(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env, _ := prRepo(t, "flow: minimal\n")
+	if out, err := runIn(t, bin, repo, env, "pr", "merge"); err == nil || !strings.Contains(out, "prep or open") {
+		t.Fatalf("err=%v\n%s", err, out)
+	}
+}
