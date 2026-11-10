@@ -409,13 +409,23 @@ it as a spec and keep syncing:
 ```bash
 specsync pull -issue 42              # issue 42 -> openspec/changes/<slug>/
 specsync pull -issue 42 -dry-run     # read the issue, show what would be written
+specsync pull -issue 42 -init        # repo has no openspec/: make a scratch one first
 specsync pull -issue 42 -change my-feature   # override the derived slug
 ```
 
 `pull` writes `proposal.md` (from the issue body, titled by the issue) and
-`tasks.md` (from a `## Tasks` checklist when present), and links the change to
-the issue so a later `specsync` push updates that same issue. A dry run reads the
-issue but writes nothing.
+`tasks.md` (from a `## Tasks` checklist when present, else an empty starter so the
+change validates), and links the change to the issue so a later `specsync` push
+updates that same issue. A dry run reads the issue but writes nothing.
+
+A repo with no `openspec/` is normal. `specsync init` (or `pull -init`) creates a
+scratch `openspec/changes/` and adds `/openspec/` to the repo's local git exclude
+file (`git rev-parse --git-path info/exclude`, which a clone shares with its linked
+worktrees; it never edits a tracked `.gitignore`). It is idempotent, refuses where `openspec/` is
+tracked, and nothing creates the folder without it. To keep specs in a shared
+store instead, pass `-store <id>` or set `SPECSYNC_DEFAULT_STORE` (or
+`default-store:` in `~/.config/specsync/config.yaml`); the default store applies
+only when there is no local `openspec/`.
 
 ### `scan` — what already exists here?
 

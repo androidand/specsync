@@ -21,17 +21,21 @@ type PullOptions struct {
 
 // PullResult reports what a pull produced (or would produce on a dry run).
 type PullResult struct {
-	Slug        string
-	Dir         string
-	IssueID     string // resolved issue ID (from -issue flag or branch name)
-	IssueURL    string
-	Proposal    string
-	Tasks       string
-	Links       []string // URLs from the ## Related section, for dry-run display
-	OriginalAsk string   // from ## Original ask section of the issue
-	DesignNotes string   // from ## Design notes section of the issue
-	Discoveries string   // from ## Discoveries section of the issue
-	Marker      string   // identity marker upserted into the source issue
+	Slug     string
+	Dir      string
+	IssueID  string // resolved issue ID (from -issue flag or branch name)
+	IssueURL string
+	Proposal string
+	Tasks    string
+	// StarterTasks is set when the issue carried no tasks and the change has no
+	// tasks.md yet, so pull writes (or on a dry run would write) an empty
+	// starter file; without one a fresh change fails validate.
+	StarterTasks bool
+	Links        []string // URLs from the ## Related section, for dry-run display
+	OriginalAsk  string   // from ## Original ask section of the issue
+	DesignNotes  string   // from ## Design notes section of the issue
+	Discoveries  string   // from ## Discoveries section of the issue
+	Marker       string   // identity marker upserted into the source issue
 	// MarkerPresent reports whether the source issue already carried the marker,
 	// i.e. no write was (or would be) needed. Drives the dry-run preview.
 	MarkerPresent bool
@@ -45,6 +49,11 @@ type PullResult struct {
 	BoardConfigured bool
 	Board           BoardPlan
 }
+
+// starterTasks is the empty tasks.md pull writes when the issue has no task
+// list: it makes a new change pass validate without inventing placeholder
+// tasks that the next sync would push to the issue.
+const starterTasks = "# Tasks\n\n"
 
 // Pull materializes a local change from an existing issue. The change
 // is linked to the source issue (via a cached ref) so a later push updates that
@@ -153,6 +162,11 @@ func Pull(ctx context.Context, opts PullOptions) (PullResult, error) {
 		TitleSuggestion: titleSuggestion(item.Title),
 	}
 
+	if tasks == "" {
+		_, statErr := os.Stat(filepath.Join(res.Dir, "tasks.md"))
+		res.StarterTasks = os.IsNotExist(statErr)
+	}
+
 	// Project onto the board when a target is configured and the provider supports
 	// it. Done for both dry and real runs (the projector makes no mutation on a
 	// dry run); skipped entirely when unconfigured.
@@ -194,6 +208,11 @@ func Pull(ctx context.Context, opts PullOptions) (PullResult, error) {
 		meta.BaselineTaskCount = &baseline
 		if err := SaveChangeMetadata(res.Dir, *meta); err != nil {
 			return PullResult{}, fmt.Errorf("save baseline task count: %w", err)
+		}
+	}
+	if res.StarterTasks {
+		if err := os.WriteFile(filepath.Join(res.Dir, "tasks.md"), []byte(starterTasks), 0o644); err != nil {
+			return PullResult{}, fmt.Errorf("write tasks: %w", err)
 		}
 	}
 	// Preserve Related links as links.md so the next push renders them.

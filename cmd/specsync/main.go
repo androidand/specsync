@@ -27,7 +27,7 @@ var version = "dev"
 // that doesn't start with "-" is an unrecognized bare word, not a flag set
 // for the default sync action.
 var knownSubcommands = map[string]bool{
-	"pull": true, "link": true, "scan": true, "trace": true,
+	"init": true, "pull": true, "link": true, "scan": true, "trace": true,
 	"release-plan": true, "changelog": true, "install-skill": true,
 	"changes": true, "set-stage": true, "set-priority": true, "note": true,
 	"sync": true, "audit": true, "audit-tasks": true, "validate": true,
@@ -94,13 +94,15 @@ func deprecatedSlugFlag(args []string) error {
 func main() {
 	cmd, rest, err := resolveSubcommand(os.Args[1:])
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "specsync: %v\n\nRun with no subcommand (optionally with flags) to sync, or use one of: pull, adopt, link, scan, trace, release-plan, changelog, install-skill, changes, set-stage, set-priority, note, audit, audit-tasks, validate, spinoff, pr-body, verify, idea, ideas, archive, epic, topology\n", err)
+		fmt.Fprintf(os.Stderr, "specsync: %v\n\nRun with no subcommand (optionally with flags) to sync, or use one of: init, pull, adopt, link, scan, trace, release-plan, changelog, install-skill, changes, set-stage, set-priority, note, audit, audit-tasks, validate, spinoff, pr-body, verify, idea, ideas, archive, epic, topology\n", err)
 		os.Exit(2)
 	}
 
 	switch cmd {
 	case "version":
 		fmt.Println("specsync " + versionString())
+	case "init":
+		runInit(rest)
 	case "pull":
 		runPull(rest)
 	case "adopt":
@@ -596,6 +598,7 @@ func runPull(args []string) {
 	project := fs.String("project", "", "target GitHub Projects board as owner/number (default: openspec/specsync.yml board; unset = no board)")
 	assignee := fs.String("assignee", "", "board assignee login (default: the acting viewer, \"me\")")
 	statusMap := fs.String("status-map", "", "stage→Status overrides as stage=Name pairs, e.g. \"active=In Progress,archived=Done\" (default: $SPECSYNC_STATUS_MAP)")
+	initFlag := fs.Bool("init", false, "create a scratch openspec/ first when there is none (see `specsync init`); nothing is created without it")
 	worktree := fs.Bool("worktree", false, "create or reuse a worktree and run pull inside it")
 	worktreeDir := fs.String("worktree-dir", "", "worktree base directory (default: $SPECSYNC_WORKTREE_DIR or ../worktrees)")
 	if err := deprecatedSlugFlag(args); err != nil {
@@ -604,7 +607,10 @@ func runPull(args []string) {
 	_ = fs.Parse(args)
 	checkArgs(fs, args, 0)
 
-	abs := resolveRoot(fs, openspec, storeFlag).Dir
+	if *worktree && *initFlag {
+		fail(fmt.Errorf("-init cannot be combined with -worktree: run specsync init inside the worktree, then pull there"))
+	}
+	abs := resolveRootInit(fs, openspec, storeFlag, *initFlag, *dryRun).Dir
 	repoRoot := filepath.Dir(abs)
 
 	resolvedBoard, err := specsync.ResolveBoard(*project, repoRoot)
@@ -647,6 +653,8 @@ func runPull(args []string) {
 		printPreview("proposal.md", res.Proposal)
 		if res.Tasks != "" {
 			printPreview("tasks.md", res.Tasks)
+		} else if res.StarterTasks {
+			fmt.Println("\nwould write an empty starter tasks.md (the issue has no task list)")
 		}
 		if res.MarkerPresent {
 			fmt.Printf("\nissue %s already carries the marker %s (no edit needed)\n", res.IssueID, res.Marker)
@@ -678,6 +686,8 @@ func runPull(args []string) {
 	fmt.Println("  + specsync.yml (target)")
 	if res.Tasks != "" {
 		fmt.Println("  + tasks.md")
+	} else if res.StarterTasks {
+		fmt.Println("  + tasks.md (empty starter; the issue had no task list)")
 	}
 	if res.TitleSuggestion != "" {
 		fmt.Printf("  title could be tighter: %q — edit the proposal.md H1 if you agree\n", res.TitleSuggestion)
