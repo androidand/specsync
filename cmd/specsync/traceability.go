@@ -286,11 +286,3 @@ func branchMatchesChange(branch, slug string) bool {
 	}
 	return false
 }
-
-// prBodyReferencesIssue reports whether body contains a reference to issue number.
-// Matches patterns like "#42", "Closes #42", "Part of #42", "Refs #42", etc.
-func prBodyReferencesIssue(body, issueNum string) bool {
-	// Look for #N pattern where N matches the issue number.
-	refPattern := "#" + issueNum
-	return strings.Contains(body, refPattern)
-}

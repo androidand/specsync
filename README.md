@@ -108,6 +108,7 @@ appear on someone else's repository.
 | `audit-tasks` | Audit that task status matches code changes (dogfooding). |
 | `changes` | List all OpenSpec changes with status. |
 | `ideas` | List open stage:intake issues for the repo. |
+| `overview` | List all work in all repositories, grouped by epic. |
 | `relate` | Show the work connected to a change or a file path. |
 | `scan` | Scan for existing work in a code area or topic. |
 | `status` | Show where your current work stands, or every change with -everything. |
@@ -484,6 +485,27 @@ tracked, and nothing creates the folder without it. To keep specs in a shared
 store instead, pass `-store <id>` or set `SPECSYNC_DEFAULT_STORE` (or
 `default-store:` in `~/.config/specsync/config.yaml`); the default store applies
 only when there is no local `openspec/`.
+
+### See all your work
+
+`specsync status` in a worktree shows where that work stands. When its change has an
+epic, blockers or links, it also lists every related item in the clones around it,
+marks where you are, and ends with the next step. `specsync overview` lists all work
+in all repos under the workspace roots (`-root`, `SPECSYNC_ROOTS`, else the folder
+holding the current clone, two levels deep), grouped by epic, then work under no
+epic, then branches with no change:
+
+```bash
+specsync overview -attention             # only work that needs a look
+specsync overview -repo api -epic #1     # scopes combine
+specsync overview -mine -json            # for agents
+```
+
+Relations come only from what is asserted: an epic link confirmed by the tracker,
+`## Blocked by` / `## Blocks` in `links.md`, and the request that closes an issue,
+which also names a change's branch when its name follows no convention. Both
+commands are read-only, and mark a result incomplete, with the reason, when a source
+such as the tracker was unreachable.
 
 ### `scan` — what already exists here?
 

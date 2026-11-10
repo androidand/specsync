@@ -87,6 +87,7 @@ specsync agent-help                # overview
 - `audit-tasks` — Audit that task status matches code changes (dogfooding).
 - `changes` — List all OpenSpec changes with status.
 - `ideas` — List open stage:intake issues for the repo.
+- `overview` — List all work in all repositories, grouped by epic.
 - `relate` — Show the work connected to a change or a file path.
 - `scan` — Scan for existing work in a code area or topic.
 - `status` — Show where your current work stands, or every change with -everything.

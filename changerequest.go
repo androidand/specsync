@@ -3,6 +3,7 @@ package specsync
 import (
 	"context"
 	"sort"
+	"strings"
 )
 
 // ChangeRequest is a pull or merge request as the work provider reports it.
@@ -13,12 +14,16 @@ type ChangeRequest struct {
 	State          string              `json:"state"` // open, closed, merged
 	Draft          bool                `json:"draft"`
 	Branch         string              `json:"branch"` // head branch
+	Author         string              `json:"author,omitempty"`
 	Base           string              `json:"base,omitempty"`
 	ReviewDecision string              `json:"reviewDecision,omitempty"` // approved, changes_requested, review_required
 	Mergeable      string              `json:"mergeable,omitempty"`      // mergeable, conflicting, unknown
 	Checks         ChangeRequestChecks `json:"checks"`
 	Size           ChangeRequestSize   `json:"size"`
 	Closes         []string            `json:"closes,omitempty"` // issue numbers it closes
+	// ClosesRefs names the same issues as owner/repo#N when the provider says
+	// which repository each belongs to.
+	ClosesRefs []string `json:"closesRefs,omitempty"`
 	// HeadSHA is the commit the request's head branch pointed at.
 	HeadSHA string `json:"headSha,omitempty"`
 	// Fork is true when the request comes from another repository, so its head
@@ -50,6 +55,8 @@ type ChangeRequestSize struct {
 type ChangeRequestSet struct {
 	Requests  []ChangeRequest
 	Truncated bool
+	// Repo is the repository the listing came from.
+	Repo string
 }
 
 // ChangeRequestSource is an optional provider capability: list a repo's
@@ -150,4 +157,41 @@ func sortedUnique(in []string) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// ForIssue returns the request that closes the issue (issueRepo#id), as the
+// provider asserts: an open one if any, else the newest. Requests from forks
+// are ignored. A request that names the repository of each closed issue
+// matches only that one; a bare number matches only when the listing came from
+// issueRepo itself.
+func (s ChangeRequestSet) ForIssue(issueRepo, id string) *ChangeRequest {
+	var best *ChangeRequest
+	for i := range s.Requests {
+		c := &s.Requests[i]
+		if c.Fork {
+			continue
+		}
+		if len(c.ClosesRefs) > 0 {
+			if !containsString(c.ClosesRefs, issueRepo+"#"+id) {
+				continue
+			}
+		} else if s.Repo != issueRepo || !containsString(c.Closes, id) {
+			continue
+		}
+		switch {
+		case best == nil:
+			best = c
+		case c.State == "open" && best.State != "open":
+			best = c
+		case (c.State == "open") == (best.State == "open") && c.Number > best.Number:
+			best = c
+		}
+	}
+	return best
+}
+
+// PRBodyReferencesIssue reports whether body contains a reference to the issue
+// number, such as "#42", "Closes #42" or "Part of #42".
+func PRBodyReferencesIssue(body, issueNum string) bool {
+	return strings.Contains(body, "#"+issueNum)
 }

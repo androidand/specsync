@@ -26,12 +26,15 @@ type ghCheck struct {
 }
 
 type ghChangeRequest struct {
-	Number         int    `json:"number"`
-	URL            string `json:"url"`
-	State          string `json:"state"`
-	IsDraft        bool   `json:"isDraft"`
-	HeadRefName    string `json:"headRefName"`
-	HeadRefOid     string `json:"headRefOid"`
+	Number      int    `json:"number"`
+	URL         string `json:"url"`
+	State       string `json:"state"`
+	IsDraft     bool   `json:"isDraft"`
+	HeadRefName string `json:"headRefName"`
+	HeadRefOid  string `json:"headRefOid"`
+	Author      struct {
+		Login string `json:"login"`
+	} `json:"author"`
 	CrossRepo      bool   `json:"isCrossRepository"`
 	BaseRefName    string `json:"baseRefName"`
 	ReviewDecision string `json:"reviewDecision"`
@@ -40,7 +43,13 @@ type ghChangeRequest struct {
 	Deletions      int    `json:"deletions"`
 	ChangedFiles   int    `json:"changedFiles"`
 	Closing        []struct {
-		Number int `json:"number"`
+		Number     int `json:"number"`
+		Repository struct {
+			Name  string `json:"name"`
+			Owner struct {
+				Login string `json:"login"`
+			} `json:"owner"`
+		} `json:"repository"`
 	} `json:"closingIssuesReferences"`
 	Checks []ghCheck `json:"statusCheckRollup"`
 }
@@ -80,7 +89,7 @@ func (p *GitHubProvider) ChangeRequests(ctx context.Context) (ChangeRequestSet, 
 func (p *GitHubProvider) listChangeRequests(ctx context.Context, state string, limit int) ([]ghChangeRequest, error) {
 	args := append([]string{"pr", "list"}, p.repoFlag()...)
 	args = append(args, "--state", state, "--limit", strconv.Itoa(limit), "--json",
-		"number,url,state,isDraft,headRefName,headRefOid,isCrossRepository,baseRefName,reviewDecision,mergeable,"+
+		"number,url,state,isDraft,headRefName,headRefOid,author,isCrossRepository,baseRefName,reviewDecision,mergeable,"+
 			"additions,deletions,changedFiles,closingIssuesReferences,statusCheckRollup")
 	out, err := p.run(ctx, args...)
 	if err != nil {
@@ -171,6 +180,7 @@ func (r ghChangeRequest) toChangeRequest() ChangeRequest {
 		Draft:          r.IsDraft,
 		Branch:         r.HeadRefName,
 		HeadSHA:        r.HeadRefOid,
+		Author:         r.Author.Login,
 		Fork:           r.CrossRepo,
 		Base:           r.BaseRefName,
 		ReviewDecision: strings.ToLower(r.ReviewDecision),
@@ -179,6 +189,9 @@ func (r ghChangeRequest) toChangeRequest() ChangeRequest {
 	}
 	for _, c := range r.Closing {
 		cr.Closes = append(cr.Closes, strconv.Itoa(c.Number))
+		if c.Repository.Name != "" && c.Repository.Owner.Login != "" {
+			cr.ClosesRefs = append(cr.ClosesRefs, c.Repository.Owner.Login+"/"+c.Repository.Name+"#"+strconv.Itoa(c.Number))
+		}
 	}
 	var failing []string
 	for _, c := range r.Checks {

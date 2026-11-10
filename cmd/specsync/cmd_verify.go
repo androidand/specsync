@@ -141,7 +141,7 @@ func (cm *verifyCmd) run(args []string) {
 		for _, ci := range changeIssues {
 			if branchMatchesChange(branch, ci.slug) {
 				// This PR belongs to this change. Check if the body references the issue.
-				if !prBodyReferencesIssue(pr.Body, ci.issueNum) {
+				if !specsync.PRBodyReferencesIssue(pr.Body, ci.issueNum) {
 					fmt.Printf("  WARNING: %s (branch %s) — no reference to #%s in PR body\n", pr.URL, branch, ci.issueNum)
 					warnings++
 				}
