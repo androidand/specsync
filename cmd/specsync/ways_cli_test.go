@@ -243,9 +243,9 @@ func TestFlowJSONCarriesNoEmptySlugPaths(t *testing.T) {
 
 func TestDoctorConfigNotesReservedKeys(t *testing.T) {
 	bin := buildSpecsyncBinary(t)
-	repo, env := waysRepo(t, "worktrees: {dir: ../w}\n")
+	repo, env := waysRepo(t, "cleanup: {remote_branch: keep}\n")
 	out, err := runIn(t, bin, repo, env, "doctor", "config")
-	if err != nil || !strings.Contains(out, "reserved for flow-verbs") {
+	if err != nil || !strings.Contains(out, "reserved for worktree-cleanup") {
 		t.Fatalf("err=%v\n%s", err, out)
 	}
 }

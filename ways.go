@@ -19,7 +19,19 @@ type Gate struct {
 	Optional bool
 }
 
-type WorktreeConfig struct{ Dir, Branch string }
+type WorktreeConfig struct {
+	Dir, Branch string
+	Hooks       []string
+}
+
+// SaveConfig is the `save:` section: what `specsync save` refuses.
+type SaveConfig struct {
+	ForbidTrailers []string
+	ForbidFiles    []string
+}
+
+// PRConfig is the `pr:` section: confirmations `specsync pr open` requires.
+type PRConfig struct{ Confirm []string }
 type CleanupConfig struct {
 	RemoteBranch string
 	Archive      bool
@@ -35,6 +47,8 @@ type Ways struct {
 	Steps     []string // effective steps, in order
 	Gates     []Gate
 	Worktrees WorktreeConfig
+	Save      SaveConfig
+	PR        PRConfig
 	Text      TextConfig
 	Cleanup   CleanupConfig
 	Sync      SyncConfig
@@ -63,10 +77,12 @@ var presets = map[string][]string{
 
 func presetNames() string { return "minimal, pr-review, strict" }
 
-var topLevelKeys = []string{"board", "ideas_repo", "flow", "gates", "worktrees", "text", "cleanup", "sync"}
+var topLevelKeys = []string{"board", "ideas_repo", "flow", "gates", "worktrees", "text", "cleanup", "sync", "save", "pr"}
 
 var sectionKeys = map[string][]string{
-	"worktrees": {"dir", "branch"},
+	"worktrees": {"dir", "branch", "hooks"},
+	"save":      {"forbid_trailers", "forbid_files"},
+	"pr":        {"confirm"},
 	"text":      append([]string{"profile", "headers", "filler", "template"}, textIntKeys...),
 	"cleanup":   {"remote_branch", "archive", "min_age_days", "hooks", "protect"},
 	"sync":      {"strategy", "after_review", "force"},
@@ -117,7 +133,7 @@ func ParseWays(data []byte) (Ways, []ConfigIssue) {
 	if n := root.Get("gates"); n != nil {
 		w.readGates(n, root.KeyLine["gates"], add)
 	}
-	for _, sec := range []string{"worktrees", "text", "cleanup", "sync"} {
+	for _, sec := range []string{"worktrees", "text", "cleanup", "sync", "save", "pr"} {
 		n := root.Get(sec)
 		if n == nil {
 			continue
@@ -200,10 +216,7 @@ func (w *Ways) readGates(n *YNode, line int, add addIssue) {
 	}
 }
 
-var reservedKeys = map[string]string{
-	"worktrees.dir":    "flow-verbs",
-	"worktrees.branch": "flow-verbs",
-}
+var reservedKeys = map[string]string{}
 
 func (w *Ways) readSection(sec string, n *YNode, add addIssue) {
 	for _, k := range n.Keys {
@@ -228,9 +241,32 @@ func (w *Ways) readSection(sec string, n *YNode, add addIssue) {
 		}
 		return b
 	}
+	stringList := func(key string) []string {
+		c := n.Get(key)
+		if c == nil {
+			return nil
+		}
+		if c.Kind != YList {
+			add(n.KeyLine[key], sec+"."+key, "%s must be a list", key)
+			return nil
+		}
+		var out []string
+		for _, item := range c.List {
+			if item.Kind != YScalar || item.Scalar == "" {
+				add(item.Line, sec+"."+key, "%s must be a list of text values", key)
+				continue
+			}
+			out = append(out, item.Scalar)
+		}
+		return out
+	}
 	switch sec {
 	case "worktrees":
-		w.Worktrees = WorktreeConfig{Dir: n.Str("dir"), Branch: n.Str("branch")}
+		w.Worktrees = WorktreeConfig{Dir: n.Str("dir"), Branch: n.Str("branch"), Hooks: stringList("hooks")}
+	case "save":
+		w.Save = SaveConfig{ForbidTrailers: stringList("forbid_trailers"), ForbidFiles: stringList("forbid_files")}
+	case "pr":
+		w.PR = PRConfig{Confirm: stringList("confirm")}
 	case "text":
 		w.Text.read(n, add)
 	case "cleanup":
