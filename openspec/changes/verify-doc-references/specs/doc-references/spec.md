@@ -20,18 +20,24 @@ the change's branch as `orphaned`, showing the commit's subject.
 - **THEN** it is reported as orphaned with its subject
 
 ### Requirement: Match references precisely
-specsync SHALL consider a token a commit hash only when it is 7 to 40 hexadecimal
-characters, stands alone as a word, and is written as inline code or follows the word
-"commit", and SHALL ignore other tokens without reporting them.
+specsync SHALL consider a token a commit hash only when it is 7 to 40 hexadecimal characters with at least one digit and one letter, stands alone as a word, and is written as inline code or follows the word "commit", "sha" or "fixed in". It SHALL ignore fenced code blocks, URLs, markdown anchors such as `(#2-output)` and file paths such as `docs/guide.md#4`, and SHALL NOT report a hash that names an object that is not a commit. A commit on any local or remote branch SHALL NOT be reported as orphaned. In a shallow clone an unresolved hash SHALL be reported as unknown, not stale.
 
 #### Scenario: Ordinary hex-looking word
 - **WHEN** a document contains the word `defaced` outside code
 - **THEN** it is not treated as a hash and nothing is reported
 
+#### Scenario: Anchor and file path
+- **WHEN** a document contains `(#2-output)` or `docs/guide.md#4`
+- **THEN** neither is treated as a request reference
+
 ### Requirement: Check request and issue references through the provider
 specsync SHALL check `#n` and `owner/repo#n` references through the work provider and report
 those that do not exist and the state of those that do, and SHALL skip this check with a
 status line when the provider cannot answer.
+
+#### Scenario: Reference that cannot be asked about
+- **WHEN** the repository cannot be resolved for a bare `#n`, or a number is not valid
+- **THEN** the reference is skipped with a status line and never reported as missing
 
 #### Scenario: Provider unavailable
 - **WHEN** the provider's tool is missing

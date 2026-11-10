@@ -1838,8 +1838,15 @@
     },
     "verify": {
       "command": "verify",
-      "description": "Verify PR references to their change issues.",
+      "description": "Verify PR references to their change issues, or with -refs the commit and request references in change documents.",
       "mutates": false,
+      "args": [
+        {
+          "name": "path",
+          "description": "with -refs: extra markdown files or folders to scan, besides the change folders",
+          "required": false
+        }
+      ],
       "workflow": {
         "position": "pre-merge",
         "related_before": [
@@ -1862,6 +1869,13 @@
           "description": "print only the acceptance checklist, for pasting into a PR"
         },
         {
+          "name": "fail-on-stale",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "with -refs: exit non-zero when a commit reference is stale or orphaned"
+        },
+        {
           "name": "json",
           "type": "boolean",
           "required": false,
@@ -1874,6 +1888,13 @@
           "required": false,
           "default": "openspec",
           "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "refs",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "report commit hashes and request references in change documents (and any paths given) that no longer resolve"
         },
         {
           "name": "repo",
@@ -1892,10 +1913,13 @@
       ],
       "safety_rules": [
         "Run before merging a PR",
-        "All open PRs should have issue references"
+        "All open PRs should have issue references",
+        "-refs is read-only and advisory: it never rewrites a document or suggests a replacement for a stale reference"
       ],
       "examples": [
-        "specsync verify"
+        "specsync verify",
+        "specsync verify -refs",
+        "specsync verify -refs -fail-on-stale docs/runbook.md"
       ]
     },
     "version": {

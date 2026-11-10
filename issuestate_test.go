@@ -43,6 +43,27 @@ func TestGitHubIssueStates_OneCallForManyRefs(t *testing.T) {
 	}
 }
 
+func TestGitHubIssueStates_PullRequestsResolveWithTheirState(t *testing.T) {
+	var query string
+	p := NewGitHubProviderFunc(func(_ context.Context, args ...string) (string, error) {
+		query = strings.Join(args, " ")
+		return `{"data":{"i0":{"issue":{"state":"MERGED"}},"i1":{"issue":{"state":"OPEN"}}}}`, nil
+	})
+	got, err := p.IssueStates(context.Background(), []Ref{
+		{Provider: "github:acme/app", ID: "7"},
+		{Provider: "github:acme/app", ID: "8"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(query, "... on PullRequest{state}") {
+		t.Errorf("the query must also cover pull requests: %s", query)
+	}
+	if got["github:acme/app#7"].State != "merged" || got["github:acme/app#8"].State != "open" {
+		t.Errorf("got %+v", got)
+	}
+}
+
 func TestGitHubIssueStates_MissingIssueIsUnknownForThatRefOnly(t *testing.T) {
 	p := NewGitHubProviderFunc(func(context.Context, ...string) (string, error) {
 		return "", errors.New(`gh api graphql -f query={i0:repository(owner:"acme",name:"app"){issue(number:1){state stateReason}} i1:repository(owner:"acme",name:"app"){issue(number:999){state stateReason}} }: exit status 1
@@ -116,7 +137,7 @@ func stubCountingAliases(calls *[]string) func(context.Context, ...string) (stri
 	return func(_ context.Context, args ...string) (string, error) {
 		q := strings.Join(args, " ")
 		*calls = append(*calls, q)
-		n := strings.Count(q, "issue(number:")
+		n := strings.Count(q, "issueOrPullRequest(number:")
 		var parts []string
 		for i := 0; i < n; i++ {
 			parts = append(parts, fmt.Sprintf(`"i%d":{"issue":{"state":"OPEN","stateReason":null}}`, i))
@@ -141,7 +162,7 @@ func TestGitHubIssueStates_BatchesOfFiftyAndNoDuplicates(t *testing.T) {
 		t.Fatalf("120 distinct refs need 3 calls of at most 50, got %d", len(calls))
 	}
 	for _, q := range calls {
-		if n := strings.Count(q, "issue(number:"); n > 50 {
+		if n := strings.Count(q, "issueOrPullRequest(number:"); n > 50 {
 			t.Errorf("a batch holds %d aliases", n)
 		}
 	}

@@ -144,7 +144,7 @@ appear on someone else's repository.
 | `pr-body` | Generate the correct PR body fragment for a change. |
 | `release-plan` | Inspect release impact and generate release notes. |
 | `validate` | Validate OpenSpec change structure. |
-| `verify` | Verify PR references to their change issues. |
+| `verify` | Verify PR references to their change issues, or with -refs the commit and request references in change documents. |
 
 **Housekeeping.** Start with `specsync doctor`.
 
