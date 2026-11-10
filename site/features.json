@@ -165,6 +165,6 @@
   },
   {
     "title": "Clean up finished work safely",
-    "body": "<code>specsync cleanup</code> lists worktrees whose work is provably merged and, with <code>-apply</code>, removes them, their branches and archives the change. It never touches dirty trees, unpushed commits, open requests or live sessions; hooks run only after <code>specsync trust</code>."
+    "body": "<code>specsync cleanup</code> lists worktrees whose work is provably merged and, with <code>-apply</code>, removes them and their branches. It never touches dirty trees, ignored files, protected or shared branches, unpushed commits, open requests or live sessions, and re-checks each one just before removal; hooks run only after <code>specsync trust</code>."
   }
 ]

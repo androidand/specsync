@@ -19,10 +19,10 @@ Depends on `status-pr-and-worktree-state` (facts) and `ways-of-working-and-next`
 - budget: files<=8, lines<=300
 
 - [x] 2.1 Remove worktree, delete local branch, optional remote branch
-- [x] 2.2 Archive the change when its issue is closed, using `archive`
-- [x] 2.3 Run `cleanup.hooks` only when the config is trusted; otherwise print them (test: untrusted config, mixed trust under `-root`)
+- [x] 2.2 Report `specsync archive -change <slug>` as a follow-up when its issue is closed (cleanup never archives itself)
+- [x] 2.3 Run `cleanup.hooks` only when the config is trusted; otherwise skip the item and print them (test: untrusted config, mixed trust under `-root`)
 - [x] 2.4 `cleanup:` config section, validated by `doctor`
-- [x] 2.5 Tests in a fixture repo: removal order, kept remote, hook, archive
+- [x] 2.5 Tests in a fixture repo: removal order, kept remote, hook, archive follow-up
 
 ## Slice 3: Docs
 - after: 2

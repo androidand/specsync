@@ -15,11 +15,11 @@ The rule is known: remove the worktree when the PR merges. It is still forgotten
 - **Dry run by default.** It prints what it would do and why. `-apply` does it.
 - **A worktree is a candidate** only when its work is provably in the base: its request is merged and the branch head equals the head the request merged with (nothing was pushed after the merge), or the branch head is an ancestor of the base. It must also be clean. A request closed without merging is never a candidate.
 - **Steps per candidate**, each configurable:
-  1. remove the worktree
-  2. delete the local branch
-  3. delete the remote branch (default: keep)
-  4. archive the change when its issue is closed
-  5. run `cleanup.hooks` (for example stop services or remove notes), only when the config is trusted (see `ways-of-working-and-next`)
+  1. run `cleanup.hooks` in the worktree (for example stop services or remove notes), only when the config is trusted (see `ways-of-working-and-next`)
+  2. remove the worktree
+  3. delete the local branch
+  4. delete the remote branch (default: keep), only when its tip is still this head
+  - Archiving is reported as a follow-up (`specsync archive -change <slug>`), never done by cleanup.
 - **Never touched:** dirty trees, unpushed commits, open requests, the current worktree, a worktree with a live session.
 - **Reported only:** old work that is not provably in the base and has unpushed commits, and branches whose upstream was deleted while their commits are not in the base. It might be lost work. It is never removed.
 - `-root <dir>` covers every repo under a directory.
@@ -27,7 +27,7 @@ The rule is known: remove the worktree when the PR merges. It is still forgotten
 ```yaml
 cleanup:
   remote_branch: keep     # keep | delete
-  archive: true
+  archive: true           # print the archive command as a follow-up
   min_age_days: 0
   hooks: []
 ```
@@ -50,4 +50,4 @@ cleanup:
 
 ## Release note
 
-Add `specsync cleanup`: list and remove finished worktrees and branches safely, and archive their changes.
+Add `specsync cleanup`: list and remove finished worktrees and branches safely, and report the archive follow-up for their changes.

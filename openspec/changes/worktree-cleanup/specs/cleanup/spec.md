@@ -38,9 +38,10 @@ take with the reason.
 - **THEN** no worktree, branch or change is removed
 
 ### Requirement: Take configured steps in order
-With `-apply`, `cleanup` SHALL remove the worktree, delete the local branch, optionally delete the
-remote branch, archive the change when its issue is closed, and run the configured hooks, in that
-order, according to configuration.
+With `-apply`, `cleanup` SHALL run the configured hooks in the worktree, remove the worktree, delete
+the local branch and optionally delete the remote branch, in that order, according to configuration.
+It SHALL NOT archive a change; when `cleanup.archive` is true and the issue is closed it SHALL report
+`specsync archive -change <slug>` as a follow-up.
 
 #### Scenario: Remote branch kept
 - **WHEN** `remote_branch` is `keep`
@@ -48,11 +49,11 @@ order, according to configuration.
 
 #### Scenario: Hook configured
 - **WHEN** a cleanup hook is configured and the config is trusted
-- **THEN** it runs after the other steps for each cleaned worktree
+- **THEN** it runs first, in the worktree, for each cleaned worktree
 
 #### Scenario: Untrusted config
 - **WHEN** a hook is configured in a config the user has not trusted with `specsync trust`
-- **THEN** no hook runs, the hook commands are printed and the other steps still apply
+- **THEN** no hook runs, the hook commands are printed and the worktree is skipped, not removed
 
 #### Scenario: Several repos
 - **WHEN** `-root` covers repos with different trust states
@@ -82,19 +83,19 @@ and that have unpushed commits, and SHALL NOT remove them.
 - **THEN** both are listed
 
 ### Requirement: Protect branches and ignored files
-`cleanup` SHALL NOT remove or delete a protected branch (main, master, develop, trunk, the base or default branch, or the branch checked out in the main checkout), and SHALL NOT remove a worktree that holds ignored files other than common build output (node_modules, dist, build, target, .next, vendor, __pycache__) unless `-include-ignored` is given. Both SHALL be checked again immediately before removal.
+`cleanup` SHALL NOT remove or delete a protected branch (main, master, develop, trunk, staging, production, prod, gh-pages, release/*, hotfix/*, the `cleanup.protect` globs, the base or default branch, or the branch checked out in the main checkout) or a branch with commits from several authors, and SHALL NOT remove a worktree that holds ignored files other than common build output (node_modules, dist, build, target, .next, vendor, __pycache__) unless `-include-ignored` is given. Both SHALL be checked again immediately before removal.
 
 #### Scenario: Ignored file
 - **WHEN** a finished worktree holds an ignored `debug.log`
 - **THEN** it is skipped as "has ignored files: debug.log"
 
 ### Requirement: Order and fresh checks
-For each candidate `cleanup` SHALL re-verify it from fresh facts, then run hooks in the worktree (only when trusted), archive the change, remove the worktree, delete the local branch (`-d`, and `-D` only when its head is the merged head or in the base), and delete the remote branch only when the upstream has the same remote and name and its tip, read at that moment, is the head being removed or the merged head. A failed hook or archive SHALL leave the worktree and branch in place.
+For each candidate `cleanup` SHALL re-verify it from fresh facts, then run hooks in the worktree (only when trusted), remove the worktree, delete the local branch only while it still points at the verified head, and delete the remote branch only when the upstream has the same remote and name and its tip, read at that moment, is the head being removed or the merged head. A failed hook SHALL leave the worktree and branch in place. Unreadable git status or ignored-file checks SHALL make the worktree not a candidate. A request merged into a branch other than the base SHALL NOT count as proof.
 
 #### Scenario: Remote moved on
 - **WHEN** someone pushed to the remote branch after the merge
 - **THEN** the remote branch is kept and the reason is reported
 
 ### Requirement: Say when sessions were not checked
-When no session provider is configured, it failed, or `-state off` is used, `cleanup` SHALL say that live sessions were not checked.
+When no session provider is configured, it failed, or `-state off` is used, `cleanup` SHALL say that live sessions were not checked, and `-apply` SHALL refuse unless `-assume-no-sessions` is given.
 

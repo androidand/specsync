@@ -57,6 +57,14 @@ func TestCleanupCommandIsADryRunUnlessApplied(t *testing.T) {
 	}
 
 	out, err = runIn(t, bin, t.TempDir(), env, "cleanup", "-root", root, "-state", "off", "-apply")
+	if err != nil || !strings.Contains(out, "live sessions not verified") {
+		t.Fatalf("-apply without a verified session check must refuse: %v\n%s", err, out)
+	}
+	if _, err := os.Stat(wt); err != nil {
+		t.Fatal("the worktree must stay when sessions were not verified")
+	}
+
+	out, err = runIn(t, bin, t.TempDir(), env, "cleanup", "-root", root, "-state", "off", "-apply", "-assume-no-sessions")
 	if err != nil {
 		t.Fatalf("apply: %v\n%s", err, out)
 	}
@@ -72,7 +80,7 @@ func TestCleanupCommandNeverRemovesTheCurrentWorktree(t *testing.T) {
 	bin := buildSpecsyncBinary(t)
 	root, wt := cleanupWorkspace(t)
 	env := append(os.Environ(), "SPECSYNC_TRUST_FILE="+filepath.Join(t.TempDir(), "trust.json"))
-	out, err := runIn(t, bin, wt, env, "cleanup", "-root", root, "-state", "off", "-apply")
+	out, err := runIn(t, bin, wt, env, "cleanup", "-root", root, "-state", "off", "-apply", "-assume-no-sessions")
 	if err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	}
