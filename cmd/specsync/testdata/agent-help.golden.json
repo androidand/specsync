@@ -15,6 +15,7 @@
     "install-skill",
     "link",
     "note",
+    "overview",
     "pr-body",
     "pull",
     "relate",
@@ -895,6 +896,96 @@
       "examples": [
         "specsync note my-change 'Found edge case in X' -dry-run",
         "specsync note my-change 'Found edge case in X'"
+      ]
+    },
+    "overview": {
+      "command": "overview",
+      "description": "List all work in all repositories, grouped by epic.",
+      "mutates": false,
+      "workflow": {
+        "position": "planning",
+        "related_before": [
+          "status"
+        ],
+        "related_after": [
+          "status"
+        ]
+      },
+      "flags": [
+        {
+          "name": "attention",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "only work that needs attention"
+        },
+        {
+          "name": "epic",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "only work under this epic: an issue URL, owner/repo#N or #N"
+        },
+        {
+          "name": "json",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "output as JSON"
+        },
+        {
+          "name": "mine",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "only work whose request I opened, and local work with no request"
+        },
+        {
+          "name": "repo",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "only work in this repository: owner/name or name"
+        },
+        {
+          "name": "root",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "folders to look in, separated by the path list separator (default: $SPECSYNC_ROOTS, else the folder holding the current clone)"
+        },
+        {
+          "name": "stage",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "only changes at this stage"
+        },
+        {
+          "name": "state",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "on (default), fresh to bypass the request cache, or off for local facts only"
+        },
+        {
+          "name": "unattached",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "only work under no epic"
+        }
+      ],
+      "safety_rules": [
+        "Never modifies a clone, worktree, index, ref or the tracker; it may write a short-lived request cache outside the repo",
+        "Looks only under the roots (-root, SPECSYNC_ROOTS, or the folder holding the current clone), two levels deep; nothing is remembered"
+      ],
+      "examples": [
+        "specsync overview",
+        "specsync overview -attention",
+        "specsync overview -repo api -attention",
+        "specsync overview -epic acme/web#1 -json",
+        "specsync overview -root ~/dev -unattached"
       ]
     },
     "pr-body": {

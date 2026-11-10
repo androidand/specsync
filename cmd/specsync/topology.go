@@ -91,11 +91,20 @@ func (cm *statusCmd) run(args []string) {
 		fail(err)
 	}
 
+	var related *specsync.RelatedWork
+	if current && len(topo.Changes) == 1 && hasRelations(topo.Changes[0]) {
+		related = relatedWork(ctx, topo.Changes[0], *state)
+	}
+
 	switch {
 	case *asJSON:
-		emitJSON(topo)
+		emitJSON(struct {
+			*specsync.Topology
+			Related *specsync.RelatedWork `json:"related,omitempty"`
+		}{topo, related})
 	case current && len(topo.Changes) == 1:
 		printCurrentStatus(topo.Changes[0], topo.RequestState == "ok")
+		printRelated(related, topo.Changes[0])
 		for _, s := range topo.Status {
 			fmt.Println("status:", s)
 		}
@@ -326,4 +335,92 @@ func orDash(s string) string {
 		return "-"
 	}
 	return s
+}
+
+// hasRelations reports whether the row asserts anything worth a workspace walk.
+func hasRelations(row specsync.ChangeTopology) bool {
+	return row.Epic != "" || len(row.BlockedBy) > 0 || len(row.Blocks) > 0 || len(row.Linked) > 0
+}
+
+// relatedWork finds what relates to the current work across the workspace.
+// Sources that fail are carried as reasons, never hidden.
+func relatedWork(ctx context.Context, current specsync.ChangeTopology, state string) *specsync.RelatedWork {
+	work, err := specsync.CollectWorkRows(ctx, specsync.OverviewOptions{
+		Topology: specsync.TopologyOptions{
+			LocalOnly:       state == "off",
+			Cache:           requestCache(),
+			RefreshRequests: state == "fresh",
+		},
+	})
+	if err != nil {
+		return &specsync.RelatedWork{Current: specsync.RowKey(current), Incomplete: []string{err.Error()}}
+	}
+	rows := make([]specsync.ChangeTopology, 0, len(work.Rows)+1)
+	key, found := specsync.RowKey(current), false
+	for _, r := range work.Rows {
+		if specsync.RowKey(r) == key && r.Store == current.Store {
+			r, found = current, true
+		}
+		rows = append(rows, r)
+	}
+	if !found {
+		rows = append(rows, current)
+	}
+	rel := specsync.RelatedTo(current, rows, work.Status)
+	if rel == nil && len(work.Status) > 0 {
+		rel = &specsync.RelatedWork{Current: key, Incomplete: work.Status}
+	}
+	return rel
+}
+
+// printRelated prints the epic chain, siblings and blockers around the current
+// work, marks it, and ends with the next step.
+func printRelated(rel *specsync.RelatedWork, current specsync.ChangeTopology) {
+	if rel == nil {
+		return
+	}
+	fmt.Println()
+	if e := rel.Epic; e != nil {
+		fmt.Printf("epic %s  %d of %d known done\n", e.Key, e.Done, e.Total)
+		for _, up := range e.Above {
+			fmt.Printf("  above: %s\n", up)
+		}
+		for i, it := range e.Items {
+			branch := "├─ "
+			if i == len(e.Items)-1 {
+				branch = "└─ "
+			}
+			printRelatedItem(it, branch, rel.Current)
+		}
+	}
+	for _, group := range []struct {
+		title string
+		items []specsync.RelatedItem
+	}{{"blocked by", rel.BlockedBy}, {"blocks", rel.Blocks}, {"linked", rel.Linked}} {
+		if len(group.items) == 0 {
+			continue
+		}
+		fmt.Println(group.title + ":")
+		for _, it := range group.items {
+			printRelatedItem(it, "  ", rel.Current)
+		}
+	}
+	for _, reason := range rel.Incomplete {
+		fmt.Println("incomplete:", reason)
+	}
+	if current.Sync != nil {
+		fmt.Println("next:", current.Sync.Summary)
+	}
+}
+
+func printRelatedItem(it specsync.RelatedItem, branch, current string) {
+	if it.Row == nil {
+		fmt.Printf("%s%s  (not found in the workspace)\n", branch, it.Key)
+		return
+	}
+	mark := ""
+	if it.Key == current {
+		mark = "◄ you are here"
+	}
+	printWorkRow(*it.Row, branch, mark)
 }

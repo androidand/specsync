@@ -27,7 +27,13 @@
     "group": "plan",
     "icon": "flow",
     "title": "See who's already working what",
-    "body": "<code>specsync status</code> shows where your work stands: pull request, checks, review, unpushed and uncommitted work, how far the base has moved and whether a merge would conflict — with the commands to catch up. Read-only, and <code>-json</code> gives agents the same facts."
+    "body": "<code>specsync status</code> shows where your work stands: pull request, checks, review, unpushed and uncommitted work, how far the base has moved and whether a merge would conflict — with the commands to catch up. Under an epic or with blockers it also lists every related item across your repos. Read-only, and <code>-json</code> gives agents the same facts."
+  },
+  {
+    "group": "plan",
+    "icon": "flow",
+    "title": "All your work, across repos",
+    "body": "<code>specsync overview</code> lists every change, worktree and open request in the clones under your workspace, grouped by epic, then work under no epic, then branches with no change. Scope it with <code>-repo</code>, <code>-epic</code>, <code>-mine</code>, <code>-attention</code>, <code>-stage</code> or <code>-unattached</code>. Read-only; <code>-json</code> for agents."
   },
   {
     "group": "plan",
