@@ -148,5 +148,11 @@
     "icon": "flow",
     "title": "Define your flow once, get the next step",
     "body": "Declare gates and steps in <code>openspec/specsync.yml</code>; <code>specsync next</code> reads the work's state and prints the next step and its command, <code>specsync flow</code> marks where you are. Commands from the repo run only after <code>specsync trust</code>."
+  },
+  {
+    "group": "review",
+    "icon": "state",
+    "title": "A map for reviewing a big pull request",
+    "body": "<code>specsync review-map</code> turns a branch into a checklist: the paths the author declared as needing judgement first, then each commit with its files and sizes, then totals by category. <code>-equivalent</code> proves a rewritten branch holds the same content."
   }
 ]

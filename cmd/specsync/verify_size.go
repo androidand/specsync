@@ -66,23 +66,33 @@ func runVerifySize(fs *flag.FlagSet, openspec, store *string, branch, base, budg
 
 var branchIssue = regexp.MustCompile(`^(?:[^/]+/)?(\d+)-`)
 
-// changeBudgetLine finds the one change the branch belongs to, by slug or by
-// issue number in its name, as status does, and returns its budget line. With
-// no specs, or no single match, it returns "".
+// changeBudgetLine returns the budget line of the one change the branch
+// belongs to, or "" when there is none.
 func changeBudgetLine(ctx context.Context, fs *flag.FlagSet, openspec, store *string, dir, head string) (line, slug string) {
+	c := matchedChange(ctx, fs, openspec, store, dir, head)
+	if c == nil {
+		return "", ""
+	}
+	return specsync.SliceBudgetLine(c.Dir), c.Slug
+}
+
+// matchedChange finds the one change a branch belongs to, by slug or by issue
+// number in its name, as status does. With no specs, or no single match, it
+// returns nil.
+func matchedChange(ctx context.Context, fs *flag.FlagSet, openspec, store *string, dir, head string) *specsync.Change {
 	root := resolveRootUnchecked(fs, openspec, store)
 	if root.Validate() != nil {
-		return "", ""
+		return nil
 	}
 	changes, err := specsync.LoadChanges(root.Dir)
 	if err != nil {
-		return "", ""
+		return nil
 	}
 	name := head
 	if name == "HEAD" {
 		out, err := exec.CommandContext(ctx, "git", "-C", dir, "rev-parse", "--abbrev-ref", "HEAD").Output()
 		if err != nil {
-			return "", ""
+			return nil
 		}
 		name = strings.TrimSpace(string(out))
 	}
@@ -108,7 +118,7 @@ func changeBudgetLine(ctx context.Context, fs *flag.FlagSet, openspec, store *st
 		}
 	}
 	if len(matches) != 1 {
-		return "", ""
+		return nil
 	}
-	return specsync.SliceBudgetLine(matches[0].Dir), matches[0].Slug
+	return &matches[0]
 }

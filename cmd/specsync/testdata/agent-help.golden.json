@@ -22,6 +22,7 @@
     "pull",
     "relate",
     "release-plan",
+    "review-map",
     "scan",
     "set-priority",
     "set-stage",
@@ -1419,6 +1420,79 @@
         "specsync release-plan",
         "specsync release-plan --since v0.9.0",
         "specsync release-plan -json"
+      ]
+    },
+    "review-map": {
+      "command": "review-map",
+      "description": "Turn a branch into a review checklist, or prove a rewritten branch has the same content.",
+      "mutates": false,
+      "args": [
+        {
+          "name": "target",
+          "description": "a branch, a range base..head, or a pull request number or URL (default: the checked-out branch against origin/HEAD); with -equivalent: \u003cold\u003e \u003cnew\u003e",
+          "required": false
+        }
+      ],
+      "workflow": {
+        "position": "pre-merge",
+        "related_before": [
+          "verify"
+        ]
+      },
+      "flags": [
+        {
+          "name": "base",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "base to compare against (default: origin/HEAD)"
+        },
+        {
+          "name": "change",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "the change whose `## Review focus` and tasks apply (default: the one the branch belongs to)"
+        },
+        {
+          "name": "equivalent",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "compare the trees of \u003cold\u003e and \u003cnew\u003e; exit non-zero when they differ"
+        },
+        {
+          "name": "json",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "output as JSON"
+        },
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "store",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "registered OpenSpec store id to operate on (default: openspec/config.yaml `store:`, else ./openspec)"
+        }
+      ],
+      "safety_rules": [
+        "Read-only: needs git; the provider only resolves a pull request number or URL",
+        "Marks files as needing judgement only from the change's `## Review focus` section; it marks nothing as safe and is not a reviewer",
+        "-equivalent compares the content of two revisions, not their history; it exits 1 when they differ and 2 on an error"
+      ],
+      "examples": [
+        "specsync review-map",
+        "specsync review-map origin/main..feat/42-thing -json",
+        "specsync review-map -change my-change 123",
+        "specsync review-map -equivalent feat/42-thing-old feat/42-thing"
       ]
     },
     "scan": {
