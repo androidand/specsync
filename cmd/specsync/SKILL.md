@@ -124,6 +124,7 @@ specsync agent-help                # overview
 
 **Housekeeping** (start: `specsync doctor`)
 - `agent-help` — Show how to use any specsync command, for people and agents.
+- `cleanup` — List finished worktrees and, with -apply, remove them and their branches.
 - `doctor` — Diagnose skill installation, environment, and context health.
 - `install-skill` — Install the specsync skill for your coding agent.
 - `trust` — Allow specsync to run the commands in this repo's specsync.yml.

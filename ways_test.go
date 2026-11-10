@@ -201,12 +201,12 @@ func TestParseWaysReservedKeysAreAcceptedAndNoted(t *testing.T) {
 	for _, r := range w.Reserved {
 		got[r.Key] = true
 	}
-	for _, k := range []string{"worktrees.dir", "worktrees.branch", "cleanup.remote_branch"} {
+	for _, k := range []string{"worktrees.dir", "worktrees.branch"} {
 		if !got[k] {
 			t.Errorf("%s must be reported as reserved: %+v", k, w.Reserved)
 		}
 	}
-	if got["cleanup.archive"] {
-		t.Error("cleanup.archive is used by next, not reserved")
+	if got["cleanup.archive"] || got["cleanup.remote_branch"] {
+		t.Error("the cleanup keys are used by cleanup, not reserved")
 	}
 }

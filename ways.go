@@ -4,9 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -21,6 +23,9 @@ type WorktreeConfig struct{ Dir, Branch string }
 type CleanupConfig struct {
 	RemoteBranch string
 	Archive      bool
+	MinAgeDays   int
+	Hooks        []string
+	Protect      []string
 }
 
 // Ways is the repository's declared way of working, read from
@@ -63,7 +68,7 @@ var topLevelKeys = []string{"board", "ideas_repo", "flow", "gates", "worktrees",
 var sectionKeys = map[string][]string{
 	"worktrees": {"dir", "branch"},
 	"text":      append([]string{"profile", "headers", "filler", "template"}, textIntKeys...),
-	"cleanup":   {"remote_branch", "archive"},
+	"cleanup":   {"remote_branch", "archive", "min_age_days", "hooks", "protect"},
 	"sync":      {"strategy", "after_review", "force"},
 }
 
@@ -80,10 +85,11 @@ func LoadWays(repoRoot string) (Ways, []ConfigIssue) {
 // problem it can find with its line.
 func ParseWays(data []byte) (Ways, []ConfigIssue) {
 	w := Ways{
-		Flow:  DefaultFlow,
-		Steps: presets[DefaultFlow],
-		Sync:  SyncConfig{Strategy: "rebase", AfterReview: "merge", Force: "with-lease"},
-		Text:  DefaultText(),
+		Flow:    DefaultFlow,
+		Steps:   presets[DefaultFlow],
+		Sync:    SyncConfig{Strategy: "rebase", AfterReview: "merge", Force: "with-lease"},
+		Text:    DefaultText(),
+		Cleanup: CleanupConfig{RemoteBranch: "keep"},
 	}
 	root, err := ParseConfigYAML(data)
 	if err != nil {
@@ -195,9 +201,8 @@ func (w *Ways) readGates(n *YNode, line int, add addIssue) {
 }
 
 var reservedKeys = map[string]string{
-	"worktrees.dir":         "flow-verbs",
-	"worktrees.branch":      "flow-verbs",
-	"cleanup.remote_branch": "worktree-cleanup",
+	"worktrees.dir":    "flow-verbs",
+	"worktrees.branch": "flow-verbs",
 }
 
 func (w *Ways) readSection(sec string, n *YNode, add addIssue) {
@@ -229,7 +234,45 @@ func (w *Ways) readSection(sec string, n *YNode, add addIssue) {
 	case "text":
 		w.Text.read(n, add)
 	case "cleanup":
-		w.Cleanup = CleanupConfig{RemoteBranch: enum("remote_branch", "keep", "delete"), Archive: boolean("archive")}
+		if v := enum("remote_branch", "keep", "delete"); v != "" {
+			w.Cleanup.RemoteBranch = v
+		}
+		if n.Get("archive") != nil {
+			w.Cleanup.Archive = boolean("archive")
+		}
+		if v := n.Str("min_age_days"); v != "" {
+			days, err := strconv.Atoi(v)
+			if err != nil || days < 0 {
+				add(n.KeyLine["min_age_days"], "cleanup.min_age_days", "min_age_days must be a whole number of days, got %q", v)
+			} else {
+				w.Cleanup.MinAgeDays = days
+			}
+		}
+		list := func(key, what string) []string {
+			h := n.Get(key)
+			if h == nil {
+				return nil
+			}
+			if h.Kind != YList {
+				add(n.KeyLine[key], "cleanup."+key, "%s must be a list", key)
+			}
+			var out []string
+			for _, item := range h.List {
+				if item.Kind != YScalar || strings.TrimSpace(item.Scalar) == "" {
+					add(item.Line, "cleanup."+key, "each entry of %s must be %s", key, what)
+					continue
+				}
+				out = append(out, item.Scalar)
+			}
+			return out
+		}
+		w.Cleanup.Hooks = list("hooks", "a command")
+		w.Cleanup.Protect = list("protect", "a branch glob")
+		for _, g := range w.Cleanup.Protect {
+			if _, err := path.Match(g, "x"); err != nil {
+				add(n.KeyLine["protect"], "cleanup.protect", "malformed glob %q in protect", g)
+			}
+		}
 	case "sync":
 		if v := enum("strategy", "rebase", "merge"); v != "" {
 			w.Sync.Strategy = v
@@ -241,6 +284,13 @@ func (w *Ways) readSection(sec string, n *YNode, add addIssue) {
 			w.Sync.Force = v
 		}
 	}
+}
+
+// TrustedCommands is every command the config can make specsync run: the
+// gates, including optional ones, then the cleanup hooks. Trusting a config
+// trusts all of them.
+func (w Ways) TrustedCommands() []string {
+	return append(w.GateCommands(true, nil), w.Cleanup.Hooks...)
 }
 
 // GateCommands returns the commands to run, in order. Optional gates are

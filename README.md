@@ -157,6 +157,7 @@ appear on someone else's repository.
 | Command | What it does |
 |---|---|
 | `agent-help` | Show how to use any specsync command, for people and agents. |
+| `cleanup` | List finished worktrees and, with -apply, remove them and their branches. |
 | `doctor` | Diagnose skill installation, environment, and context health. |
 | `install-skill` | Install the specsync skill for your coding agent. |
 | `trust` | Allow specsync to run the commands in this repo's specsync.yml. |
@@ -561,6 +562,53 @@ specsync -change my-change -slices -dry-run    # child issue per slice, blocked-
 under no slice, and slices without a contract. `status` shows which slice a branch was started for and uses that
 slice's budget as the size threshold. `-slices` is off by default; a provider that cannot nest issues gets the
 slices listed in the issue body instead. `sync -slices` heals on every run (it adds a missing child, nesting or edge and skips what exists), and exits non-zero listing any step that failed. specsync records the order and reports state; it creates no pull request.
+
+### `cleanup` — remove finished work
+
+```bash
+specsync cleanup                 # dry run: what is finished, why, and what would be done
+specsync cleanup -apply          # remove the worktree and its local branch (-assume-no-sessions if no provider)
+specsync cleanup -root ~/dev     # every repo under a folder
+```
+
+A worktree is finished only when its work is provably in the base: its request merged with this
+head into the base branch (a request merged into another feature branch proves nothing), or the
+head is already in the base, the branch's reflog shows commits made on it and no reset (a reset can
+discard commits, so a reset branch needs a merged request), and the tree is clean. A request closed without merging is never a
+candidate, and old work with unpushed commits is listed as needing attention, never removed.
+
+Skipped, with the reason shown: dirty trees or a `git status` that cannot be read, worktrees with
+ignored files (a top-level `node_modules`, `dist`, `build`, `target`, `.next`, `vendor` or
+`__pycache__` alone does not block; a nested one does; `-include-ignored` overrides), open requests, protected
+branches (`main`, `master`, `develop`, `trunk`, `staging`, `production`, `prod`, `gh-pages`,
+`release/*`, `hotfix/*`, `cleanup.protect` globs where a trailing `/*` covers every depth, the base
+and default branch on any remote, the one checked out in the main checkout), branches with commits
+from several authors (or whose authors cannot be told), a config with problems (`fix
+openspec/specsync.yml: ...`, never silently defaulted), the current worktree, the
+main checkout, worktrees with a live session, and items whose hooks cannot run because the config
+is not trusted. Live sessions are checked only when a session provider is configured
+(`-sessions-cmd`): without one a dry run warns, and `-apply` refuses unless `-assume-no-sessions`
+is given.
+
+Each candidate is checked again from fresh facts just before it is touched, then done in this
+order: hooks (in the main checkout, never the worktree, with `SPECSYNC_WORKTREE` set, a 60 s limit
+and capped output; they must not rely on the working directory), remove the worktree, delete the
+local branch (only if its tip is still the verified head; the result says how to restore it and the
+branch's config is removed), delete the remote branch (only when its upstream has the same name, its
+tip, read now, is this head, and no open request targets it). A dry run writes nothing: no git
+objects and no request cache. A failed hook leaves the worktree and
+branch in place. Cleanup never archives: with `archive: true` and a closed issue it prints
+`specsync archive -change <slug>` as a follow-up. `specsync trust` lists every gate and cleanup
+hook, and `trust -yes` records them. Configure it in `openspec/specsync.yml`:
+
+```yaml
+cleanup:
+  remote_branch: keep   # keep | delete
+  archive: false        # true prints the archive command as a follow-up when the issue is closed
+  min_age_days: 0       # age before unpushed work is listed as needing attention
+  hooks: []             # for example: make stop
+  protect: []           # branch globs that are never removed, for example: keep/*
+```
 
 ### `scan` — what already exists here?
 
