@@ -15,10 +15,10 @@
 - contract: The body renders short, from the change and the repo template.
 - budget: files<=8, lines<=300
 
-- [ ] 2.1 `pr-body -template` with sections Summary, Changes, Review focus, Size, Verification, Closes
-- [ ] 2.2 Use `.github/pull_request_template.md` when present
-- [ ] 2.3 Per-section budgets
-- [ ] 2.4 Tests: default template, repo template, budgets
+- [x] 2.1 `pr-body -template` with sections Summary, Changes, Review focus, Size, Verification, Closes
+- [x] 2.2 Use `.github/pull_request_template.md` when present
+- [x] 2.3 Per-section budgets
+- [x] 2.4 Tests: default template, repo template, budgets
 
 ## Slice 3: Config and docs
 - after: 1

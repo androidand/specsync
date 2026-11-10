@@ -117,3 +117,73 @@ func TestLintPRReadsTitleAndBodyFromTheProvider(t *testing.T) {
 		t.Fatalf("pr: %v\n%s", err, out)
 	}
 }
+
+func prBodyRepo(t *testing.T, template string) (dir string, env []string) {
+	t.Helper()
+	proposal := "# Show where work stands\n\n## Why\n\nWork is spread over many branches. Nobody sees it all.\n\n## What\n\n- `status` lists each change.\n- `overview` lists all work.\n"
+	dir, env = lintRepo(t, proposal, "")
+	if err := os.WriteFile(filepath.Join(dir, "openspec", "changes", "demo", "tasks.md"), []byte("- [x] a\n- [ ] b\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if template != "" {
+		if err := os.MkdirAll(filepath.Join(dir, ".github"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, ".github", "pull_request_template.md"), []byte(template), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	stub := t.TempDir()
+	script := "#!/bin/sh\ncase \"$1 $2\" in\n  \"issue list\") echo '[{\"number\":7,\"url\":\"https://github.com/o/r/issues/7\",\"body\":\"<!-- specsync:change=demo -->\"}]' ;;\n  *) echo '[]' ;;\nesac\n"
+	if err := os.WriteFile(filepath.Join(stub, "gh"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return dir, append(env, "PATH="+stub+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+func TestPRBodyTemplateRendersTheDefaultBody(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	dir, env := prBodyRepo(t, "")
+	out, err := runIn(t, bin, dir, env, "pr-body", "-change", "demo", "-repo", "o/r", "-template")
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	for _, want := range []string{"## Summary\n\nWork is spread over many branches.\n", "## Changes\n\n- `status` lists each change.\n", "## Verification\n\n1 of 2 tasks done.\n", "## Closes\n\nPart of #7\n"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "## Size") {
+		t.Errorf("no base to measure against, so no Size section:\n%s", out)
+	}
+	if strings.Contains(out, "Nobody sees it all") {
+		t.Errorf("only the first Why sentence:\n%s", out)
+	}
+}
+
+func TestPRBodyTemplateUsesTheRepoTemplate(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	dir, env := prBodyRepo(t, "## Description\n\n<!-- why -->\n\n## Checklist\n\n- [ ] docs updated\n")
+	out, err := runIn(t, bin, dir, env, "pr-body", "-change", "demo", "-repo", "o/r", "-template")
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if !strings.Contains(out, "## Description\n\nWork is spread over many branches.") || !strings.Contains(out, "- [ ] docs updated") || strings.Contains(out, "<!-- why -->") {
+		t.Fatalf("repo template sections:\n%s", out)
+	}
+	if !strings.Contains(out, "Part of #7") {
+		t.Fatalf("the reference must still be present:\n%s", out)
+	}
+}
+
+func TestPRBodyWithoutTemplateFlagIsUnchanged(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	dir, env := prBodyRepo(t, "")
+	out, err := runIn(t, bin, dir, env, "pr-body", "-change", "demo", "-repo", "o/r")
+	if err != nil || strings.TrimSpace(out) != "Part of #7" {
+		t.Fatalf("the plain output stays the reference line: %v\n%s", err, out)
+	}
+	if out, err := runIn(t, bin, dir, env, "pr-body", "-change", "demo", "-repo", "o/r", "-template", "-body-file", "x.md"); err == nil || !strings.Contains(out, "-template") {
+		t.Fatalf("-template and -body-file conflict: %v\n%s", err, out)
+	}
+}

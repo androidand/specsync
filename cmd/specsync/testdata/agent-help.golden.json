@@ -1260,6 +1260,13 @@
           "required": false,
           "default": "",
           "description": "registered OpenSpec store id to operate on (default: openspec/config.yaml `store:`, else ./openspec)"
+        },
+        {
+          "name": "template",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "render a short body (Summary, Changes, Review focus, Size, Verification, Closes) from the change and the repo's pull request template"
         }
       ],
       "safety_rules": [
@@ -1267,7 +1274,8 @@
         "Part of or Closes depends on task completion"
       ],
       "examples": [
-        "specsync pr-body -change my-change"
+        "specsync pr-body -change my-change",
+        "specsync pr-body -change my-change -template"
       ]
     },
     "pull": {
