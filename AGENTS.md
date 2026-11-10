@@ -14,7 +14,8 @@ layer.
   tracker offers it, is that tracker's concern — e.g. Beads' own `bd prime`
   session hook handles its memory; specsync never reads or writes it), not a
   control plane (it owns no orchestration), and it runs invoke-and-exit (no
-  daemon, no background state).
+  daemon, no background state). It does provide mechanical verbs and a next-step
+  oracle for the work itself (`next`, `flow`), and never orchestrates agents.
 - Trackers/issues are projections and the collaboration surface; `specsync` keeps
   them aligned with the spec.
 

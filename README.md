@@ -624,6 +624,25 @@ quoted and bare scalars, and `#` comments. Anchors, aliases, tags, multi-line sc
 inline collections, duplicate keys and tab indentation are errors reported with their line number.
 Nested keys never act as top-level ones, so `board:` inside a section does not change the board.
 
+### Your flow, gates and the next step
+
+```yaml
+flow: pr-review          # minimal | pr-review (default) | strict, or a list of steps
+gates:
+  - {name: lint, run: "make lint"}
+  - {name: e2e, run: "make e2e", optional: true}
+worktrees: {dir: "../worktrees", branch: "{type}/{issue}-{slug}"}
+cleanup: {remote_branch: keep, archive: true}
+sync: {strategy: rebase, after_review: merge, force: with-lease}
+```
+
+Steps are `new, start, build, gate, review, merge, cleanup`. `specsync next` reads the current
+work's state (the same facts as `status`) and prints the next step and its command; `specsync flow`
+marks where the work is. Both only report. A gate counts as run when the commit it passed for is
+written to `<git-dir>/specsync/gates-passed`. `specsync doctor config` validates the file, with
+line numbers. Commands defined in the file run only after `specsync trust` records its hash for
+you and this repository; a changed file needs trust again.
+
 ### `ideas` — list open intake issues
 
 See what you've captured that nobody has triaged yet:

@@ -37,5 +37,5 @@
 - contract: The flow is documented and discoverable.
 
 - [x] 3.1 Declare `next` and `flow` once as `Command` types; docs are generated
-- [ ] 3.2 Add the principle line to the agent guide; update `site/features.json`
-- [ ] 3.3 Run `specsync changelog -fail-on-unlinked-commits`
+- [x] 3.2 Add the principle line to the agent guide; update `site/features.json`
+- [x] 3.3 Run `specsync changelog -fail-on-unlinked-commits` (locally it needs -resolve-refs because a fresh worktree has no refs cache; CI runs that form)
