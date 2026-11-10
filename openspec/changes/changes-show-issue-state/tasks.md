@@ -2,8 +2,8 @@
 
 ## 1. Issue states
 
-- [ ] 1.1 Add a batched `IssueStates(refs)` to the provider interface; GitHub implements it with one `gh api graphql` call, others return `unknown`
-- [ ] 1.2 Test first: one call for N refs; a missing issue yields `unknown` for that ref only
+- [x] 1.1 Add a batched `IssueStates(refs)` to the provider interface; GitHub implements it with one `gh api graphql` call, others return `unknown`
+- [x] 1.2 Test first: one call for N refs; a missing issue yields `unknown` for that ref only
 
 ## 2. changes command
 
