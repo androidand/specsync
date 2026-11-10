@@ -35,9 +35,9 @@ func (*archiveCmd) Spec() Spec {
 		Summary:  "Archive a completed change: final push, close, then retention.",
 		Mutates:  true,
 		Workflow: AgentCommandWorkflow{Position: "after-complete", RelatedBefore: []string{"changes", "sync"}, RelatedAfter: []string{"verify"}},
-		Required: []string{"change"},
 		Safety: []string{
 			"Use -dry-run to preview before archiving",
+			"Without -change, archives the change the current branch names; on the default branch nothing resolves",
 			"Refuses unchecked-task changes unless -force is set, except with -reason not-planned or duplicate",
 			"-reason duplicate needs -duplicate-of; -comment is posted in the same call as the close, so if the close fails nothing is posted; a reason or comment cannot be recorded on an issue that is already closed",
 		},
@@ -52,7 +52,7 @@ func (*archiveCmd) Spec() Spec {
 
 func (cm *archiveCmd) Flags(fs *flag.FlagSet) {
 	cm.openspec, cm.storeFlag = addRootFlags(fs)
-	cm.change = fs.String("change", "", "change to archive (required)")
+	cm.change = fs.String("change", "", "change to archive (default: the one the current branch names)")
 	cm.repo = fs.String("repo", "", "target repo as owner/name (default: auto-detect)")
 	cm.retain = fs.String("retain", "", "retention policy: move (keep) or prune (delete)")
 	cm.force = fs.Bool("force", false, "archive even when tasks are unchecked")
@@ -75,11 +75,14 @@ func (cm *archiveCmd) run(args []string) {
 	}
 	checkArgs(fs, args, 0)
 
-	if *change == "" {
-		fail(fmt.Errorf("archive: -change <slug> is required"))
-	}
-
 	abs := resolveRoot(fs, openspec, storeFlag).Dir
+	if *change == "" {
+		slug, err := inferChange("archive", abs)
+		if err != nil {
+			fail(fmt.Errorf("%w; pass -change <slug>", err))
+		}
+		*change = slug
+	}
 
 	// Build provider.
 	var provider specsync.WorkProvider

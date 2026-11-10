@@ -27,16 +27,18 @@ func (*setStageCmd) Spec() Spec {
 		Mutates:  true,
 		Workflow: AgentCommandWorkflow{Position: "workflow", RelatedBefore: []string{"changes"}, RelatedAfter: []string{"sync"}},
 		Args: []Arg{
-			{Name: "change", Description: "Change slug", Required: true},
+			{Name: "change", Description: "Change slug; omit it inside the change's worktree to use the one the branch names"},
 			{Name: "stage", Description: "New stage (backlog, active, blocked, in-review, complete, archived, auto)", Required: true},
 		},
 		Safety: []string{
 			"Use 'auto' to let specsync derive stage from tasks",
+			"Omitting the change uses the one the current branch names (feat/<issue>-<slug> or <prefix>/<slug>); on the default branch nothing resolves",
 		},
 		Examples: []string{
 			"specsync set-stage my-change active",
 			"specsync set-stage my-change blocked",
 			"specsync set-stage my-change complete",
+			"specsync set-stage active",
 		},
 	}
 }
@@ -57,12 +59,17 @@ func (cm *setStageCmd) run(args []string) {
 		fail(err)
 	}
 	checkArgs(fs, args, -1)
-	if fs.NArg() < 2 {
-		fail(fmt.Errorf("usage: specsync set-stage <change> <stage|auto>"))
+	if fs.NArg() < 1 || fs.NArg() > 2 {
+		fail(fmt.Errorf("usage: specsync set-stage [<change>] <stage|auto>  (change defaults to the one the current branch names)"))
 	}
-	changeName, stage := fs.Arg(0), fs.Arg(1)
+	root := resolveRoot(fs, openspec, storeFlag).Dir
+	changeName, rest, err := splitChangeArgs("set-stage", root, fs.Args(), 1)
+	if err != nil {
+		fail(err)
+	}
+	stage := rest[0]
 
-	change := mutableChange(resolveRoot(fs, openspec, storeFlag).Dir, changeName, false)
+	change := mutableChange(root, changeName, false)
 	meta := changeMetadata(change)
 
 	if stage == "auto" {

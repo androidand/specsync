@@ -28,11 +28,13 @@ func (*noteCmd) Spec() Spec {
 		Mutates:  true,
 		Workflow: AgentCommandWorkflow{Position: "implementation", RelatedAfter: []string{"spinoff"}},
 		Safety: []string{
-			"Takes positional args: <change> <text>, not a -text flag",
+			"Takes positional args: [<change>] <text>, not a -text flag; quote the text",
+			"Omitting the change uses the one the current branch names; on the default branch nothing resolves",
 		},
 		Examples: []string{
-			"specsync note my-change 'Found edge case in X' -dry-run",
+			"specsync note -dry-run my-change 'Found edge case in X'",
 			"specsync note my-change 'Found edge case in X'",
+			"specsync note 'Found edge case in X'",
 		},
 	}
 }
@@ -54,12 +56,17 @@ func (cm *noteCmd) run(args []string) {
 		fail(err)
 	}
 	checkArgs(fs, args, -1)
-	if fs.NArg() < 2 {
-		fail(fmt.Errorf("usage: specsync note <change> <text>"))
+	if fs.NArg() < 1 || fs.NArg() > 2 {
+		fail(fmt.Errorf("usage: specsync note [<change>] <text>  (change defaults to the one the current branch names; quote the text)"))
 	}
-	changeName, text := fs.Arg(0), fs.Arg(1)
+	root := resolveRoot(fs, openspec, storeFlag).Dir
+	changeName, rest, err := splitChangeArgs("note", root, fs.Args(), 1)
+	if err != nil {
+		fail(err)
+	}
+	text := rest[0]
 
-	c, err := specsync.LoadChangeBySlug(resolveRoot(fs, openspec, storeFlag).Dir, changeName)
+	c, err := specsync.LoadChangeBySlug(root, changeName)
 	if err != nil {
 		fail(err)
 	}

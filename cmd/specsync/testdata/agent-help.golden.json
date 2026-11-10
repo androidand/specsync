@@ -166,9 +166,9 @@
         {
           "name": "change",
           "type": "string",
-          "required": true,
+          "required": false,
           "default": "",
-          "description": "change to archive (required)"
+          "description": "change to archive (default: the one the current branch names)"
         },
         {
           "name": "comment",
@@ -236,6 +236,7 @@
       ],
       "safety_rules": [
         "Use -dry-run to preview before archiving",
+        "Without -change, archives the change the current branch names; on the default branch nothing resolves",
         "Refuses unchecked-task changes unless -force is set, except with -reason not-planned or duplicate",
         "-reason duplicate needs -duplicate-of; -comment is posted in the same call as the close, so if the close fails nothing is posted; a reason or comment cannot be recorded on an issue that is already closed"
       ],
@@ -1329,11 +1330,13 @@
         }
       ],
       "safety_rules": [
-        "Takes positional args: \u003cchange\u003e \u003ctext\u003e, not a -text flag"
+        "Takes positional args: [\u003cchange\u003e] \u003ctext\u003e, not a -text flag; quote the text",
+        "Omitting the change uses the one the current branch names; on the default branch nothing resolves"
       ],
       "examples": [
-        "specsync note my-change 'Found edge case in X' -dry-run",
-        "specsync note my-change 'Found edge case in X'"
+        "specsync note -dry-run my-change 'Found edge case in X'",
+        "specsync note my-change 'Found edge case in X'",
+        "specsync note 'Found edge case in X'"
       ]
     },
     "overview": {
@@ -2276,8 +2279,8 @@
       "args": [
         {
           "name": "change",
-          "description": "Change slug",
-          "required": true
+          "description": "Change slug; omit it inside the change's worktree to use the one the branch names",
+          "required": false
         },
         {
           "name": "stage",
@@ -2311,12 +2314,14 @@
         }
       ],
       "safety_rules": [
-        "Use 'auto' to let specsync derive stage from tasks"
+        "Use 'auto' to let specsync derive stage from tasks",
+        "Omitting the change uses the one the current branch names (feat/\u003cissue\u003e-\u003cslug\u003e or \u003cprefix\u003e/\u003cslug\u003e); on the default branch nothing resolves"
       ],
       "examples": [
         "specsync set-stage my-change active",
         "specsync set-stage my-change blocked",
-        "specsync set-stage my-change complete"
+        "specsync set-stage my-change complete",
+        "specsync set-stage active"
       ]
     },
     "slice": {
