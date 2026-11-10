@@ -192,21 +192,49 @@ func TestRequireTrustNeedsNothingWhenNoCommands(t *testing.T) {
 	}
 }
 
-func TestParseWaysReservedKeysAreAcceptedAndNoted(t *testing.T) {
+func TestParseWaysNoKeyIsReservedAnyMore(t *testing.T) {
 	w, issues := ParseWays([]byte("worktrees: {dir: ../w, branch: x}\ntext: {profile: plain}\ncleanup: {remote_branch: keep, archive: true}\n"))
 	if len(issues) != 0 {
-		t.Fatalf("reserved keys are valid: %+v", issues)
+		t.Fatalf("these keys are valid: %+v", issues)
 	}
-	got := map[string]bool{}
+	if len(w.Reserved) != 0 {
+		t.Fatalf("every accepted key is now used by a command: %+v", w.Reserved)
+	}
+}
+
+func TestParseWays_VerbConfig(t *testing.T) {
+	w, issues := ParseWays([]byte(`worktrees:
+  dir: ../wt
+  branch: "feat/{issue}-{slug}"
+  hooks: [make setup, "echo hi # not a comment"]
+save:
+  forbid_trailers: [Co-Authored-By, Signed-off-by]
+  forbid_files: ["*.pem"]
+pr:
+  confirm: [tests-run, manual-test]
+`))
+	if len(issues) != 0 {
+		t.Fatalf("issues: %v", issues)
+	}
+	if w.Worktrees.Dir != "../wt" || w.Worktrees.Branch != "feat/{issue}-{slug}" || len(w.Worktrees.Hooks) != 2 || w.Worktrees.Hooks[1] != "echo hi # not a comment" {
+		t.Fatalf("worktrees = %+v", w.Worktrees)
+	}
+	if len(w.Save.ForbidTrailers) != 2 || w.Save.ForbidFiles[0] != "*.pem" {
+		t.Fatalf("save = %+v", w.Save)
+	}
+	if len(w.PR.Confirm) != 2 || w.PR.Confirm[1] != "manual-test" {
+		t.Fatalf("pr = %+v", w.PR)
+	}
 	for _, r := range w.Reserved {
-		got[r.Key] = true
-	}
-	for _, k := range []string{"worktrees.dir", "worktrees.branch"} {
-		if !got[k] {
-			t.Errorf("%s must be reported as reserved: %+v", k, w.Reserved)
+		if r.Key == "worktrees.dir" || r.Key == "worktrees.branch" {
+			t.Fatalf("%s is used now and must not be reported as reserved", r.Key)
 		}
 	}
-	if got["cleanup.archive"] || got["cleanup.remote_branch"] {
-		t.Error("the cleanup keys are used by cleanup, not reserved")
+}
+
+func TestParseWays_VerbConfigRejectsNonLists(t *testing.T) {
+	_, issues := ParseWays([]byte("save:\n  forbid_trailers: Co-Authored-By\npr:\n  confirm: {a: b}\n"))
+	if len(issues) != 2 {
+		t.Fatalf("want two list errors, got %v", issues)
 	}
 }

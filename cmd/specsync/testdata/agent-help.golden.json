@@ -11,30 +11,37 @@
     "doctor",
     "epic",
     "flow",
+    "gates",
     "idea",
     "ideas",
     "init",
     "install-skill",
     "link",
     "lint",
+    "new",
     "next",
     "note",
     "overview",
+    "park",
+    "pr",
     "pr-body",
     "pull",
     "relate",
     "release-plan",
     "review-map",
+    "save",
     "scan",
     "set-priority",
     "set-stage",
     "slice",
     "slices",
     "spinoff",
+    "start",
     "status",
     "sync",
     "trace",
     "trust",
+    "update",
     "validate",
     "verify",
     "version"
@@ -766,6 +773,75 @@
         "specsync flow -json"
       ]
     },
+    "gates": {
+      "command": "gates",
+      "description": "Run the repo's configured gates in order and stamp the commit when they pass.",
+      "mutates": true,
+      "workflow": {
+        "position": "pre-merge",
+        "related_before": [
+          "next"
+        ],
+        "related_after": [
+          "pr"
+        ]
+      },
+      "flags": [
+        {
+          "name": "continue",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "keep running after a gate fails"
+        },
+        {
+          "name": "dry-run",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "list the gates that would run and run nothing"
+        },
+        {
+          "name": "json",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "output as JSON"
+        },
+        {
+          "name": "only",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "run only these gates (comma-separated names); a partial run never stamps"
+        },
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "with",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "also run these optional gates (comma-separated names)"
+        }
+      ],
+      "safety_rules": [
+        "Runs commands from openspec/specsync.yml, so nothing runs until `specsync trust -yes` has been given for that file",
+        "The stamp is written only for a full passing run on a clean tree; a new commit, a failed run or a partial run leaves no valid stamp",
+        "-dry-run lists the gates that would run and runs nothing"
+      ],
+      "examples": [
+        "specsync gates -dry-run",
+        "specsync gates",
+        "specsync gates -with e2e",
+        "specsync gates -only lint,types -continue"
+      ]
+    },
     "idea": {
       "command": "idea",
       "description": "Capture a free-text idea as a stage:intake issue.",
@@ -1093,6 +1169,80 @@
         "specsync lint -body-file body.md"
       ]
     },
+    "new": {
+      "command": "new",
+      "description": "Create a change from a short template, after showing likely duplicates; the issue is created only on -yes.",
+      "mutates": true,
+      "args": [
+        {
+          "name": "title",
+          "description": "what the change delivers, as one short sentence",
+          "required": true
+        }
+      ],
+      "workflow": {
+        "position": "issue-first-start",
+        "related_after": [
+          "start",
+          "pull"
+        ]
+      },
+      "flags": [
+        {
+          "name": "anyway",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "create the change even though likely duplicates were found"
+        },
+        {
+          "name": "dry-run",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "show the duplicates and the text and create nothing"
+        },
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "repo",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "repository to search for duplicate issues as owner/name (default: the current repository)"
+        },
+        {
+          "name": "store",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "registered OpenSpec store id to operate on (default: openspec/config.yaml `store:`, else ./openspec)"
+        },
+        {
+          "name": "yes",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "create the tracker issue (specsync -change \u003cslug\u003e) from the edited proposal; refused while placeholders remain"
+        }
+      ],
+      "safety_rules": [
+        "Searches local changes and open issues for the title's key words first and stops when it finds likely duplicates, unless -anyway is given",
+        "Writes only openspec/changes/\u003cslug\u003e/ (proposal and tasks); it never creates the openspec folder: run specsync init first in a repo with none",
+        "Without -yes it scaffolds the change and prints the text; the tracker issue is created only with -yes, and only from text you have edited: -yes refuses while the template placeholders remain",
+        "-dry-run creates nothing at all"
+      ],
+      "examples": [
+        "specsync new 'Show a clean summary in status' -dry-run",
+        "specsync new 'Show a clean summary in status'",
+        "specsync new 'Show a clean summary in status' -yes"
+      ]
+    },
     "next": {
       "command": "next",
       "description": "Say the next step for your current work, and the command for it.",
@@ -1302,6 +1452,227 @@
         "specsync overview -repo api -attention",
         "specsync overview -epic acme/web#1 -json",
         "specsync overview -root ~/dev -unattached"
+      ]
+    },
+    "park": {
+      "command": "park",
+      "description": "Stop work so another session can resume: save, set the stage and leave a note.",
+      "mutates": true,
+      "workflow": {
+        "position": "implementation",
+        "related_before": [
+          "save"
+        ],
+        "related_after": [
+          "status"
+        ]
+      },
+      "flags": [
+        {
+          "name": "add",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "an untracked file to include (repeatable); untracked files are never included otherwise"
+        },
+        {
+          "name": "allow",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "a file whose secret scan result you have reviewed as a false positive (repeatable); reported when used"
+        },
+        {
+          "name": "change",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "the change this work belongs to (default: found from the branch name)"
+        },
+        {
+          "name": "dry-run",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "show what would be committed and pushed and change nothing"
+        },
+        {
+          "name": "json",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "output as JSON"
+        },
+        {
+          "name": "m",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "commit message (required)"
+        },
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "push",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "push the branch after committing (never forces)"
+        },
+        {
+          "name": "push-to-request",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "allow pushing a branch that has an open pull request"
+        },
+        {
+          "name": "stage",
+          "type": "string",
+          "required": false,
+          "default": "backlog",
+          "description": "the stage to set on the change"
+        },
+        {
+          "name": "store",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "registered OpenSpec store id to operate on (default: openspec/config.yaml `store:`, else ./openspec)"
+        }
+      ],
+      "safety_rules": [
+        "Runs the same guards as save before anything is written; nothing is discarded, reset or deleted",
+        "Sets the change's stage (default backlog) and appends a `parked:` line to its discoveries.md, then commits",
+        "Pushes only with -push, with the same rules as save"
+      ],
+      "examples": [
+        "specsync park -m 'waiting on the API change' -dry-run",
+        "specsync park -m 'waiting on the API change' -stage blocked"
+      ]
+    },
+    "pr": {
+      "command": "pr",
+      "description": "Check a branch is ready for a pull request (prep) and open one with a short generated body (open).",
+      "mutates": true,
+      "args": [
+        {
+          "name": "verb",
+          "description": "prep (check, read-only) or open (check, then create the pull request)",
+          "required": true
+        }
+      ],
+      "workflow": {
+        "position": "pre-merge",
+        "related_before": [
+          "gates",
+          "update"
+        ],
+        "related_after": [
+          "status"
+        ]
+      },
+      "flags": [
+        {
+          "name": "base",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "open: the base branch (default: the repository's default branch)"
+        },
+        {
+          "name": "body-file",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "open: a body file to use instead of the generated one"
+        },
+        {
+          "name": "budget",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "size budget override, e.g. files=15,lines=400,commits=30"
+        },
+        {
+          "name": "change",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "the change this branch belongs to (default: found from the branch name)"
+        },
+        {
+          "name": "confirm",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "open: a confirmation named in pr.confirm (repeatable), or oversized"
+        },
+        {
+          "name": "draft",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "open: create the pull request as a draft"
+        },
+        {
+          "name": "dry-run",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "open: show what would be created and create nothing"
+        },
+        {
+          "name": "exclude",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "glob of paths left out of the size counts (repeatable)"
+        },
+        {
+          "name": "json",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "prep: output as JSON"
+        },
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "store",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "registered OpenSpec store id to operate on (default: openspec/config.yaml `store:`, else ./openspec)"
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "open: the title (default: the change's title)"
+        }
+      ],
+      "safety_rules": [
+        "prep reads and changes nothing; it checks a clean tree, tasks done, current with the base, gates stamped for HEAD and the size budget",
+        "open refuses unless prep passes, the branch is pushed and every pr.confirm entry from openspec/specsync.yml is given with -confirm \u003cname\u003e",
+        "-confirm oversized acknowledges only a failed size check; no other failed check can be waived",
+        "open never pushes; -dry-run prints the title, body and command and creates nothing"
+      ],
+      "examples": [
+        "specsync pr prep",
+        "specsync pr open -dry-run",
+        "specsync pr open -confirm tests-run -confirm manual-test"
       ]
     },
     "pr-body": {
@@ -1684,6 +2055,120 @@
         "specsync review-map origin/main..feat/42-thing -json",
         "specsync review-map -change my-change 123",
         "specsync review-map -equivalent feat/42-thing-old feat/42-thing"
+      ]
+    },
+    "save": {
+      "command": "save",
+      "description": "Commit your work safely: refuses secrets and forbidden trailers, pushes only when asked.",
+      "mutates": true,
+      "workflow": {
+        "position": "implementation",
+        "related_before": [
+          "next"
+        ],
+        "related_after": [
+          "gates",
+          "update"
+        ]
+      },
+      "flags": [
+        {
+          "name": "add",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "an untracked file to include (repeatable); untracked files are never included otherwise"
+        },
+        {
+          "name": "allow",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "a file whose secret scan result you have reviewed as a false positive (repeatable); reported when used"
+        },
+        {
+          "name": "change",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "the change this work belongs to (default: found from the branch name)"
+        },
+        {
+          "name": "dry-run",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "show what would be committed and pushed and change nothing"
+        },
+        {
+          "name": "json",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "output as JSON"
+        },
+        {
+          "name": "m",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "commit message (required)"
+        },
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "push",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "push the branch after committing (never forces)"
+        },
+        {
+          "name": "push-to-request",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "allow pushing a branch that has an open pull request"
+        },
+        {
+          "name": "store",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "registered OpenSpec store id to operate on (default: openspec/config.yaml `store:`, else ./openspec)"
+        },
+        {
+          "name": "sync",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "after committing, preview then sync the change to its tracker issue (specsync -change \u003cslug\u003e); a change with no issue yet gets one only with -yes"
+        },
+        {
+          "name": "yes",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "with -sync, allow creating a new tracker issue for a change that has none"
+        }
+      ],
+      "safety_rules": [
+        "Commits tracked changes only; an untracked file is included only when named with -add",
+        "Refuses files that look like secrets (by name or content) and any save.forbid_files, and trailers listed in save.forbid_trailers",
+        "Scans only the lines a change adds (whole new files), the commit message too; a file it cannot scan is refused unless named with -allow, which is reported",
+        "Refuses a detached HEAD, and pushes only with -push, by explicit refspec, never forcing: it refuses the default branch and a branch with an open or unknown pull request unless -push-to-request is given",
+        "Every refusal happens before anything is committed",
+        "-dry-run lists what would be committed and changes nothing"
+      ],
+      "examples": [
+        "specsync save -m 'fix: handle empty input (#42)' -dry-run",
+        "specsync save -m 'fix: handle empty input (#42)'",
+        "specsync save -m 'add the new fixture' -add testdata/new.json -push"
       ]
     },
     "scan": {
@@ -2070,6 +2555,98 @@
         "specsync spinoff -from my-change -text 'Found edge case in X'"
       ]
     },
+    "start": {
+      "command": "start",
+      "description": "Start or resume work on a change in its own worktree, the same way every time.",
+      "mutates": true,
+      "args": [
+        {
+          "name": "ref",
+          "description": "a change slug, or the number or URL of an issue the change is linked to",
+          "required": true
+        }
+      ],
+      "workflow": {
+        "position": "issue-first-start",
+        "related_before": [
+          "pull",
+          "new"
+        ],
+        "related_after": [
+          "next",
+          "save"
+        ]
+      },
+      "flags": [
+        {
+          "name": "base",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "start point for a new branch (default: the repository's default branch)"
+        },
+        {
+          "name": "dry-run",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "show the worktree and branch and create nothing"
+        },
+        {
+          "name": "json",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "output as JSON"
+        },
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "sessions-cmd",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "command that prints a JSON array of agent sessions (cwd, id, name, status, updatedAt, resume) to show how to resume each piece of work; default $SPECSYNC_SESSIONS_CMD; an empty value disables it for this run; it does not run with -state=off. Taken only from here or the environment, never from a repository file"
+        },
+        {
+          "name": "sessions-timeout",
+          "type": "string",
+          "required": false,
+          "default": "5s",
+          "description": "how long to wait for the session provider"
+        },
+        {
+          "name": "store",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "registered OpenSpec store id to operate on (default: openspec/config.yaml `store:`, else ./openspec)"
+        },
+        {
+          "name": "type",
+          "type": "string",
+          "required": false,
+          "default": "feat",
+          "description": "branch type for the {type} placeholder"
+        }
+      ],
+      "safety_rules": [
+        "Reuses the change's worktree when it exists and creates nothing; otherwise creates one from the worktrees: directory and branch pattern in openspec/specsync.yml",
+        "Start hooks run only in a newly created worktree, and only after `specsync trust -yes`",
+        "Refuses when the session provider reports a live session in the worktree, or cannot be asked while one is configured",
+        "Records the branch-to-change link in the repository's git config; -dry-run changes nothing"
+      ],
+      "examples": [
+        "specsync start add-retry -dry-run",
+        "specsync start add-retry",
+        "specsync start 42"
+      ]
+    },
     "status": {
       "command": "status",
       "description": "Show where your current work stands, or every change with -everything.",
@@ -2427,6 +3004,85 @@
         "specsync trust",
         "specsync trust -yes",
         "specsync trust -revoke"
+      ]
+    },
+    "update": {
+      "command": "update",
+      "description": "Bring your branch up to date with its base or upstream: a plan first, then -apply.",
+      "mutates": true,
+      "workflow": {
+        "position": "implementation",
+        "related_before": [
+          "status"
+        ],
+        "related_after": [
+          "gates"
+        ]
+      },
+      "flags": [
+        {
+          "name": "apply",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "run the plan (without it nothing changes)"
+        },
+        {
+          "name": "fetch",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "run git fetch first so the plan sees current remote branches"
+        },
+        {
+          "name": "force-with-lease",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "with -push, allow publishing a rebase of a pushed branch, by a lease on the remote sha"
+        },
+        {
+          "name": "json",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "output the plan as JSON"
+        },
+        {
+          "name": "openspec",
+          "type": "string",
+          "required": false,
+          "default": "openspec",
+          "description": "path to the openspec/ directory"
+        },
+        {
+          "name": "push",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "with -apply, push afterwards (with a lease after a rebase)"
+        },
+        {
+          "name": "push-to-request",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "with -push, allow pushing when the branch has an open pull request or that could not be checked"
+        }
+      ],
+      "safety_rules": [
+        "Without -apply it prints the plan and changes nothing",
+        "Refuses a dirty working tree; never force-pushes a shared branch (those are merged)",
+        "Pushes only with -push, by explicit refspec to the branch's own name; publishing a rebase of a pushed branch also needs -force-with-lease, which leases against a freshly fetched remote sha already contained in HEAD",
+        "Refuses a detached HEAD, and -push from the default branch unless -push-to-request is given; every refusal happens before anything is changed",
+        "An unknown or open pull request state counts as under review: the plan merges, and -push then needs -push-to-request",
+        "Stops at a conflict, names the files and leaves git's own merge or rebase state for you to resolve or abort",
+        "The plan uses the sync: strategy from openspec/specsync.yml; run with -fetch to refresh remote branches first"
+      ],
+      "examples": [
+        "specsync update",
+        "specsync update -fetch -apply",
+        "specsync update -apply -push"
       ]
     },
     "validate": {

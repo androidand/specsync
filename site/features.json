@@ -166,5 +166,11 @@
   {
     "title": "Clean up finished work safely",
     "body": "<code>specsync cleanup</code> lists worktrees whose work is provably merged and, with <code>-apply</code>, removes them and their branches. It never touches dirty trees, ignored files, protected or shared branches, unpushed commits, open requests or live sessions, and re-checks each one just before removal; hooks run only after <code>specsync trust</code>."
+  },
+  {
+    "group": "collaborate",
+    "icon": "flow",
+    "title": "The same steps every time",
+    "body": "<code>new</code>, <code>start</code>, <code>save</code>, <code>gates</code>, <code>update</code> and <code>pr prep</code>/<code>open</code> do the mechanical parts of starting, checking and opening work, each with a dry run. They refuse secrets, forbidden trailers, unsafe pushes and unconfirmed PRs; the conventions come from <code>openspec/specsync.yml</code>."
   }
 ]

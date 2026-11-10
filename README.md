@@ -125,13 +125,18 @@ appear on someone else's repository.
 | `idea` | Capture a free-text idea as a stage:intake issue. |
 | `init` | Create a scratch openspec/ here and keep it out of git. |
 | `link` | Cross-link two or more OpenSpec changes. |
+| `new` | Create a change from a short template, after showing likely duplicates; the issue is created only on -yes. |
 | `note` | Append a discovery line to a change's discoveries.md. |
+| `park` | Stop work so another session can resume: save, set the stage and leave a note. |
 | `pull` | Pull an issue into a local OpenSpec change. |
+| `save` | Commit your work safely: refuses secrets and forbidden trailers, pushes only when asked. |
 | `set-priority` | Set or unset a change's numeric priority override. |
 | `set-stage` | Set the workflow stage of a change. |
 | `slice` | Start a slice: create its branch and worktree, stacked on the previous slice. |
 | `slices` | List a change's slices with progress, order, budget and state. |
 | `spinoff` | Spin off emergent work from a discovery. |
+| `start` | Start or resume work on a change in its own worktree, the same way every time. |
+| `update` | Bring your branch up to date with its base or upstream: a plan first, then -apply. |
 
 **Sync with the tracker.** Start with `specsync -dry-run -change <slug>`.
 
@@ -145,7 +150,9 @@ appear on someone else's repository.
 |---|---|
 | `archive` | Archive a completed change: final push, close, then retention. |
 | `changelog` | Generate release notes from OpenSpec changes and commits. |
+| `gates` | Run the repo's configured gates in order and stamp the commit when they pass. |
 | `lint` | Check titles and issue or PR text against the short-text standard. |
+| `pr` | Check a branch is ready for a pull request (prep) and open one with a short generated body (open). |
 | `pr-body` | Generate the correct PR body fragment for a change. |
 | `release-plan` | Inspect release impact and generate release notes. |
 | `review-map` | Turn a branch into a review checklist, or prove a rewritten branch has the same content. |
@@ -703,7 +710,12 @@ flow: pr-review          # minimal | pr-review (default) | strict, or a list of 
 gates:
   - {name: lint, run: "make lint"}
   - {name: e2e, run: "make e2e", optional: true}
-worktrees: {dir: "../worktrees", branch: "{type}/{issue}-{slug}"}
+worktrees:
+  dir: "../worktrees"
+  branch: "{type}/{issue}-{slug}"
+  hooks: ["make setup"]       # run in a new worktree, after trust
+save: {forbid_trailers: [Co-Authored-By], forbid_files: ["*.sql"]}
+pr: {confirm: [tests-run, manual-test]}
 cleanup: {remote_branch: keep, archive: true}
 sync: {strategy: rebase, after_review: merge, force: with-lease}
 ```
@@ -715,8 +727,28 @@ written to `<git-dir>/specsync/gates-passed`. `specsync doctor config` validates
 line numbers. Commands defined in the file run only after `specsync trust` records its hash for
 you and this repository: `specsync trust` prints them and records nothing, `specsync trust -yes`
 records trust, and a changed file needs trust again. Until then `next` and `flow` point at
-`specsync trust` instead of the commands. `worktrees.dir`, `worktrees.branch` and
-`cleanup.remote_branch` are reserved for later changes: accepted, noted by `doctor config`, not used.
+`specsync trust` instead of the commands.
+
+### Start, check and open work the same way every time
+
+The flow verbs do the mechanical steps and refuse unsafe states; the conventions come from the
+config above, never from code. All of them print a plan with `-dry-run` (or without `-apply`) and
+change nothing then. See `docs/flow-verbs.md` for moving a personal script onto them.
+
+- `specsync new <title>` creates a change from a short template after showing likely duplicate
+  changes and open issues; the tracker issue is created only with `-yes`, and only once the template placeholders have been edited away.
+- `specsync start <slug|issue>` reuses the change's worktree or creates one from `worktrees:`,
+  runs the start hooks there (after trust) and refuses when the session provider reports a live session.
+- `specsync save -m <msg>` commits tracked changes (untracked files only with `-add`), refuses
+  secret-looking files and forbidden trailers, pushes only with `-push` (by explicit refspec to the
+  branch's own name), and not onto a branch with an open pull request without `-push-to-request`.
+  `-sync` previews the tracker sync first and creates a new issue only with `-yes`.
+  It scans only the lines a change adds (and the message), refuses a detached HEAD, and takes `-allow <file>` for a reviewed false positive. `specsync park -m <note>` saves, sets the stage and leaves a note.
+- `specsync gates` runs the configured gates after trust and stamps the commit when a full run passes on a clean tree.
+- `specsync update` plans how to bring the branch current (the `sync:` strategy); `-apply` runs it,
+  stops at a conflict, and `-push` publishes a rebase of a pushed branch only with `-force-with-lease`, leased on a freshly fetched sha; shared branches, and branches whose pull request state is open or unknown, are merged, never rewritten.
+- `specsync pr prep` checks tasks, freshness, the gate stamp and the size budget; `specsync pr open`
+  creates the pull request with the generated short body once prep passes and every `pr.confirm` entry is given with `-confirm`.
 
 ### Keep issue and PR text short
 

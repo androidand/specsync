@@ -101,13 +101,18 @@ specsync agent-help                # overview
 - `idea` — Capture a free-text idea as a stage:intake issue.
 - `init` — Create a scratch openspec/ here and keep it out of git.
 - `link` — Cross-link two or more OpenSpec changes.
+- `new` — Create a change from a short template, after showing likely duplicates; the issue is created only on -yes.
 - `note` — Append a discovery line to a change's discoveries.md.
+- `park` — Stop work so another session can resume: save, set the stage and leave a note.
 - `pull` — Pull an issue into a local OpenSpec change.
+- `save` — Commit your work safely: refuses secrets and forbidden trailers, pushes only when asked.
 - `set-priority` — Set or unset a change's numeric priority override.
 - `set-stage` — Set the workflow stage of a change.
 - `slice` — Start a slice: create its branch and worktree, stacked on the previous slice.
 - `slices` — List a change's slices with progress, order, budget and state.
 - `spinoff` — Spin off emergent work from a discovery.
+- `start` — Start or resume work on a change in its own worktree, the same way every time.
+- `update` — Bring your branch up to date with its base or upstream: a plan first, then -apply.
 
 **Sync with the tracker** (start: `specsync -dry-run -change <slug>`)
 - `sync` — Synchronize an OpenSpec change with GitHub Issues.
@@ -115,7 +120,9 @@ specsync agent-help                # overview
 **Review and release** (start: `specsync verify`)
 - `archive` — Archive a completed change: final push, close, then retention.
 - `changelog` — Generate release notes from OpenSpec changes and commits.
+- `gates` — Run the repo's configured gates in order and stamp the commit when they pass.
 - `lint` — Check titles and issue or PR text against the short-text standard.
+- `pr` — Check a branch is ready for a pull request (prep) and open one with a short generated body (open).
 - `pr-body` — Generate the correct PR body fragment for a change.
 - `release-plan` — Inspect release impact and generate release notes.
 - `review-map` — Turn a branch into a review checklist, or prove a rewritten branch has the same content.

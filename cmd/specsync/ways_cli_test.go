@@ -241,11 +241,11 @@ func TestFlowJSONCarriesNoEmptySlugPaths(t *testing.T) {
 	}
 }
 
-func TestDoctorConfigNotesReservedKeys(t *testing.T) {
+func TestDoctorConfigAcceptsKeysCommandsNowUse(t *testing.T) {
 	bin := buildSpecsyncBinary(t)
-	repo, env := waysRepo(t, "worktrees: {dir: ../w}\n")
+	repo, env := waysRepo(t, "cleanup: {remote_branch: keep}\nworktrees: {dir: ../w}\n")
 	out, err := runIn(t, bin, repo, env, "doctor", "config")
-	if err != nil || !strings.Contains(out, "reserved for flow-verbs") {
+	if err != nil || strings.Contains(out, "reserved") {
 		t.Fatalf("err=%v\n%s", err, out)
 	}
 }
