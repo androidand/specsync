@@ -12,12 +12,14 @@ import (
 
 type flowFlags struct {
 	openspec *string
+	change   *string
 	asJSON   *bool
 	state    *string
 }
 
 func (ff *flowFlags) define(fs *flag.FlagSet) {
 	ff.openspec = fs.String("openspec", "openspec", "path to the openspec/ directory")
+	ff.change = fs.String("change", "", "the change to report on (default: the work in the current folder)")
 	ff.asJSON = fs.Bool("json", false, "output as JSON")
 	ff.state = fs.String("state", "on", "on (default) reuses pull request data for up to a minute; fresh refetches it; off skips the tracker and pull request lookups: local facts only, offline")
 }
@@ -44,9 +46,14 @@ func (ff *flowFlags) currentPosition(args []string, fs *flag.FlagSet) specsync.F
 
 	ctx := context.Background()
 	cwd, _ := os.Getwd()
+	scopeDir := cwd
+	if *ff.change != "" {
+		scopeDir = ""
+	}
 	topo, err := specsync.BuildTopology(ctx, specsync.TopologyOptions{
 		OpenSpecDir:     *ff.openspec,
-		Dir:             cwd,
+		Slug:            *ff.change,
+		Dir:             scopeDir,
 		LocalOnly:       *ff.state == "off",
 		Cache:           requestCache(),
 		RefreshRequests: *ff.state == "fresh",
@@ -54,11 +61,15 @@ func (ff *flowFlags) currentPosition(args []string, fs *flag.FlagSet) specsync.F
 	if err != nil {
 		fail(err)
 	}
+	if len(topo.Changes) > 1 {
+		fail(fmt.Errorf("%d changes here; pass -change <slug>", len(topo.Changes)))
+	}
 	var row *specsync.ChangeTopology
 	if len(topo.Changes) == 1 {
 		row = &topo.Changes[0]
 	}
 	facts := specsync.FactsFromRow(row)
+	facts.PRUnknown = topo.RequestState != "ok"
 	facts.Trusted = specsync.IsTrusted(root)
 	dir := cwd
 	if row != nil && row.Worktree != "" {

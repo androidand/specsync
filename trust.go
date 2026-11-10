@@ -110,6 +110,6 @@ func RequireTrust(root string, commands []string) error {
 	for _, c := range commands {
 		fmt.Fprintf(&b, "  $ %s\n", c)
 	}
-	b.WriteString("Read them, then run: specsync trust")
+	b.WriteString("Read them, then run: specsync trust -yes")
 	return fmt.Errorf("%s", b.String())
 }

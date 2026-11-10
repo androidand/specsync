@@ -68,12 +68,26 @@ func TestFlowGatesNotRunNamesTheGateCommands(t *testing.T) {
 	}
 }
 
-func TestFlowGatesUntrustedSaysSo(t *testing.T) {
+func TestFlowGatesUntrustedNeverSuggestsTheCommands(t *testing.T) {
 	f := baseFacts()
 	f.GatesPassed, f.Trusted = false, false
 	s := current(t, defaultWays(), f)
-	if !strings.Contains(s.Reason, "specsync trust") {
+	if s.Command != "specsync trust" || !strings.Contains(s.Reason, "review the commands first") {
 		t.Fatalf("an untrusted config must point at trust: %+v", s)
+	}
+	for _, field := range []string{s.Command, s.Reason} {
+		if strings.Contains(field, "make lint") || strings.Contains(field, "make test") {
+			t.Fatalf("repository commands must not be suggested before trust: %+v", s)
+		}
+	}
+}
+
+func TestFlowGatesTrustedExplainsWhoRunsThem(t *testing.T) {
+	f := baseFacts()
+	f.GatesPassed = false
+	s := current(t, defaultWays(), f)
+	if !strings.Contains(s.Reason, "specsync gates") || !strings.Contains(s.Reason, "yourself") {
+		t.Fatalf("%+v", s)
 	}
 }
 
@@ -213,5 +227,38 @@ func TestFlowFactsFromRow(t *testing.T) {
 	}
 	if f := FactsFromRow(nil); f.HasChange {
 		t.Fatalf("%+v", f)
+	}
+}
+
+func TestFlowUnknownPullRequestStateIsNotNoPullRequest(t *testing.T) {
+	f := baseFacts()
+	f.PRUnknown = true
+	s := current(t, defaultWays(), f)
+	if s.Step != "review" || s.Command != "" || !strings.Contains(s.Reason, "pull request state unknown") {
+		t.Fatalf("%+v", s)
+	}
+	if strings.Contains(s.Command+s.Reason, "gh pr create") {
+		t.Fatalf("must not suggest opening a pull request that may exist: %+v", s)
+	}
+}
+
+func TestFlowDoneStepsCarryNoCommandOrReason(t *testing.T) {
+	f := baseFacts()
+	pos := defaultWays().Position(f)
+	for _, s := range pos.Steps {
+		if s.Done && (s.Command != "" || s.Reason != "") {
+			t.Fatalf("a done step must be clean: %+v", s)
+		}
+	}
+}
+
+func TestFlowNeverEmitsEmptySlugPaths(t *testing.T) {
+	pos := defaultWays().Position(FlowFacts{})
+	for _, s := range pos.Steps {
+		for _, text := range []string{s.Command, s.Reason} {
+			if strings.Contains(text, "changes//") || strings.Contains(text, "-change  ") || strings.HasSuffix(text, "-change ") || strings.Contains(text, "worktrees/ ") {
+				t.Fatalf("empty slug leaked: %+v", s)
+			}
+		}
 	}
 }

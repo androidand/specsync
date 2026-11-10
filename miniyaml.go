@@ -2,6 +2,7 @@ package specsync
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -66,7 +67,8 @@ type yparser struct {
 // quoted and bare scalars, and comments. Any other construct is an error.
 func ParseConfigYAML(data []byte) (*YNode, error) {
 	p := &yparser{}
-	for i, raw := range strings.Split(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n") {
+	text := strings.TrimPrefix(string(data), "\ufeff")
+	for i, raw := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n") {
 		no := i + 1
 		body, err := stripComment(raw, no)
 		if err != nil {
@@ -99,23 +101,34 @@ func ParseConfigYAML(data []byte) (*YNode, error) {
 }
 
 func stripComment(s string, no int) (string, error) {
-	var quote byte
 	for i := 0; i < len(s); i++ {
-		c := s[i]
-		switch {
-		case quote != 0:
-			if c == '\\' && quote == '"' {
-				i++
-			} else if c == quote {
-				quote = 0
+		switch c := s[i]; {
+		case c == '"' || c == '\'':
+			if end := closingQuote(s, i); end > 0 {
+				i = end
 			}
-		case (c == '"' || c == '\'') && (i == 0 || strings.ContainsRune(" :-[{,", rune(s[i-1]))):
-			quote = c
 		case c == '#' && (i == 0 || s[i-1] == ' ' || s[i-1] == '\t'):
 			return s[:i], nil
 		}
 	}
 	return s, nil
+}
+
+// closingQuote returns the index of the quote that closes the one at i, or -1
+// when there is none, in which case the quote is ordinary text (it's).
+func closingQuote(s string, i int) int {
+	q := s[i]
+	for j := i + 1; j < len(s); j++ {
+		switch {
+		case q == '"' && s[j] == '\\':
+			j++
+		case q == '\'' && s[j] == '\'' && j+1 < len(s) && s[j+1] == '\'':
+			j++
+		case s[j] == q:
+			return j
+		}
+	}
+	return -1
 }
 
 func (p *yparser) block(indent int) (*YNode, error) {
@@ -275,18 +288,30 @@ func quoted(s string, no int) (val, rest string, err error) {
 	return "", "", &YAMLError{no, "unterminated quote"}
 }
 
+var (
+	anchorRE = regexp.MustCompile(`^&[A-Za-z0-9_-]+( |$)`)
+	aliasRE  = regexp.MustCompile(`^\*[A-Za-z0-9_-]+$`)
+	tagRE    = regexp.MustCompile(`^(!![A-Za-z0-9_-]*|!<[^>]*>)( |$)`)
+	blockRE  = regexp.MustCompile(`^[|>][+-]?[0-9]*$`)
+)
+
+// inlineValue reads a value written on the key's line. Text that merely
+// starts with a YAML indicator (`[[ -f x ]] && make`, `*.sh`, `> out`) is a
+// plain scalar; only the real constructs are errors or collections.
 func inlineValue(s string, no int) (*YNode, error) {
-	switch s[0] {
-	case '&':
+	switch {
+	case anchorRE.MatchString(s):
 		return nil, &YAMLError{no, "anchors are unsupported"}
-	case '*':
+	case aliasRE.MatchString(s):
 		return nil, &YAMLError{no, "aliases are unsupported"}
-	case '!':
+	case tagRE.MatchString(s):
 		return nil, &YAMLError{no, "tags are unsupported"}
-	case '|', '>':
+	case blockRE.MatchString(s):
 		return nil, &YAMLError{no, "multi-line scalars are unsupported"}
-	case '{', '[':
-		return flow(s, no)
+	case s[0] == '{' && s[len(s)-1] == '}', s[0] == '[' && s[len(s)-1] == ']':
+		if n, err := flow(s, no); err == nil || strings.Contains(err.Error(), "nested") {
+			return n, err
+		}
 	}
 	return scalar(s, no)
 }

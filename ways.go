@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -33,6 +34,8 @@ type Ways struct {
 	Text      TextConfig
 	Cleanup   CleanupConfig
 	Sync      SyncConfig
+	// Reserved lists keys that are accepted but not used yet.
+	Reserved []ConfigIssue
 }
 
 // ConfigIssue is one problem found in the config, with its line.
@@ -90,12 +93,15 @@ func ParseWays(data []byte) (Ways, []ConfigIssue) {
 		}
 		return w, []ConfigIssue{{Line: 1, Msg: err.Error()}}
 	}
+	if root.Kind != YMap {
+		return w, []ConfigIssue{{Line: root.Line, Msg: "the config must be a map of keys (key: value)"}}
+	}
 	var issues []ConfigIssue
 	add := func(line int, key, format string, a ...any) {
 		issues = append(issues, ConfigIssue{Line: line, Key: key, Msg: fmt.Sprintf(format, a...)})
 	}
 	for _, k := range root.Keys {
-		if !hasString(topLevelKeys, k) {
+		if !slices.Contains(topLevelKeys, k) {
 			add(root.KeyLine[k], k, "unknown key %q%s", k, didYouMean(k, topLevelKeys))
 		}
 	}
@@ -115,7 +121,7 @@ func ParseWays(data []byte) (Ways, []ConfigIssue) {
 			continue
 		}
 		for _, k := range n.Keys {
-			if !hasString(sectionKeys[sec], k) {
+			if !slices.Contains(sectionKeys[sec], k) {
 				add(n.KeyLine[k], sec+"."+k, "unknown key %q in %s%s", k, sec, didYouMean(k, sectionKeys[sec]))
 			}
 		}
@@ -137,9 +143,13 @@ func (w *Ways) readFlow(n *YNode, line int, add addIssue) {
 		}
 		w.Flow, w.Steps = n.Scalar, steps
 	case YList:
+		if len(n.List) == 0 {
+			add(line, "flow", "flow needs at least one step, or use a preset: %s", presetNames())
+			return
+		}
 		var steps []string
 		for _, s := range n.List {
-			if s.Kind != YScalar || !hasString(flowSteps, s.Scalar) {
+			if s.Kind != YScalar || !slices.Contains(flowSteps, s.Scalar) {
 				add(line, "flow", "unknown step %q: use steps from %s", s.Scalar, strings.Join(flowSteps, ", "))
 				return
 			}
@@ -162,7 +172,7 @@ func (w *Ways) readGates(n *YNode, line int, add addIssue) {
 			continue
 		}
 		for _, k := range g.Keys {
-			if !hasString([]string{"name", "run", "optional"}, k) {
+			if !slices.Contains([]string{"name", "run", "optional"}, k) {
 				add(g.KeyLine[k], "gates."+k, "unknown key %q in a gate%s", k, didYouMean(k, []string{"name", "run", "optional"}))
 			}
 		}
@@ -184,10 +194,23 @@ func (w *Ways) readGates(n *YNode, line int, add addIssue) {
 	}
 }
 
+var reservedKeys = map[string]string{
+	"worktrees.dir":         "flow-verbs",
+	"worktrees.branch":      "flow-verbs",
+	"text.profile":          "concise-change-text",
+	"cleanup.remote_branch": "worktree-cleanup",
+}
+
 func (w *Ways) readSection(sec string, n *YNode, add addIssue) {
+	for _, k := range n.Keys {
+		if owner, ok := reservedKeys[sec+"."+k]; ok {
+			w.Reserved = append(w.Reserved, ConfigIssue{Line: n.KeyLine[k], Key: sec + "." + k,
+				Msg: fmt.Sprintf("%s.%s is reserved for %s and is not used yet", sec, k, owner)})
+		}
+	}
 	enum := func(key string, allowed ...string) string {
 		v := n.Str(key)
-		if v != "" && !hasString(allowed, v) {
+		if v != "" && !slices.Contains(allowed, v) {
 			add(n.KeyLine[key], sec+"."+key, "%s must be %s, got %q", key, strings.Join(allowed, " or "), v)
 			return ""
 		}
@@ -228,7 +251,7 @@ func (w Ways) GateCommands(includeOptional bool, only []string) []string {
 	for _, g := range w.Gates {
 		switch {
 		case len(only) > 0:
-			if !hasString(only, g.Name) {
+			if !slices.Contains(only, g.Name) {
 				continue
 			}
 		case g.Optional && !includeOptional:
@@ -247,15 +270,6 @@ func parseBool(s string) (bool, bool) {
 		return false, true
 	}
 	return false, false
-}
-
-func hasString(list []string, s string) bool {
-	for _, e := range list {
-		if e == s {
-			return true
-		}
-	}
-	return false
 }
 
 func didYouMean(key string, known []string) string {

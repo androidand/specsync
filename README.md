@@ -643,7 +643,10 @@ work's state (the same facts as `status`) and prints the next step and its comma
 marks where the work is. Both only report. A gate counts as run when the commit it passed for is
 written to `<git-dir>/specsync/gates-passed`. `specsync doctor config` validates the file, with
 line numbers. Commands defined in the file run only after `specsync trust` records its hash for
-you and this repository; a changed file needs trust again.
+you and this repository: `specsync trust` prints them and records nothing, `specsync trust -yes`
+records trust, and a changed file needs trust again. Until then `next` and `flow` point at
+`specsync trust` instead of the commands. `worktrees.dir`, `worktrees.branch`, `text.profile` and
+`cleanup.remote_branch` are reserved for later changes: accepted, noted by `doctor config`, not used.
 
 ### `ideas` — list open intake issues
 

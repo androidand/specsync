@@ -87,6 +87,9 @@ func TestParseWaysIssues(t *testing.T) {
 		{"section wrong type", "worktrees: ../w\n", 1, "must be a map"},
 		{"archive not bool", "cleanup:\n  archive: yes please\n", 2, "true or false"},
 		{"unsupported yaml", "a: &x 1\n", 1, "anchors"},
+		{"empty flow list", "flow: []\n", 1, "at least one step"},
+		{"list root", "- a\n- b\n", 1, "map of keys"},
+		{"scalar root", "just text\n", 1, "key: value"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -139,7 +142,7 @@ func TestTrustFreshCloneRefusesAndPrintsCommands(t *testing.T) {
 	if err == nil {
 		t.Fatal("an untrusted config must not run commands")
 	}
-	for _, want := range []string{"make lint", "make test", "specsync trust"} {
+	for _, want := range []string{"make lint", "make test", "specsync trust -yes"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("error %q lacks %q", err, want)
 		}
@@ -186,5 +189,24 @@ func TestRequireTrustNeedsNothingWhenNoCommands(t *testing.T) {
 	root := repoWithConfig(t, "board: acme/1\n")
 	if err := RequireTrust(root, nil); err != nil {
 		t.Fatalf("no commands, nothing to trust: %v", err)
+	}
+}
+
+func TestParseWaysReservedKeysAreAcceptedAndNoted(t *testing.T) {
+	w, issues := ParseWays([]byte("worktrees: {dir: ../w, branch: x}\ntext: {profile: p}\ncleanup: {remote_branch: keep, archive: true}\n"))
+	if len(issues) != 0 {
+		t.Fatalf("reserved keys are valid: %+v", issues)
+	}
+	got := map[string]bool{}
+	for _, r := range w.Reserved {
+		got[r.Key] = true
+	}
+	for _, k := range []string{"worktrees.dir", "worktrees.branch", "text.profile", "cleanup.remote_branch"} {
+		if !got[k] {
+			t.Errorf("%s must be reported as reserved: %+v", k, w.Reserved)
+		}
+	}
+	if got["cleanup.archive"] {
+		t.Error("cleanup.archive is used by next, not reserved")
 	}
 }

@@ -639,6 +639,13 @@
       },
       "flags": [
         {
+          "name": "change",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "the change to report on (default: the work in the current folder)"
+        },
+        {
           "name": "json",
           "type": "boolean",
           "required": false,
@@ -916,6 +923,13 @@
         ]
       },
       "flags": [
+        {
+          "name": "change",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "the change to report on (default: the work in the current folder)"
+        },
         {
           "name": "json",
           "type": "boolean",
@@ -1960,7 +1974,7 @@
           "type": "boolean",
           "required": false,
           "default": false,
-          "description": "show the commands that would be trusted without recording trust"
+          "description": "with -yes, show what would be recorded without recording it"
         },
         {
           "name": "openspec",
@@ -1975,15 +1989,23 @@
           "required": false,
           "default": false,
           "description": "remove the trust record for this repository"
+        },
+        {
+          "name": "yes",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "record trust for the commands printed (without it nothing is recorded)"
         }
       ],
       "safety_rules": [
-        "Writes only a per-user record (a hash of the config) outside the repo; read the printed commands first",
+        "Without -yes it only prints the commands and records nothing; read them, then run the printed specsync trust -yes",
+        "Writes only a per-user record (a hash of the config) outside the repo",
         "A changed config needs trust again; specsync never runs repository-defined commands without it"
       ],
       "examples": [
-        "specsync trust -dry-run",
         "specsync trust",
+        "specsync trust -yes",
         "specsync trust -revoke"
       ]
     },

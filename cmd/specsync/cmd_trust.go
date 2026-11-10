@@ -15,6 +15,7 @@ type trustCmd struct {
 	openspec *string
 	dryRun   *bool
 	revoke   *bool
+	yes      *bool
 }
 
 func init() { Register(&trustCmd{}) }
@@ -28,12 +29,13 @@ func (*trustCmd) Spec() Spec {
 		Mutates:  true,
 		Workflow: AgentCommandWorkflow{Position: "setup", RelatedAfter: []string{"doctor"}},
 		Safety: []string{
-			"Writes only a per-user record (a hash of the config) outside the repo; read the printed commands first",
+			"Without -yes it only prints the commands and records nothing; read them, then run the printed specsync trust -yes",
+			"Writes only a per-user record (a hash of the config) outside the repo",
 			"A changed config needs trust again; specsync never runs repository-defined commands without it",
 		},
 		Examples: []string{
-			"specsync trust -dry-run",
 			"specsync trust",
+			"specsync trust -yes",
 			"specsync trust -revoke",
 		},
 	}
@@ -41,7 +43,8 @@ func (*trustCmd) Spec() Spec {
 
 func (cm *trustCmd) Flags(fs *flag.FlagSet) {
 	cm.openspec = fs.String("openspec", "openspec", "path to the openspec/ directory")
-	cm.dryRun = fs.Bool("dry-run", false, "show the commands that would be trusted without recording trust")
+	cm.yes = fs.Bool("yes", false, "record trust for the commands printed (without it nothing is recorded)")
+	cm.dryRun = fs.Bool("dry-run", false, "with -yes, show what would be recorded without recording it")
 	cm.revoke = fs.Bool("revoke", false, "remove the trust record for this repository")
 }
 
@@ -78,6 +81,10 @@ func (cm *trustCmd) Run(_ context.Context, args []string) error {
 	}
 	for _, c := range ways.GateCommands(true, nil) {
 		fmt.Printf("  $ %s\n", c)
+	}
+	if !*cm.yes {
+		fmt.Println("Nothing recorded. If you trust these commands, run: specsync trust -yes")
+		return nil
 	}
 	if *cm.dryRun {
 		fmt.Println("DRY RUN — would trust the commands above for", root)

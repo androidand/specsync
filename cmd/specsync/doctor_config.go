@@ -16,6 +16,7 @@ type ConfigDiagnostic struct {
 	Trusted  bool                   `json:"trusted"`
 	Commands []string               `json:"commands,omitempty"`
 	Issues   []specsync.ConfigIssue `json:"issues,omitempty"`
+	Reserved []specsync.ConfigIssue `json:"reserved,omitempty"`
 }
 
 func doctorConfig(asJSON bool) {
@@ -41,6 +42,7 @@ func configDiagnostic(root string) ConfigDiagnostic {
 		Trusted:  specsync.IsTrusted(root),
 		Commands: ways.GateCommands(true, nil),
 		Issues:   issues,
+		Reserved: ways.Reserved,
 	}
 	if d.Flow == "" {
 		d.Flow = "custom"
@@ -60,6 +62,9 @@ func printConfigDiagnostic(d ConfigDiagnostic) {
 			state = "trusted"
 		}
 		fmt.Printf("  gate commands: %d, %s\n", len(d.Commands), state)
+	}
+	for _, r := range d.Reserved {
+		fmt.Printf("  note: line %d: %s\n", r.Line, r.Msg)
 	}
 	if len(d.Issues) == 0 {
 		fmt.Println("  config is valid")

@@ -24,6 +24,9 @@ type FlowFacts struct {
 	GatesPassed bool // a gate stamp exists for Head
 	Trusted     bool // the config's commands may run
 	PR          *ChangeRequest
+	// PRUnknown is true when pull request state could not be read (offline, or
+	// the lookup failed), so a missing PR does not mean there is none.
+	PRUnknown bool
 }
 
 // StepState is one step of the flow with whether it is done.
@@ -95,6 +98,9 @@ func (w Ways) Position(f FlowFacts) FlowPosition {
 	pos := FlowPosition{Flow: flow}
 	for _, name := range w.Steps {
 		s := w.evaluate(name, f)
+		if s.Done {
+			s.Command, s.Reason = "", ""
+		}
 		pos.Steps = append(pos.Steps, s)
 	}
 	for i := range pos.Steps {
@@ -111,6 +117,10 @@ func (w Ways) Position(f FlowFacts) FlowPosition {
 func (w Ways) evaluate(step string, f FlowFacts) StepState {
 	s := StepState{Step: step}
 	strict := w.Flow == "strict"
+	slug := f.Slug
+	if slug == "" {
+		slug = "<slug>"
+	}
 	switch step {
 	case "new":
 		s.Done = f.HasChange
@@ -121,14 +131,14 @@ func (w Ways) evaluate(step string, f FlowFacts) StepState {
 		if f.IssueID != "" {
 			s.Command = "specsync pull -issue " + f.IssueID + " -worktree"
 		} else {
-			s.Command = "git worktree add ../worktrees/" + f.Slug + " -b feat/" + f.Slug
+			s.Command = "git worktree add ../worktrees/" + slug + " -b feat/" + slug
 		}
 		s.Reason = "the change has no branch or worktree yet"
 	case "build":
 		s.Done = f.TasksTotal > 0 && f.TasksDone == f.TasksTotal
 		s.Reason = fmt.Sprintf("tasks %d/%d", f.TasksDone, f.TasksTotal)
 		if f.TasksTotal == 0 {
-			s.Reason = "no tasks listed; add them to openspec/changes/" + f.Slug + "/tasks.md"
+			s.Reason = "no tasks listed; add them to openspec/changes/" + slug + "/tasks.md"
 		}
 	case "gate":
 		s.Done = f.GatesPassed && !f.Dirty
@@ -136,35 +146,46 @@ func (w Ways) evaluate(step string, f FlowFacts) StepState {
 		if f.GatesPassed && f.Dirty {
 			s.Reason = "uncommitted changes since the last gate run"
 		}
-		cmds := w.GateCommands(strict, nil)
+		cmds := strings.Join(w.GateCommands(strict, nil), " && ")
 		switch {
 		case len(w.Gates) == 0:
 			s.Reason += "; no gates configured: add gates: to openspec/specsync.yml"
 		case !f.Trusted:
-			s.Reason += "; the config's commands need specsync trust first"
-			fallthrough
+			s.Command = "specsync trust"
+			s.Reason += "; the commands in " + SpecSyncConfigPath + " have not been trusted: review the commands first (specsync trust prints them)"
 		default:
-			s.Command = strings.Join(cmds, " && ")
+			s.Command = cmds
+			s.Reason += "; gates are run by specsync gates (coming with flow-verbs), so run these yourself"
 		}
 	case "review":
 		s.Done, s.Command, s.Reason = w.reviewState(f, strict)
 	case "merge":
 		s.Done = f.PR != nil && f.PR.State == "merged"
+		s.Reason = "approved and green: merge the pull request"
 		if f.PR != nil {
 			s.Command = fmt.Sprintf("gh pr merge %d", f.PR.Number)
+		} else if f.PRUnknown {
+			s.Reason = unknownPR
 		}
-		s.Reason = "approved and green: merge the pull request"
 	case "cleanup":
 		s.Done, s.Command, s.Reason = w.cleanupState(f)
 	}
 	return s
 }
 
+const unknownPR = "pull request state unknown (offline, or the lookup failed); run without -state=off to check"
+
 func (w Ways) reviewState(f FlowFacts, strict bool) (done bool, command, reason string) {
 	pr := f.PR
+	slug := f.Slug
+	if slug == "" {
+		slug = "<slug>"
+	}
 	switch {
+	case pr == nil && f.PRUnknown:
+		return false, "", unknownPR
 	case pr == nil:
-		return false, "gh pr create", "no pull request yet; specsync pr-body -change " + f.Slug + " prints a body"
+		return false, "gh pr create", "no pull request yet; specsync pr-body -change " + slug + " prints a body"
 	case pr.State == "merged":
 		return true, "", ""
 	case pr.State == "closed":
@@ -186,6 +207,9 @@ func (w Ways) reviewState(f FlowFacts, strict bool) (done bool, command, reason 
 }
 
 func (w Ways) cleanupState(f FlowFacts) (done bool, command, reason string) {
+	if f.PR == nil && f.PRUnknown {
+		return false, "", unknownPR
+	}
 	if f.PR == nil || f.PR.State != "merged" {
 		return false, "", "nothing to clean up until the pull request is merged"
 	}
