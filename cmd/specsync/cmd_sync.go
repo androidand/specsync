@@ -44,7 +44,7 @@ func (*syncCmd) Spec() Spec {
 		Workflow: AgentCommandWorkflow{Position: "after-implementation", RelatedBefore: []string{"scan", "pull", "changes"}, RelatedAfter: []string{"changes", "verify", "release-plan"}},
 		Safety: []string{
 			"Always use -dry-run first to preview changes",
-			"Always pass -change when one change is in scope (without it, syncs every change)",
+			"Pass -change for one change or -all for every change; without either a writing sync is refused (-dry-run previews all)",
 			"Confirm git remote points to the right repo",
 		},
 		Confusions: map[string]string{
@@ -61,8 +61,8 @@ func (*syncCmd) Spec() Spec {
 
 func (cm *syncCmd) Flags(fs *flag.FlagSet) {
 	cm.openspec, cm.store = addRootFlags(fs)
-	cm.change = fs.String("change", "", "sync only this change (default: all changes)")
-	cm.all = fs.Bool("all", false, "sync every change in the resolved root (required to sweep a store)")
+	cm.change = fs.String("change", "", "sync only this change (a writing sync needs -change or -all)")
+	cm.all = fs.Bool("all", false, "sync every change in the resolved root (a writing sync needs -change or -all)")
 	cm.repo = fs.String("repo", "", "target repo as owner/name (default: auto-detect from git remote)")
 	fs.Var(&cm.providerNames, "provider", "work provider: github, beads, mcp (repeatable; auto-detect when absent)")
 	cm.mcpConfig = fs.String("mcp-config", ".specsync-mcp.json", "path to the MCP provider's config (used only with -provider mcp)")
@@ -95,6 +95,7 @@ func (cm *syncCmd) run(args []string) {
 
 	root := resolveRoot(fs, openspec, store)
 	guardStoreScope(root, *change, *all)
+	guardUnscopedSync(*change, *all, *dryRun)
 	abs := root.Dir
 	repoRoot := filepath.Dir(abs)
 	if root.IsStore() {

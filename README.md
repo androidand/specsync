@@ -855,7 +855,8 @@ The branch's last path segment is matched against active changes, so both
 `feat/42-my-feature` and an orchestrator's `someuser/my-feature` (Orca's
 default `<user>/<workspace>`) resolve to `my-feature`. The default branch
 never resolves, so an agent on `main` still has to name the change. Bare
-`specsync` keeps syncing every change.
+`specsync` prints its commands and writes nothing; syncing every change takes
+`specsync -all`.
 
 ```bash
 specsync set-stage active                 # on feat/42-my-feature
@@ -1034,8 +1035,8 @@ Treat OpenSpec as an active planning lifecycle, not a one-off document dump:
 
 Both paths are first-class:
 
-- spec-first: author local change, then run `specsync`
-- issue-first: start from issue, run `specsync pull`, then continue with `specsync`
+- spec-first: author local change, then run `specsync -dry-run -change <slug>` and `specsync -change <slug>`
+- issue-first: start from issue, run `specsync pull`, then continue with `specsync -change <slug>`
 
 ### `.status` and stage labels
 

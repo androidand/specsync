@@ -28,8 +28,8 @@ var version = "dev"
 // subcommand name reach runSync's flag.Parse would silently discard every
 // flag after it (including -dry-run) instead of failing loud.
 func resolveSubcommand(args []string) (cmd string, rest []string, err error) {
-	if len(args) == 0 {
-		return "sync", args, nil
+	if len(args) == 0 || (len(args) == 1 && isHelpArg(args[0])) {
+		return "help", nil, nil
 	}
 	first := args[0]
 	if first == "-version" || first == "--version" {
@@ -72,8 +72,12 @@ func deprecatedSlugFlag(args []string) error {
 func main() {
 	cmd, rest, err := resolveSubcommand(os.Args[1:])
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "specsync: %v\n\nRun with no subcommand (optionally with flags) to sync, or use one of: %s\n", err, strings.Join(commandNames(), ", "))
+		fmt.Fprintf(os.Stderr, "specsync: %v\n\nRun specsync with no arguments to list the commands, or use one of: %s\n", err, strings.Join(commandNames(), ", "))
 		os.Exit(2)
+	}
+	if cmd == "help" {
+		fmt.Print(renderUsage())
+		return
 	}
 
 	if c, ok := lookupCommand(cmd); ok {
@@ -84,6 +88,38 @@ func main() {
 	}
 
 	fail(fmt.Errorf("unknown subcommand %q", cmd))
+}
+
+// isHelpArg reports whether arg alone asks for the top-level usage.
+func isHelpArg(arg string) bool {
+	switch arg {
+	case "-h", "-help", "--help", "help":
+		return true
+	}
+	return false
+}
+
+// renderUsage lists the commands by purpose, from the registry. It is what an
+// empty invocation prints: exploring the CLI must never write to a tracker.
+func renderUsage() string {
+	var b strings.Builder
+	b.WriteString("specsync projects OpenSpec changes into an issue tracker and keeps them in step.\n\n")
+	b.WriteString("Usage: specsync <command> [flags]\n\n")
+	for _, g := range groupInfo {
+		rows := commandsIn(g.Group)
+		if len(rows) == 0 {
+			continue
+		}
+		fmt.Fprintf(&b, "%s (start: %s)\n", g.Title, g.Start)
+		for _, s := range rows {
+			fmt.Fprintf(&b, "  %-14s %s\n", s.Name, s.Summary)
+		}
+		b.WriteString("\n")
+	}
+	b.WriteString("Sync one change: specsync -dry-run -change <slug>, then without -dry-run.\n")
+	b.WriteString("Sync every change: specsync -all (a sync without -change or -all is refused).\n")
+	b.WriteString("Details: specsync agent-help <command>, or specsync <command> -h.\n")
+	return b.String()
 }
 
 // isVersionArg reports whether the first CLI arg requests the binary version.

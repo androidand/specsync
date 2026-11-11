@@ -19,7 +19,7 @@ specsync handles **tracker sync** (OpenSpec ↔ GitHub/Beads).
 1. **Create or pull**: `specsync pull -issue N` or create a change in `openspec/changes/<slug>/`
 2. **Implement**: Write code, update `tasks.md`
 3. **Sync**: `specsync -dry-run -change <slug>` then `specsync -change <slug>`
-4. **Complete**: All tasks checked → `specsync` → `openspec archive <slug>`
+4. **Complete**: All tasks checked → `specsync -change <slug>` → `openspec archive <slug>`. Bare `specsync` only prints the commands; syncing every change needs `-all`.
 
 ## Core Commands
 

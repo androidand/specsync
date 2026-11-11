@@ -87,6 +87,24 @@ func guardStoreScope(root specsync.ResolvedRoot, slug string, all bool) {
 	os.Exit(2)
 }
 
+// guardUnscopedSync refuses a sync that would write to the tracker without
+// naming its scope: one change (-change) or every change (-all). A dry run
+// writes nothing and needs neither. An agent that ran `specsync` to see its
+// commands once created an issue for every change in a repository.
+func guardUnscopedSync(slug string, all, dryRun bool) {
+	if err := unscopedSyncErr(slug, all, dryRun); err != nil {
+		fmt.Fprintln(os.Stderr, "specsync:", err)
+		os.Exit(2)
+	}
+}
+
+func unscopedSyncErr(slug string, all, dryRun bool) error {
+	if slug != "" || all || dryRun {
+		return nil
+	}
+	return fmt.Errorf("refusing to sync without a scope: pass -change <slug> for one change, -all for every change, or -dry-run to preview")
+}
+
 // scopedTargetRepos returns the GitHub repos declared by a single scoped
 // change. It yields nothing when the run is unscoped or when -repo was given,
 // because an explicit flag always wins.

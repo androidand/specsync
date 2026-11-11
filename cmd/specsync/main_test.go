@@ -90,8 +90,9 @@ func TestIsVersionArg(t *testing.T) {
 }
 
 // TestResolveSubcommand pins dispatch: known subcommands route with their
-// remaining args intact, "push" is a transparent alias for "sync", bare
-// invocations (no args, or flags-only) default to "sync", and any other bare
+// remaining args intact, "push" is a transparent alias for "sync", an empty
+// invocation or a lone help flag prints usage, flags-only invocations go to
+// "sync" (which refuses without -change, -all or -dry-run), and any other bare
 // word is rejected rather than silently reaching runSync's flag.Parse (which
 // would otherwise discard every flag typed after it — see the doc comment on
 // resolveSubcommand for the incident this pins).
@@ -103,7 +104,9 @@ func TestResolveSubcommand(t *testing.T) {
 		wantRest []string
 		wantErr  bool
 	}{
-		{"empty", nil, "sync", nil, false},
+		{"empty prints usage", nil, "help", nil, false},
+		{"help flag prints usage", []string{"-h"}, "help", nil, false},
+		{"help word prints usage", []string{"help"}, "help", nil, false},
 		{"flags only", []string{"-change", "foo"}, "sync", []string{"-change", "foo"}, false},
 		{"explicit sync", []string{"sync", "-change", "foo"}, "sync", []string{"-change", "foo"}, false},
 		// The deprecated -slug flag routes to sync like any flag, where
