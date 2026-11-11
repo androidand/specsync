@@ -4,6 +4,32 @@ All notable changes to this project are documented here. One entry per shipped
 OpenSpec change — see the linked issues for the full spec and discussion.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.15.0] - 2026-11-11
+
+### Changed
+
+- `specsync archive -reason not-planned|duplicate` closes an abandoned or duplicate change with the matching reason, without `-force`. (#209)
+- `specsync changes -issues` shows each change's issue and state and flags changes whose issue was closed or whose tasks are all checked while the issue is open. (#208)
+- Commands that act on one change (`set-stage`, `note`, `archive`) now find it from the branch you are on, including Orca's `<user>/<workspace>` branches. (#200)
+- `specsync workspace setup` and `workspace archive` keep a change in step with an Orca workspace, turning a workspace started from an issue into a change. (#202)
+- Plan a large change as slices in `tasks.md`, each with a contract, an order and a size budget, and see each slice's branch, worktree and pull request with `specsync slices`. (#194)
+- `specsync status` and `specsync verify -size` now flag a branch that is too large or that mixes unrelated concerns, before review starts. (#193)
+- `specsync review-map` turns a branch into a review checklist: what to read first, what is mechanical, and which commit introduced what, plus a check that a rewritten branch holds the same content. (#195)
+- Smooth first use of specsync in a repo that has no openspec/ (#205)
+- `specsync start` can create the change's worktree as an Orca workspace, linked to its issue (`worktrees.launcher: orca`). (#228)
+- Add `specsync status`: the state of your current work, with PR, checks, review and local state. (#186)
+- `specsync status` can now show how to resume each piece of work: the worktree to open, the last note on the change, and, through an optional external provider, the agent session that was working there. (#188)
+- `specsync verify -refs` finds commit hashes and request references in your change documents that no longer resolve, for example after a rebase. (#196)
+- Add `specsync next` and a `flow` section in `openspec/specsync.yml`: define your gates and steps once, and see the next step for the work in front of you. (#189)
+- Add `specsync overview` for all work across repos, and show every related item in `specsync status`. (#187)
+- Add `specsync cleanup`: list and remove finished worktrees and branches safely, and report the archive follow-up for their changes. (#190)
+
+### Fixed
+
+- Keep appended links out of dependency sections (#198)
+
+<!-- 3 internal commit(s) omitted (chore/docs/ci/...) -->
+
 ## [0.14.1] - 2026-10-22
 
 ### Changed
