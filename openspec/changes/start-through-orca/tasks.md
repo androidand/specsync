@@ -8,4 +8,4 @@
 - [x] 1.6 `-dry-run` and `-json` report the launcher and its command
 - [x] 1.7 Tests with a fake Orca: launch, renamed branch, upstream removed, Linux screen reader, git default unchanged
 - [x] 1.8 README, example config, `site/features.json`, skill
-- [ ] 1.9 Try it with Orca on this repo (Orca not installed on the dev machine yet)
+- [x] 1.9 Try it with Orca on this repo: Orca 1.4.255 created the workspace on the exact branch from `origin/main`, linked to the issue, with no upstream and the branch link recorded
