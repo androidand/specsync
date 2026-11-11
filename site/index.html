@@ -817,7 +817,7 @@ a:focus-visible {
     </svg>
     specsync
     <span class="nav-badge"><!-- VERSION:start -->
-v0.14.0
+v0.15.0
 <!-- VERSION:end --></span>
   </a>
   <div class="nav-links">
@@ -900,12 +900,24 @@ v0.14.0
           <p>Start from local <code>proposal.md</code>/<code>tasks.md</code> or pull an existing issue tracker issue with <code>specsync pull</code>.</p>
         </div>
         <div class="feature">
+        <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h6"/><path d="M4 18h6"/><path d="M10 6l3 6"/><path d="M10 18l3-6"/><path d="M13 12h7"/><path d="M18 9l3 3-3 3"/><circle cx="4" cy="6" r="1.5"/><circle cx="4" cy="18" r="1.5"/></svg></span><span class="feature-title">Works in repos with no openspec/</span></h4>
+          <p><code>specsync init</code> (or <code>pull -init</code>) makes a scratch <code>openspec/</code> that git never sees, so an agent can pull an issue and sync in any repo. Nothing is created unless you ask; a user-level default store is also supported.</p>
+        </div>
+        <div class="feature">
         <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h6"/><path d="M4 18h6"/><path d="M10 6l3 6"/><path d="M10 18l3-6"/><path d="M13 12h7"/><path d="M18 9l3 3-3 3"/><circle cx="4" cy="6" r="1.5"/><circle cx="4" cy="18" r="1.5"/></svg></span><span class="feature-title">Design notes survive the worktree</span></h4>
           <p>A <code>design.md</code> renders as <code>## Design notes</code> in the synced issue, so decisions made while planning aren't lost if the local worktree is force-removed. Oversized notes overflow to a linked issue comment instead of getting truncated.</p>
         </div>
         <div class="feature">
         <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5.5"/><circle cx="12" cy="12" r="1.2"/><path d="M12 12L19.5 8"/></svg></span><span class="feature-title">Planning scan</span></h4>
           <p><code>specsync scan</code> shows what already exists for an area — in-flight changes, loose issues, recent commits — before you plan.</p>
+        </div>
+        <div class="feature">
+        <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h6"/><path d="M4 18h6"/><path d="M10 6l3 6"/><path d="M10 18l3-6"/><path d="M13 12h7"/><path d="M18 9l3 3-3 3"/><circle cx="4" cy="6" r="1.5"/><circle cx="4" cy="18" r="1.5"/></svg></span><span class="feature-title">Where your work stands</span></h4>
+          <p><code>specsync status</code> shows where your work stands: pull request, checks, review, unpushed and uncommitted work, how far the base has moved and whether a merge would conflict — with the commands to catch up. Under an epic or with blockers it also lists every related item across your repos, and how to pick each piece up again, including its agent session through an optional provider. Read-only, and <code>-json</code> gives agents the same facts.</p>
+        </div>
+        <div class="feature">
+        <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h6"/><path d="M4 18h6"/><path d="M10 6l3 6"/><path d="M10 18l3-6"/><path d="M13 12h7"/><path d="M18 9l3 3-3 3"/><circle cx="4" cy="6" r="1.5"/><circle cx="4" cy="18" r="1.5"/></svg></span><span class="feature-title">All your work, across repos</span></h4>
+          <p><code>specsync overview</code> lists every change, worktree and open request in the clones under your workspace, grouped by epic, then work under no epic, then branches with no change. Scope it with <code>-repo</code>, <code>-epic</code>, <code>-mine</code>, <code>-attention</code>, <code>-stage</code> or <code>-unattached</code>. Read-only; <code>-json</code> for agents.</p>
         </div>
         <div class="feature">
         <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6"/><path d="M9 1v4"/><path d="M15 1v4"/><rect x="4" y="3" width="16" height="20" rx="2"/><path d="M8 10h8"/><path d="M8 14h8"/><path d="M8 18h5"/><path d="M17 18l2 2 3-3"/></svg></span><span class="feature-title">Spin off emergent work</span></h4>
@@ -915,6 +927,14 @@ v0.14.0
         <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h6"/><path d="M4 18h6"/><path d="M10 6l3 6"/><path d="M10 18l3-6"/><path d="M13 12h7"/><path d="M18 9l3 3-3 3"/><circle cx="4" cy="6" r="1.5"/><circle cx="4" cy="18" r="1.5"/></svg></span><span class="feature-title">Capture ideas</span></h4>
           <p><code>specsync idea "Thought"</code> files a vague or elaborate idea as a GitHub issue in your ideas inbox; <code>specsync ideas</code> lists open intake. Graduate with <code>specsync pull -issue &lt;n&gt;</code>.</p>
         </div>
+        <div class="feature">
+        <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h6"/><path d="M4 18h6"/><path d="M10 6l3 6"/><path d="M10 18l3-6"/><path d="M13 12h7"/><path d="M18 9l3 3-3 3"/><circle cx="4" cy="6" r="1.5"/><circle cx="4" cy="18" r="1.5"/></svg></span><span class="feature-title">Define your flow once, get the next step</span></h4>
+          <p>Declare gates and steps in <code>openspec/specsync.yml</code>; <code>specsync next</code> reads the work's state and prints the next step and its command, <code>specsync flow</code> marks where you are. Commands from the repo run only after <code>specsync trust</code>.</p>
+        </div>
+        <div class="feature">
+        <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h6"/><path d="M4 18h6"/><path d="M10 6l3 6"/><path d="M10 18l3-6"/><path d="M13 12h7"/><path d="M18 9l3 3-3 3"/><circle cx="4" cy="6" r="1.5"/><circle cx="4" cy="18" r="1.5"/></svg></span><span class="feature-title">Plan a big change as slices</span></h4>
+          <p>Declare reviewable slices in <code>tasks.md</code>, each with a contract, an order and a size budget. <code>specsync slices</code> shows each slice's branch and pull request, <code>slice start</code> opens the next one stacked on the last, and <code>sync -slices</code> mirrors them as child issues.</p>
+        </div>
         </div>
       </div>
       <div class="feature-theme">
@@ -922,7 +942,7 @@ v0.14.0
         <div class="features">
         <div class="feature">
         <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M6 10a6 6 0 0 1 10-4"/><path d="M16 6h4v4"/><path d="M18 14a6 6 0 0 1-10 4"/><path d="M8 18H4v-4"/></svg></span><span class="feature-title">Idempotent</span></h4>
-          <p>Run <code>specsync -change my-change</code> as often as needed. If the issue tracker issue already exists, specsync updates it (same identity marker) instead of creating a duplicate.</p>
+          <p>Run <code>specsync -change my-change</code> as often as needed. specsync finds the change's issue from its identity marker, the ref cache or the branch name (<code>feat/42-my-change</code>) and updates it instead of creating a duplicate; <code>pull</code> without <code>-issue</code> resolves the same way.</p>
         </div>
         <div class="feature">
         <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M6 10a6 6 0 0 1 10-4"/><path d="M16 6h4v4"/><path d="M18 14a6 6 0 0 1-10 4"/><path d="M8 18H4v-4"/></svg></span><span class="feature-title">Adopt an existing issue</span></h4>
@@ -933,24 +953,20 @@ v0.14.0
           <p>Set stage explicitly with <code>specsync set-stage my-change [active|blocked|in-review|complete]</code> so progress is visible and committed in metadata.</p>
         </div>
         <div class="feature">
+        <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h5"/><path d="M5 12h9"/><path d="M5 17h13"/><circle cx="4" cy="7" r="1.2"/><circle cx="4" cy="12" r="1.2"/><circle cx="4" cy="17" r="1.2"/><path d="M19 17l1.8 1.8L23 16.6"/></svg></span><span class="feature-title">The branch names the change</span></h4>
+          <p>Inside a change's worktree, <code>set-stage</code>, <code>note</code> and <code>archive</code> find the change from the branch — <code>feat/42-my-change</code> or an Orca workspace's <code>user/my-change</code>. On <code>main</code> nothing resolves, so an agent there can't act on a change by accident.</p>
+        </div>
+        <div class="feature">
+        <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h6"/><path d="M4 18h6"/><path d="M10 6l3 6"/><path d="M10 18l3-6"/><path d="M13 12h7"/><path d="M18 9l3 3-3 3"/><circle cx="4" cy="6" r="1.5"/><circle cx="4" cy="18" r="1.5"/></svg></span><span class="feature-title">Orca workspaces</span></h4>
+          <p>With <code>worktrees.launcher: orca</code>, <code>specsync start my-change</code> creates the change's worktree through Orca, linked to its issue, so Orca's agent gets the spec as its brief; the branch stays unpublished until you push. <code>workspace setup</code> and <code>workspace archive</code> in <code>orca.yaml</code> hooks keep the stage in step: active when a workspace starts, back to derived when it is archived.</p>
+        </div>
+        <div class="feature">
         <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h6"/><path d="M4 18h6"/><path d="M10 6l3 6"/><path d="M10 18l3-6"/><path d="M13 12h7"/><path d="M18 9l3 3-3 3"/><circle cx="4" cy="6" r="1.5"/><circle cx="4" cy="18" r="1.5"/></svg></span><span class="feature-title">Priority-driven dispatch</span></h4>
           <p>Set priorities (1-100) with <code>specsync set-priority my-change 85</code>. Agents respect priority when deciding what to work on next — humans direct focus.</p>
         </div>
         <div class="feature">
         <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path d="M15 4v16"/><path d="M5 8h2"/><path d="M11 11h2"/><path d="M17 7h2"/></svg></span><span class="feature-title">Projects board sync</span></h4>
           <p>Project and sync with <code>specsync -change my-change -project my-org/6</code>. Add <code>-status-map "active=In Progress,complete=Done"</code> to align board columns with change stages.</p>
-        </div>
-        <div class="feature">
-        <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M6 10a6 6 0 0 1 10-4"/><path d="M16 6h4v4"/><path d="M18 14a6 6 0 0 1-10 4"/><path d="M8 18H4v-4"/></svg></span><span class="feature-title">Explicit repo resolution</span></h4>
-          <p>specsync resolves the target repository deterministically: <code>-repo</code> flag → <code>gh repo set-default</code> → <code>origin</code>. Fork-parent writes are refused by default; use <code>-repo</code> to override.</p>
-        </div>
-        <div class="feature">
-        <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path d="M15 4v16"/><path d="M5 8h2"/><path d="M11 11h2"/><path d="M17 7h2"/></svg></span><span class="feature-title">Per-repository board</span></h4>
-          <p>Board resolution per-repository: <code>-project</code> flag → <code>openspec/specsync.yml</code> → no board. No global default; each repo syncs only to its own declared board.</p>
-        </div>
-        <div class="feature">
-        <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M6 10a6 6 0 0 1 10-4"/><path d="M16 6h4v4"/><path d="M18 14a6 6 0 0 1-10 4"/><path d="M8 18H4v-4"/></svg></span><span class="feature-title">Spec ↔ issue linker</span></h4>
-          <p>specsync resolves a change's issue from branch name (<code>feat/42-my-change</code>), issue marker, or ref cache — so <code>pull</code> without <code>-issue</code> and idempotent <code>sync</code> update the right issue instead of creating duplicates.</p>
         </div>
         <div class="feature">
         <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M6 10a6 6 0 0 1 10-4"/><path d="M16 6h4v4"/><path d="M18 14a6 6 0 0 1-10 4"/><path d="M8 18H4v-4"/></svg></span><span class="feature-title">Cross-repo epic scaffolding</span></h4>
@@ -962,19 +978,40 @@ v0.14.0
         </div>
         <div class="feature">
         <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h5"/><path d="M5 12h9"/><path d="M5 17h13"/><circle cx="4" cy="7" r="1.2"/><circle cx="4" cy="12" r="1.2"/><circle cx="4" cy="17" r="1.2"/><path d="M19 17l1.8 1.8L23 16.6"/></svg></span><span class="feature-title">Agent skill diagnostics</span></h4>
-          <p><code>specsync doctor</code> detects and diagnoses AI agent skill installations (Claude Code, OpenCode, Copilot, etc.), analyzes token usage, checks that the <code>openspec</code> CLI dependency is installed and reachable, and recommends fixes.</p>
+          <p><code>specsync doctor</code> detects canonical and legacy AI agent skill installations (Claude Code, Agent Skills, legacy paths), validates <code>CLAUDE.md</code> imports, checks that the <code>openspec</code> CLI is installed, and recommends fixes.</p>
         </div>
         <div class="feature">
         <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h6"/><path d="M4 18h6"/><path d="M10 6l3 6"/><path d="M10 18l3-6"/><path d="M13 12h7"/><path d="M18 9l3 3-3 3"/><circle cx="4" cy="6" r="1.5"/><circle cx="4" cy="18" r="1.5"/></svg></span><span class="feature-title">Any MCP-connected tracker</span></h4>
           <p><code>-provider mcp</code> projects changes through any external MCP server instead of <code>gh</code> — Linear, Jira, GitHub, or in-house. Speaks the current MCP spec with automatic fallback to legacy handshake-based servers.</p>
         </div>
         <div class="feature">
-        <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h5"/><path d="M5 12h9"/><path d="M5 17h13"/><circle cx="4" cy="7" r="1.2"/><circle cx="4" cy="12" r="1.2"/><circle cx="4" cy="17" r="1.2"/><path d="M19 17l1.8 1.8L23 16.6"/></svg></span><span class="feature-title">Collapsed by default</span></h4>
+        <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h5"/><path d="M5 12h9"/><path d="M5 17h13"/><circle cx="4" cy="7" r="1.2"/><circle cx="4" cy="12" r="1.2"/><circle cx="4" cy="17" r="1.2"/><path d="M19 17l1.8 1.8L23 16.6"/></svg></span><span class="feature-title">A clean issue, not a wall of text</span></h4>
           <p>A synced issue shows title and task checklist first — Proposal, Original ask, and Discoveries render inside collapsed <code>&lt;details&gt;</code> blocks, one click away, nothing removed.</p>
         </div>
         <div class="feature">
-        <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M6 10a6 6 0 0 1 10-4"/><path d="M16 6h4v4"/><path d="M18 14a6 6 0 0 1-10 4"/><path d="M8 18H4v-4"/></svg></span><span class="feature-title">No label noise by default</span></h4>
-          <p><code>specsync</code> and <code>stage:&lt;stage&gt;</code> labels are opt-in via <code>-labels</code> — neither is read back by specsync itself, so they aren't added unless you actually want native-label filtering.</p>
+        <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h5"/><path d="M5 12h9"/><path d="M5 17h13"/><circle cx="4" cy="7" r="1.2"/><circle cx="4" cy="12" r="1.2"/><circle cx="4" cy="17" r="1.2"/><path d="M19 17l1.8 1.8L23 16.6"/></svg></span><span class="feature-title">Catch stale references in your docs</span></h4>
+          <p><code>specsync verify -refs</code> finds commit hashes and issue or PR references in change documents that no longer resolve after a rebase. Read-only and advisory; it never guesses a replacement.</p>
+        </div>
+        <div class="feature">
+        <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h6"/><path d="M4 18h6"/><path d="M10 6l3 6"/><path d="M10 18l3-6"/><path d="M13 12h7"/><path d="M18 9l3 3-3 3"/><circle cx="4" cy="6" r="1.5"/><circle cx="4" cy="18" r="1.5"/></svg></span><span class="feature-title">The same steps every time</span></h4>
+          <p><code>new</code>, <code>start</code>, <code>save</code>, <code>gates</code>, <code>update</code> and <code>pr prep</code>/<code>open</code> do the mechanical parts of starting, checking and opening work, each with a dry run. They refuse secrets, forbidden trailers, unsafe pushes and unconfirmed PRs; the conventions come from <code>openspec/specsync.yml</code>.</p>
+        </div>
+        </div>
+      </div>
+      <div class="feature-theme">
+        <h3 class="feature-theme-label">Review</h3>
+        <div class="features">
+        <div class="feature">
+        <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h5"/><path d="M5 12h9"/><path d="M5 17h13"/><circle cx="4" cy="7" r="1.2"/><circle cx="4" cy="12" r="1.2"/><circle cx="4" cy="17" r="1.2"/><path d="M19 17l1.8 1.8L23 16.6"/></svg></span><span class="feature-title">Warns before a pull request is too big</span></h4>
+          <p><code>specsync status</code> and <code>verify -size</code> flag a branch that is over a files, lines or commits budget, or that mixes commit scopes, before review starts. Advisory by default; <code>-fail-on-oversized</code> makes it a gate.</p>
+        </div>
+        <div class="feature">
+        <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h5"/><path d="M5 12h9"/><path d="M5 17h13"/><circle cx="4" cy="7" r="1.2"/><circle cx="4" cy="12" r="1.2"/><circle cx="4" cy="17" r="1.2"/><path d="M19 17l1.8 1.8L23 16.6"/></svg></span><span class="feature-title">A map for reviewing a big pull request</span></h4>
+          <p><code>specsync review-map</code> turns a branch into a checklist: the paths the author declared as needing judgement first, then each commit with its files and sizes, then totals by category. <code>-equivalent</code> proves a rewritten branch holds the same content.</p>
+        </div>
+        <div class="feature">
+        <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h6"/><path d="M4 18h6"/><path d="M10 6l3 6"/><path d="M10 18l3-6"/><path d="M13 12h7"/><path d="M18 9l3 3-3 3"/><circle cx="4" cy="6" r="1.5"/><circle cx="4" cy="18" r="1.5"/></svg></span><span class="feature-title">Short, consistent issues and PRs</span></h4>
+          <p><code>specsync lint</code> checks titles, headers, sentences and length against a short standard, advisory unless <code>-fail</code>. <code>pr-body -template</code> writes a brief PR body from the change and your repo's template. Never rewrites your text.</p>
         </div>
         </div>
       </div>
@@ -992,6 +1029,10 @@ v0.14.0
         <div class="feature">
         <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h6"/><path d="M4 18h6"/><path d="M10 6l3 6"/><path d="M10 18l3-6"/><path d="M13 12h7"/><path d="M18 9l3 3-3 3"/><circle cx="4" cy="6" r="1.5"/><circle cx="4" cy="18" r="1.5"/></svg></span><span class="feature-title">Archive audit</span></h4>
           <p><code>specsync audit</code> cross-references archived changes against GitHub PRs to find archived-but-unmerged work. Add <code>-mark-shipped</code> to record the final lifecycle step.</p>
+        </div>
+        <div class="feature">
+        <h4><span class="feature-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h6"/><path d="M4 18h6"/><path d="M10 6l3 6"/><path d="M10 18l3-6"/><path d="M13 12h7"/><path d="M18 9l3 3-3 3"/><circle cx="4" cy="6" r="1.5"/><circle cx="4" cy="18" r="1.5"/></svg></span><span class="feature-title">Clean up finished work safely</span></h4>
+          <p><code>specsync cleanup</code> lists worktrees whose work is provably merged and, with <code>-apply</code>, removes them and their branches. It never touches dirty trees, ignored files, protected or shared branches, unpushed commits, open requests or live sessions, and re-checks each one just before removal; hooks run only after <code>specsync trust</code>.</p>
         </div>
         </div>
       </div>
@@ -1078,6 +1119,47 @@ v0.14.0
   <!-- CHANGELOG:start -->
         <div class="release">
           <div class="release-header">
+            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.15.0" target="_blank" rel="noopener">v0.15.0</a>
+            <span class="release-date">Nov 11, 2026</span>
+          </div>
+          <div class="release-body"><h5>Changed</h5><ul><li><code>specsync archive -reason not-planned|duplicate</code> closes an abandoned or duplicate change with the matching reason, without <code>-force</code>. <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/209" target="_blank" rel="noopener">#209</a></span></li>
+<li><code>specsync changes -issues</code> shows each change's issue and state and flags changes whose issue was closed or whose tasks are all checked while the issue is open. <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/208" target="_blank" rel="noopener">#208</a></span></li>
+<li>Commands that act on one change (<code>set-stage</code>, <code>note</code>, <code>archive</code>) now find it from the branch you are on, including Orca's <code>&lt;user&gt;/&lt;workspace&gt;</code> branches. <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/200" target="_blank" rel="noopener">#200</a></span></li>
+<li><code>specsync workspace setup</code> and <code>workspace archive</code> keep a change in step with an Orca workspace, turning a workspace started from an issue into a change. <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/202" target="_blank" rel="noopener">#202</a></span></li>
+<li>Plan a large change as slices in <code>tasks.md</code>, each with a contract, an order and a size budget, and see each slice's branch, worktree and pull request with <code>specsync slices</code>. <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/194" target="_blank" rel="noopener">#194</a></span></li>
+<li><code>specsync status</code> and <code>specsync verify -size</code> now flag a branch that is too large or that mixes unrelated concerns, before review starts. <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/193" target="_blank" rel="noopener">#193</a></span></li>
+<li><code>specsync review-map</code> turns a branch into a review checklist: what to read first, what is mechanical, and which commit introduced what, plus a check that a rewritten branch holds the same content. <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/195" target="_blank" rel="noopener">#195</a></span></li>
+<li>Smooth first use of specsync in a repo that has no openspec/ <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/205" target="_blank" rel="noopener">#205</a></span></li>
+<li><code>specsync start</code> can create the change's worktree as an Orca workspace, linked to its issue (<code>worktrees.launcher: orca</code>). <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/228" target="_blank" rel="noopener">#228</a></span></li>
+<li>Add <code>specsync status</code>: the state of your current work, with PR, checks, review and local state. <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/186" target="_blank" rel="noopener">#186</a></span></li>
+<li><code>specsync status</code> can now show how to resume each piece of work: the worktree to open, the last note on the change, and, through an optional external provider, the agent session that was working there. <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/188" target="_blank" rel="noopener">#188</a></span></li>
+<li><code>specsync verify -refs</code> finds commit hashes and request references in your change documents that no longer resolve, for example after a rebase. <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/196" target="_blank" rel="noopener">#196</a></span></li>
+<li>Add <code>specsync next</code> and a <code>flow</code> section in <code>openspec/specsync.yml</code>: define your gates and steps once, and see the next step for the work in front of you. <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/189" target="_blank" rel="noopener">#189</a></span></li>
+<li>Add <code>specsync overview</code> for all work across repos, and show every related item in <code>specsync status</code>. <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/187" target="_blank" rel="noopener">#187</a></span></li>
+<li>Add <code>specsync cleanup</code>: list and remove finished worktrees and branches safely, and report the archive follow-up for their changes. <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/190" target="_blank" rel="noopener">#190</a></span></li></ul>
+<h5>Fixed</h5><ul><li>Keep appended links out of dependency sections <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/198" target="_blank" rel="noopener">#198</a></span></li></ul></div>
+          <a class="release-full-link" href="https://github.com/androidand/specsync/releases/tag/v0.15.0" target="_blank" rel="noopener">View complete release details on GitHub →</a>
+        </div>
+        <div class="release">
+          <div class="release-header">
+            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.14.1" target="_blank" rel="noopener">v0.14.1</a>
+            <span class="release-date">Oct 22, 2026</span>
+          </div>
+          <div class="release-body"><h5>Changed</h5><ul><li>Show where each change's issue, branch, and worktree live <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/168" target="_blank" rel="noopener">#168</a></span></li>
+<li>Cap the length of generated slugs <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/166" target="_blank" rel="noopener">#166</a></span></li>
+<li><code>specsync agent-help</code> now guides agents toward one branch and worktree per issue, and documents <code>pull</code>'s existing <code>-worktree</code>/<code>-worktree-dir</code> flags. <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/162" target="_blank" rel="noopener">#162</a></span></li>
+<li>Support OpenSpec stores as a first-class spec root <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/173" target="_blank" rel="noopener">#173</a></span></li>
+<li>Reject unconsumed CLI arguments instead of silently dropping them <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/170" target="_blank" rel="noopener">#170</a></span></li>
+<li>Restore the topology command and fix stale "soon" badges on the site <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/179" target="_blank" rel="noopener">#179</a></span></li>
+<li>Trim low-value feature cards from the landing page <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/181" target="_blank" rel="noopener">#181</a></span></li>
+<li>Fixed: <code>sync -project</code> (and <code>openspec/specsync.yml</code>'s board target) now actually projects issues onto the configured GitHub Projects board — it previously reported <code>BoardConfigured: true</code> and silently did nothing. <code>pull</code> was unaffected; this restores parity for <code>sync</code>. <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/159" target="_blank" rel="noopener">#159</a></span></li></ul>
+<h5>Fixed</h5><ul><li>name every available remedy in the unlinked-commit gate message (#171) <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/0a976c35" target="_blank" rel="noopener">0a976c3</a></li>
+<li>restore the topology feature card dropped by the store-support merge (#177) <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/2d313def" target="_blank" rel="noopener">2d313de</a></li>
+<li>site soon-badge clearing didn't consider the local CHANGELOG.md fallback <a class="release-ref-commit" href="https://github.com/androidand/specsync/commit/fcfa7f57" target="_blank" rel="noopener">fcfa7f5</a></li></ul></div>
+          <a class="release-full-link" href="https://github.com/androidand/specsync/releases/tag/v0.14.1" target="_blank" rel="noopener">View complete release details on GitHub →</a>
+        </div>
+        <div class="release">
+          <div class="release-header">
             <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.14.0" target="_blank" rel="noopener">v0.14.0</a>
             <span class="release-date">Sep 10, 2026</span>
           </div>
@@ -1086,22 +1168,6 @@ v0.14.0
 <li><code>specsync</code> and <code>stage:&lt;stage&gt;</code> labels are no longer added by default — issue identity was never based on them (the body marker is), and stage duplicates the Projects board Status column wherever a board is used. Pass <code>-labels</code> to <code>sync</code> to restore the previous always-on behavior. A sync without the flag also removes these labels from issues that already carry them from before this change. <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/157" target="_blank" rel="noopener">#157</a></span></li>
 <li>Synced issues now show title and task checklist by default; the proposal, original ask, design notes, and discoveries are one click away in collapsed sections instead of pushing the tasks down the page. No content is removed or moved out of the issue. <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/152" target="_blank" rel="noopener">#152</a></span></li></ul></div>
           <a class="release-full-link" href="https://github.com/androidand/specsync/releases/tag/v0.14.0" target="_blank" rel="noopener">View complete release details on GitHub →</a>
-        </div>
-        <div class="release">
-          <div class="release-header">
-            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.13.2" target="_blank" rel="noopener">v0.13.2</a>
-            <span class="release-date">Aug 28, 2026</span>
-          </div>
-          <div class="release-body"><h5>Changed</h5><ul><li>Fixed <code>TestImportPath</code> failing in any git worktree not literally named "specsync" (e.g. this repo's own <code>specsync-&lt;change&gt;</code> worktree convention) — it now checks the actual module-root invariant instead of a folder-name string match. <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/150" target="_blank" rel="noopener">#150</a></span></li></ul></div>
-          <a class="release-full-link" href="https://github.com/androidand/specsync/releases/tag/v0.13.2" target="_blank" rel="noopener">View complete release details on GitHub →</a>
-        </div>
-        <div class="release">
-          <div class="release-header">
-            <a class="release-tag" href="https://github.com/androidand/specsync/releases/tag/v0.13.1" target="_blank" rel="noopener">v0.13.1</a>
-            <span class="release-date">Aug 28, 2026</span>
-          </div>
-          <div class="release-body"><h5>Changed</h5><ul><li>Fixed: <code>specsync -change &lt;slug&gt;</code> (and slug-based links.md entries) failed to resolve a change after <code>openspec archive</code> renamed its folder with a date prefix. Archived changes now resolve by their original slug — locally, across links.md, and via live GitHub lookup with no ref cache — so a sync run after archiving correctly projects the terminal <code>archived</code> stage instead of erroring or, worse, silently missing the issue and creating a duplicate. <span class="release-ref"><a href="https://github.com/androidand/specsync/issues/128" target="_blank" rel="noopener">#128</a></span></li></ul></div>
-          <a class="release-full-link" href="https://github.com/androidand/specsync/releases/tag/v0.13.1" target="_blank" rel="noopener">View complete release details on GitHub →</a>
         </div>
 <!-- CHANGELOG:end -->
 </section>
