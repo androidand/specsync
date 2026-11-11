@@ -26,7 +26,7 @@
   {
     "group": "plan",
     "icon": "flow",
-    "title": "See who's already working what",
+    "title": "Where your work stands",
     "body": "<code>specsync status</code> shows where your work stands: pull request, checks, review, unpushed and uncommitted work, how far the base has moved and whether a merge would conflict — with the commands to catch up. Under an epic or with blockers it also lists every related item across your repos, and how to pick each piece up again, including its agent session through an optional provider. Read-only, and <code>-json</code> gives agents the same facts."
   },
   {
@@ -48,10 +48,21 @@
     "body": "<code>specsync idea \"Thought\"</code> files a vague or elaborate idea as a GitHub issue in your ideas inbox; <code>specsync ideas</code> lists open intake. Graduate with <code>specsync pull -issue &lt;n&gt;</code>."
   },
   {
+    "group": "plan",
+    "icon": "flow",
+    "title": "Define your flow once, get the next step",
+    "body": "Declare gates and steps in <code>openspec/specsync.yml</code>; <code>specsync next</code> reads the work's state and prints the next step and its command, <code>specsync flow</code> marks where you are. Commands from the repo run only after <code>specsync trust</code>."
+  },
+  {
+    "group": "plan",
+    "title": "Plan a big change as slices",
+    "body": "Declare reviewable slices in <code>tasks.md</code>, each with a contract, an order and a size budget. <code>specsync slices</code> shows each slice's branch and pull request, <code>slice start</code> opens the next one stacked on the last, and <code>sync -slices</code> mirrors them as child issues."
+  },
+  {
     "group": "collaborate",
     "icon": "idempotent",
     "title": "Idempotent",
-    "body": "Run <code>specsync -change my-change</code> as often as needed. If the issue tracker issue already exists, specsync updates it (same identity marker) instead of creating a duplicate."
+    "body": "Run <code>specsync -change my-change</code> as often as needed. specsync finds the change's issue from its identity marker, the ref cache or the branch name (<code>feat/42-my-change</code>) and updates it instead of creating a duplicate; <code>pull</code> without <code>-issue</code> resolves the same way."
   },
   {
     "group": "collaborate",
@@ -74,14 +85,8 @@
   {
     "group": "collaborate",
     "icon": "flow",
-    "title": "Start work as an Orca workspace",
-    "body": "With <code>worktrees.launcher: orca</code>, <code>specsync start my-change</code> creates the change's worktree through Orca, linked to its issue, so Orca's agent gets the spec as its brief. It checks Orca kept the branch and leaves it unpublished until you push."
-  },
-  {
-    "group": "collaborate",
-    "icon": "flow",
-    "title": "Orca workspaces stay in step",
-    "body": "Run <code>specsync workspace setup</code> and <code>workspace archive</code> from <code>orca.yaml</code> hooks: a workspace started from an issue becomes a change, its stage goes active, and it goes back to derived when the workspace is archived."
+    "title": "Orca workspaces",
+    "body": "With <code>worktrees.launcher: orca</code>, <code>specsync start my-change</code> creates the change's worktree through Orca, linked to its issue, so Orca's agent gets the spec as its brief; the branch stays unpublished until you push. <code>workspace setup</code> and <code>workspace archive</code> in <code>orca.yaml</code> hooks keep the stage in step: active when a workspace starts, back to derived when it is archived."
   },
   {
     "group": "collaborate",
@@ -94,30 +99,6 @@
     "icon": "board",
     "title": "Projects board sync",
     "body": "Project and sync with <code>specsync -change my-change -project my-org/6</code>. Add <code>-status-map \"active=In Progress,complete=Done\"</code> to align board columns with change stages."
-  },
-  {
-    "group": "ship",
-    "icon": "followup",
-    "title": "Release follow-up",
-    "body": "<code>specsync release-plan</code> highlights shipped changes, loose/unlinked work, archive candidates, and advisory release impact from spec-level deltas."
-  },
-  {
-    "group": "ship",
-    "icon": "changelog",
-    "title": "Spec-driven changelog",
-    "body": "<code>specsync changelog</code> writes a Keep a Changelog section from your shipped changes — one entry per change, release notes authored at planning time, never a raw commit dump."
-  },
-  {
-    "group": "ship",
-    "icon": "audit",
-    "title": "Archive audit",
-    "body": "<code>specsync audit</code> cross-references archived changes against GitHub PRs to find archived-but-unmerged work. Add <code>-mark-shipped</code> to record the final lifecycle step."
-  },
-  {
-    "group": "collaborate",
-    "icon": "idempotent",
-    "title": "Spec ↔ issue linker",
-    "body": "specsync resolves a change's issue from branch name (<code>feat/42-my-change</code>), issue marker, or ref cache — so <code>pull</code> without <code>-issue</code> and idempotent <code>sync</code> update the right issue instead of creating duplicates."
   },
   {
     "group": "collaborate",
@@ -135,7 +116,7 @@
     "group": "collaborate",
     "icon": "state",
     "title": "Agent skill diagnostics",
-    "body": "<code>specsync doctor</code> detects and diagnoses AI agent skill installations (Claude Code, OpenCode, Copilot, etc.), analyzes token usage, checks that the <code>openspec</code> CLI dependency is installed and reachable, and recommends fixes."
+    "body": "<code>specsync doctor</code> detects canonical and legacy AI agent skill installations (Claude Code, Agent Skills, legacy paths), validates <code>CLAUDE.md</code> imports, checks that the <code>openspec</code> CLI is installed, and recommends fixes."
   },
   {
     "group": "collaborate",
@@ -156,16 +137,16 @@
     "body": "<code>specsync verify -refs</code> finds commit hashes and issue or PR references in change documents that no longer resolve after a rebase. Read-only and advisory; it never guesses a replacement."
   },
   {
+    "group": "collaborate",
+    "icon": "flow",
+    "title": "The same steps every time",
+    "body": "<code>new</code>, <code>start</code>, <code>save</code>, <code>gates</code>, <code>update</code> and <code>pr prep</code>/<code>open</code> do the mechanical parts of starting, checking and opening work, each with a dry run. They refuse secrets, forbidden trailers, unsafe pushes and unconfirmed PRs; the conventions come from <code>openspec/specsync.yml</code>."
+  },
+  {
     "group": "review",
     "icon": "state",
     "title": "Warns before a pull request is too big",
     "body": "<code>specsync status</code> and <code>verify -size</code> flag a branch that is over a files, lines or commits budget, or that mixes commit scopes, before review starts. Advisory by default; <code>-fail-on-oversized</code> makes it a gate."
-  },
-  {
-    "group": "plan",
-    "icon": "flow",
-    "title": "Define your flow once, get the next step",
-    "body": "Declare gates and steps in <code>openspec/specsync.yml</code>; <code>specsync next</code> reads the work's state and prints the next step and its command, <code>specsync flow</code> marks where you are. Commands from the repo run only after <code>specsync trust</code>."
   },
   {
     "group": "review",
@@ -174,21 +155,31 @@
     "body": "<code>specsync review-map</code> turns a branch into a checklist: the paths the author declared as needing judgement first, then each commit with its files and sizes, then totals by category. <code>-equivalent</code> proves a rewritten branch holds the same content."
   },
   {
+    "group": "review",
     "title": "Short, consistent issues and PRs",
     "body": "<code>specsync lint</code> checks titles, headers, sentences and length against a short standard, advisory unless <code>-fail</code>. <code>pr-body -template</code> writes a brief PR body from the change and your repo's template. Never rewrites your text."
   },
   {
-    "title": "Plan a big change as slices",
-    "body": "Declare reviewable slices in <code>tasks.md</code>, each with a contract, an order and a size budget. <code>specsync slices</code> shows each slice's branch and pull request, <code>slice start</code> opens the next one stacked on the last, and <code>sync -slices</code> mirrors them as child issues."
+    "group": "ship",
+    "icon": "followup",
+    "title": "Release follow-up",
+    "body": "<code>specsync release-plan</code> highlights shipped changes, loose/unlinked work, archive candidates, and advisory release impact from spec-level deltas."
   },
   {
+    "group": "ship",
+    "icon": "changelog",
+    "title": "Spec-driven changelog",
+    "body": "<code>specsync changelog</code> writes a Keep a Changelog section from your shipped changes — one entry per change, release notes authored at planning time, never a raw commit dump."
+  },
+  {
+    "group": "ship",
+    "icon": "audit",
+    "title": "Archive audit",
+    "body": "<code>specsync audit</code> cross-references archived changes against GitHub PRs to find archived-but-unmerged work. Add <code>-mark-shipped</code> to record the final lifecycle step."
+  },
+  {
+    "group": "ship",
     "title": "Clean up finished work safely",
     "body": "<code>specsync cleanup</code> lists worktrees whose work is provably merged and, with <code>-apply</code>, removes them and their branches. It never touches dirty trees, ignored files, protected or shared branches, unpushed commits, open requests or live sessions, and re-checks each one just before removal; hooks run only after <code>specsync trust</code>."
-  },
-  {
-    "group": "collaborate",
-    "icon": "flow",
-    "title": "The same steps every time",
-    "body": "<code>new</code>, <code>start</code>, <code>save</code>, <code>gates</code>, <code>update</code> and <code>pr prep</code>/<code>open</code> do the mechanical parts of starting, checking and opening work, each with a dry run. They refuse secrets, forbidden trailers, unsafe pushes and unconfirmed PRs; the conventions come from <code>openspec/specsync.yml</code>."
   }
 ]

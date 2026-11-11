@@ -977,7 +977,7 @@
           "type": "boolean",
           "required": false,
           "default": false,
-          "description": "install to Generic (.agents) (~/.agents/skills/specsync)"
+          "description": "install to Agent Skills (~/.agents/skills/specsync)"
         },
         {
           "name": "all",
@@ -998,21 +998,35 @@
           "type": "boolean",
           "required": false,
           "default": false,
-          "description": "install to Codex / Skein (~/.codex/skills/specsync)"
+          "description": "alias for -agents"
         },
         {
-          "name": "copilot",
+          "name": "drift",
           "type": "boolean",
           "required": false,
           "default": false,
-          "description": "install to GitHub Copilot (~/.copilot/skills/specsync)"
+          "description": "report drift for every known agent directory (no install)"
         },
         {
           "name": "opencode",
           "type": "boolean",
           "required": false,
           "default": false,
-          "description": "install to OpenCode (~/.config/opencode/skills/specsync)"
+          "description": "alias for -agents"
+        },
+        {
+          "name": "rollback",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "restore canonical content to all selected targets, overwriting local overrides"
+        },
+        {
+          "name": "temp",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "install to a temporary directory for testing (isolated)"
         }
       ],
       "safety_rules": [
@@ -1020,7 +1034,8 @@
       ],
       "examples": [
         "specsync install-skill -claude-code",
-        "specsync install-skill -all"
+        "specsync install-skill -all",
+        "specsync install-skill -drift"
       ]
     },
     "link": {

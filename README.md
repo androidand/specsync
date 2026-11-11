@@ -991,17 +991,20 @@ Installs the bundled specsync `SKILL.md` into agent skill directories so
 coding agents know how to drive the tool:
 
 ```bash
-specsync install-skill --all           # every known agent directory
-specsync install-skill --claude-code   # or: --codex --opencode --copilot --agents
+specsync install-skill --all           # Claude Code and Agent Skills
+specsync install-skill --claude-code   # ~/.claude/skills/specsync
+specsync install-skill --agents        # ~/.agents/skills/specsync
 ```
 
-The `--agents` flag installs the generic agentskills.io-compatible `.agents`
-copy. OpenCode has its own `--opencode` destination.
+`--agents` installs the generic Agent Skills copy used by Codex, OpenCode and
+other hosts; `--codex` and `--opencode` are aliases for it. `--drift` reports
+installed copies that differ from the bundled skill, and `--rollback`
+restores the bundled copy over local edits.
 
 ### `version`
 
 `specsync version` (also `-version` / `--version`) prints the binary version.
-Release builds stamp the real version; source builds print `dev`.
+Release builds stamp the real version; source builds print `dev` and the VCS revision.
 
 ## OpenSpec Workflow (Teams)
 

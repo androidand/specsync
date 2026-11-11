@@ -31,9 +31,10 @@ The build is idempotent and updates `index.html` in place.
 
 ## Feature cards
 
-Each `features.json` entry carries a `"group"`: `"plan"`, `"collaborate"`, or
-`"ship"` — `build.sh` renders these as three themed groups instead of one flat
-grid of fourteen-plus equal cards, so the section tells a story rather than
+Each `features.json` entry carries a `"group"`: `"plan"`, `"collaborate"`,
+`"review"` or `"ship"` — `build.sh` renders these as four themed groups
+instead of one flat grid of equal cards, and fails the build on any other
+value (a card with no valid group would otherwise never render), so the section tells a story rather than
 reading as an inventory.
 
 ## Marking a feature card "soon"

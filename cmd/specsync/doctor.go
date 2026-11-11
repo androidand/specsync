@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -80,6 +81,40 @@ type TokenAnalysisInfo struct {
 	DefaultLoaded int `json:"default_loaded"`
 	EstimatedMin  int `json:"estimated_min"`
 	EstimatedMax  int `json:"estimated_max"`
+}
+
+// installLocation describes a skill installation location.
+type installLocation struct {
+	Name     string
+	Path     string
+	IsLegacy bool
+}
+
+// installInfoJSON is the JSON representation of an install location.
+type installInfoJSON struct {
+	Name      string `json:"name"`
+	Path      string `json:"path"`
+	Installed bool   `json:"installed"`
+	Version   string `json:"version,omitempty"`
+	Status    string `json:"status"`
+}
+
+// repoInfoJSON is the JSON representation of repository integration.
+type repoInfoJSON struct {
+	AgentMD              bool `json:"agents_md"`
+	ClaudeMD             bool `json:"claude_md"`
+	ClaudeMDImportsAgent bool `json:"claude_md_imports_agents"`
+	ClaudeMDLinksAgent   bool `json:"claude_md_links_agents"`
+}
+
+// installDoctorJSON is the JSON output for doctor install.
+type installDoctorJSON struct {
+	Status       string            `json:"status"`
+	Message      string            `json:"message,omitempty"`
+	Canonical    []installInfoJSON `json:"canonical,omitempty"`
+	Legacy       []installInfoJSON `json:"legacy,omitempty"`
+	Repo         repoInfoJSON      `json:"repository,omitempty"`
+	Dependencies []DependencyInfo  `json:"dependencies"`
 }
 
 // doctorClaude provides Claude Code specific diagnostics.
@@ -164,7 +199,7 @@ func doctorClaude(asJSON bool) {
 				fmt.Printf("Binary Version: %s\n", result.Installation.BinaryVersion)
 			}
 			if result.Installation.NeedsUpdate {
-				fmt.Printf("Status: ⚠ Update available\n")
+				fmt.Printf("Status: Update available\n")
 			}
 		}
 		fmt.Println("\nDependencies:")
@@ -201,55 +236,149 @@ func doctorInstall(asJSON bool) {
 		fail(err)
 	}
 
-	locations := []struct {
-		name string
-		path string
-	}{
-		{"Claude Code", filepath.Join(home, ".claude", "skills", "specsync")},
-		{"Codex", filepath.Join(home, ".codex", "skills", "specsync")},
-		{"OpenCode", filepath.Join(home, ".config", "opencode", "skills", "specsync")},
+	repoRoot, repoErr := os.Getwd()
+	if repoErr != nil {
+		repoRoot = home
 	}
 
-	locInfos := make([]SkillLocationInfo, len(locations))
-	for i, loc := range locations {
-		li := SkillLocationInfo{Name: loc.name, Path: loc.path}
-		skillFile := filepath.Join(loc.path, "SKILL.md")
-		if info, err := os.Stat(skillFile); err == nil {
-			content, _ := os.ReadFile(skillFile)
-			installedVersion := extractSkillVersion(content)
-			li.Installed = true
-			li.Version = installedVersion
-			li.SizeKB = float64(info.Size()) / 1024
-			if installedVersion != "" && versionCompare(version, installedVersion) {
-				li.NeedsUpdate = true
-			}
-		}
-		locInfos[i] = li
+	// Canonical locations
+	canonicals := []installLocation{
+		{"Claude Code", filepath.Join(home, ".claude", "skills", "specsync", "SKILL.md"), false},
+		{"Agent Skills", filepath.Join(home, ".agents", "skills", "specsync", "SKILL.md"), false},
+	}
+
+	// Legacy locations
+	legacy := []installLocation{
+		{"Codex (legacy)", filepath.Join(home, ".codex", "skills", "specsync", "SKILL.md"), true},
+		{"OpenCode (legacy)", filepath.Join(home, ".config", "opencode", "skills", "specsync", "SKILL.md"), true},
+		{"Copilot (unverified)", filepath.Join(home, ".copilot", "skills", "specsync", "SKILL.md"), true},
 	}
 
 	dep := checkOpenspecBinary()
 
+	// CLAUDE.md validation
+	agentMDPath := filepath.Join(repoRoot, "AGENTS.md")
+	claudeMDPath := filepath.Join(repoRoot, "CLAUDE.md")
+	agentMDExists := false
+	claudeMDPathExists := false
+	claudeMDImportsAgentMD := false
+	claudeMDLinksAgentMD := false
+
+	if _, err := os.Stat(agentMDPath); err == nil {
+		agentMDExists = true
+	}
+	if _, err := os.Stat(claudeMDPath); err == nil {
+		claudeMDPathExists = true
+		content, _ := os.ReadFile(claudeMDPath)
+		claudeMDImportsAgentMD = bytes.Contains(content, []byte("@AGENTS.md"))
+		claudeMDLinksAgentMD = bytes.Contains(content, []byte("[AGENTS.md](AGENTS.md)"))
+	}
+
 	if asJSON {
-		result := InstallResult{Locations: locInfos, Dependencies: []DependencyInfo{dep}}
-		data, _ := json.MarshalIndent(result, "", "  ")
+		j := installDoctorJSON{Status: "ok", Dependencies: []DependencyInfo{dep}}
+
+		for _, loc := range canonicals {
+			info := installInfoJSON{Name: loc.Name, Path: loc.Path}
+			if _, err := os.Stat(loc.Path); err == nil {
+				info.Installed = true
+				content, _ := os.ReadFile(loc.Path)
+				info.Version = extractSkillVersion(content)
+				info.Status = "ok"
+			} else {
+				info.Status = "missing"
+				if loc.Name == "Agent Skills" {
+					j.Status = "warning"
+				}
+			}
+			j.Canonical = append(j.Canonical, info)
+		}
+
+		for _, loc := range legacy {
+			info := installInfoJSON{Name: loc.Name, Path: loc.Path}
+			if _, err := os.Stat(loc.Path); err == nil {
+				info.Installed = true
+				info.Status = "legacy"
+				j.Status = "warning"
+			} else {
+				info.Installed = false
+				info.Status = "not found"
+			}
+			j.Legacy = append(j.Legacy, info)
+		}
+
+		j.Repo = repoInfoJSON{
+			AgentMD:              agentMDExists,
+			ClaudeMD:             claudeMDPathExists,
+			ClaudeMDImportsAgent: claudeMDImportsAgentMD,
+			ClaudeMDLinksAgent:   claudeMDLinksAgentMD,
+		}
+
+		if claudeMDPathExists && !claudeMDImportsAgentMD {
+			j.Status = "warning"
+			if claudeMDLinksAgentMD {
+				j.Message = "CLAUDE.md links to AGENTS.md instead of importing it"
+			} else if !agentMDExists {
+				j.Message = "CLAUDE.md exists but does not reference AGENTS.md"
+			}
+		}
+
+		data, _ := json.MarshalIndent(j, "", "  ")
 		fmt.Println(string(data))
 		return
 	}
 
-	fmt.Printf("Installation Locations\n\n")
-	for _, li := range locInfos {
-		if li.Installed {
-			versionStr := ""
-			if li.Version != "" {
-				versionStr = fmt.Sprintf(" (v%s)", li.Version)
-				if li.NeedsUpdate {
-					versionStr += " ⚠ outdated"
-				}
+	fmt.Println("Installation Status")
+
+	fmt.Println("Canonical installations")
+	for _, loc := range canonicals {
+		if _, err := os.Stat(loc.Path); err == nil {
+			content, _ := os.ReadFile(loc.Path)
+			ver := extractSkillVersion(content)
+			fmt.Printf("  %s\n", loc.Name)
+			fmt.Printf("    %s\n", loc.Path)
+			if ver != "" {
+				fmt.Printf("    Version: %s\n", ver)
 			}
-			fmt.Printf("%s: %s (%.1f KB)%s\n", li.Name, "✓ Installed", li.SizeKB, versionStr)
+			fmt.Printf("    Status: ✓\n")
 		} else {
-			fmt.Printf("%s: (not installed)\n", li.Name)
+			fmt.Printf("  %s\n", loc.Name)
+			fmt.Printf("    %s\n", loc.Path)
+			fmt.Printf("    Status: not installed\n")
+			if loc.Name == "Agent Skills" {
+				fmt.Printf("    Run: specsync install-skill --agents\n")
+			}
 		}
+	}
+
+	fmt.Println()
+	fmt.Println("CLAUDE.md")
+	if claudeMDPathExists {
+		fmt.Printf("  %s\n", claudeMDPath)
+		if claudeMDImportsAgentMD {
+			fmt.Printf("  Imports AGENTS.md: yes ✓\n")
+		} else if claudeMDLinksAgentMD {
+			fmt.Printf("  Imports AGENTS.md: no (links instead of importing)\n")
+			fmt.Printf("  Status: ⚠ Use @AGENTS.md instead of [AGENTS.md](AGENTS.md)\n")
+		} else {
+			fmt.Printf("  Imports AGENTS.md: no\n")
+			fmt.Printf("  Status: ⚠ Should import AGENTS.md\n")
+		}
+	} else {
+		fmt.Printf("  %s\n", claudeMDPath)
+		fmt.Printf("  Status: not found (optional)\n")
+	}
+
+	fmt.Println()
+	fmt.Println("Legacy installations")
+	hasLegacy := false
+	for _, loc := range legacy {
+		if _, err := os.Stat(loc.Path); err == nil {
+			fmt.Printf("  %s — exists (not used by current agents)\n", loc.Path)
+			hasLegacy = true
+		}
+	}
+	if !hasLegacy {
+		fmt.Println("  None detected")
 	}
 
 	fmt.Printf("\nExternal Dependencies\n\n")
@@ -273,13 +402,9 @@ func printDependency(dep DependencyInfo) {
 func doctorContext(asJSON bool) {
 	fmt.Printf("SpecSync Token Impact Analysis\n\n")
 	fmt.Printf("Profile Tokens:\n")
-	fmt.Printf("  minimal:  ~280 tokens (60%% savings)\n")
-	fmt.Printf("  docs:     ~450 tokens (36%% savings)\n")
-	fmt.Printf("  full:     ~700 tokens (baseline)\n\n")
-	fmt.Printf("Annual Impact (5x/week usage):\n")
-	fmt.Printf("  minimal:  ~27,300 tokens/year\n")
-	fmt.Printf("  docs:     ~46,800 tokens/year\n")
-	fmt.Printf("  full:     ~182,000 tokens/year\n")
+	fmt.Printf("  default:  ~280 tokens (router only)\n\n")
+	fmt.Printf("Detailed documentation is available on-demand via\n")
+	fmt.Printf("`specsync agent-help` rather than loaded by default.\n")
 }
 
 // doctorSkill provides skill file analysis.

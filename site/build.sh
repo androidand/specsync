@@ -265,12 +265,18 @@ async function build() {
     for (const m of (e.body || "").matchAll(/#(\d+)/g)) shipped.add(m[1]);
   }
 
-  // 2. Features from features.json, grouped into three themes (Plan /
-  //    Collaborate / Ship) so fourteen equal cards read as a story instead of
+  // 2. Features from features.json, grouped into four themes (Plan /
+  //    Collaborate / Review / Ship) so fourteen equal cards read as a story instead of
   //    an inventory. status:"soon" cards are clearly badged as
   //    planned-not-yet-shipped, so the page stays true to what is installable.
   const features = JSON.parse(fs.readFileSync("features.json", "utf8"));
-  const GROUP_LABELS = { plan: "Plan", collaborate: "Collaborate", ship: "Ship" };
+  const GROUP_LABELS = { plan: "Plan", collaborate: "Collaborate", review: "Review", ship: "Ship" };
+  // A card whose group is missing or misspelled parses fine and then never
+  // renders; fail the build instead of silently shipping a shorter page.
+  const unrendered = features.filter((f) => !GROUP_LABELS[f.group]);
+  if (unrendered.length > 0) {
+    throw new Error(`features.json: unknown group on ${unrendered.map((f) => JSON.stringify(f.title)).join(", ")} (expected one of ${Object.keys(GROUP_LABELS).join(", ")})`);
+  }
   const featureCard = (f) => {
     const soon = f.status === "soon" && !(f.issue && shipped.has(String(f.issue)));
     const badge = soon ? ` <span class="soon">soon</span>` : "";
