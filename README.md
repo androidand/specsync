@@ -889,10 +889,16 @@ scripts:
     specsync workspace archive -sync
 ```
 
+Orca reads the setup hook from the new worktree's `orca.yaml` but the archive
+hook from the primary checkout's (the folder you added to Orca), so commit the
+file on the branch that checkout is on, not only on feature branches.
+
 `workspace setup` finds the workspace's change from its branch, or from the
 issue Orca linked it to (`orca worktree current --json`). If that issue has no
 change yet, it pulls one, so a workspace started from the issue list becomes a
-change. It then sets the stage to `active`. `workspace archive` sets the stage
+change. It then sets the stage to `active`. In a fresh worktree, where the gitignored
+ref caches are missing, the issue's `specsync:change=` marker is what finds a
+committed change. `workspace archive` sets the stage
 back to `auto`, derived from the tasks, so an abandoned workspace doesn't leave
 the change stuck as active; it needs `-sync` to reach the tracker, because the
 stage is kept per checkout and Orca removes the worktree. A workspace that names
@@ -900,8 +906,9 @@ no change is left alone and the hook exits 0. Both accept `-dry-run`.
 
 To have `specsync start` create the worktree as an Orca workspace, set
 `worktrees.launcher: orca` (or `auto`, to use Orca only where it is installed),
-or pass `-launcher orca`. `start` then runs `orca worktree create` with the
-change's branch and issue, and `-agent` / `-prompt` start an agent in it. It
+or pass `-launcher orca`. `start` then runs `orca worktree create` from the main
+checkout, which must be the folder you added to Orca, with the change's branch
+and issue, and `-agent` / `-prompt` start an agent in it. It
 fails if Orca put the workspace on another branch (Orca renames a taken one),
 and removes any upstream Orca set, so the branch is not published until you
 push it. Orca is found through `$ORCA_CLI_COMMAND`, then `orca-ide` on Linux
