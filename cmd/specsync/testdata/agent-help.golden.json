@@ -2810,7 +2810,7 @@
           "type": "boolean",
           "required": false,
           "default": false,
-          "description": "sync every change in the resolved root (required to sweep a store)"
+          "description": "sync every change in the resolved root (a writing sync needs -change or -all)"
         },
         {
           "name": "assignee",
@@ -2824,7 +2824,7 @@
           "type": "string",
           "required": false,
           "default": "",
-          "description": "sync only this change (default: all changes)"
+          "description": "sync only this change (a writing sync needs -change or -all)"
         },
         {
           "name": "close-completed",
@@ -2927,7 +2927,7 @@
       ],
       "safety_rules": [
         "Always use -dry-run first to preview changes",
-        "Always pass -change when one change is in scope (without it, syncs every change)",
+        "Pass -change for one change or -all for every change; without either a writing sync is refused (-dry-run previews all)",
         "Confirm git remote points to the right repo"
       ],
       "examples": [
