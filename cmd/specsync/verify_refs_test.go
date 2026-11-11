@@ -28,6 +28,7 @@ func refsRepo(t *testing.T) (repo, kept, orphan string) {
 	repo = t.TempDir()
 	git := func(args ...string) string {
 		cmd := exec.Command("git", append([]string{"-C", repo, "-c", "user.name=t", "-c", "user.email=t@example.com"}, args...)...)
+		cmd.Env = append(os.Environ(), "GIT_AUTHOR_DATE=2026-01-01T00:00:00Z", "GIT_COMMITTER_DATE=2026-01-01T00:00:00Z")
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			t.Fatalf("git %v: %v\n%s", args, err, out)
@@ -54,6 +55,11 @@ func refsRepo(t *testing.T) (repo, kept, orphan string) {
 	orphan = git("rev-parse", "HEAD")
 	git("checkout", "-q", "main")
 	git("branch", "-q", "-D", "gone")
+	for _, h := range []string{kept[:9], orphan[:9]} {
+		if !strings.ContainsAny(h, "0123456789") || !strings.ContainsAny(h, "abcdef") {
+			t.Fatalf("fixture hash %s must mix digits and letters to be recognised as a hash", h)
+		}
+	}
 	write("openspec/changes/my-change/proposal.md", "# My change\n\nFixed in `"+kept[:9]+"`, later `"+orphan[:9]+"`, and commit 1234567abcd.\nSee #12 and #99 and acme/lib#4.\n")
 	write("openspec/changes/my-change/tasks.md", "- [ ] 1.1 x\n")
 	return repo, kept, orphan
