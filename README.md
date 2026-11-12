@@ -714,6 +714,7 @@ gates:
 worktrees:
   dir: "../worktrees"
   branch: "{type}/{issue}-{slug}"
+  path: "{dir}/{repo}/{name}" # optional; default {dir}/{repo}-{slug}. {name} is <issue>-<slug>
   hooks: ["make setup"]       # run in a new worktree, after trust
   launcher: git               # git (default), orca, or auto: Orca when installed
 save: {forbid_trailers: [Co-Authored-By], forbid_files: ["*.sql"]}
@@ -739,7 +740,8 @@ change nothing then. See `docs/flow-verbs.md` for moving a personal script onto 
 
 - `specsync new <title>` creates a change from a short template after showing likely duplicate
   changes and open issues; the tracker issue is created only with `-yes`, and only once the template placeholders have been edited away.
-- `specsync start <slug|issue>` reuses the change's worktree or creates one from `worktrees:`,
+- `specsync start <slug|issue>` reuses the change's worktree or creates one from `worktrees:`
+  (`worktrees.path` sets the layout, and `pull -worktree` reads the same config),
   runs the start hooks there (after trust) and refuses when the session provider reports a live session.
   With `worktrees.launcher: orca` (or `-launcher orca`) Orca creates it, linked to the change's issue; see Working with Orca.
 - `specsync save -m <msg>` commits tracked changes (untracked files only with `-add`), refuses
@@ -747,7 +749,7 @@ change nothing then. See `docs/flow-verbs.md` for moving a personal script onto 
   branch's own name), and not onto a branch with an open pull request without `-push-to-request`.
   `-sync` previews the tracker sync first and creates a new issue only with `-yes`.
   It scans only the lines a change adds (and the message), refuses a detached HEAD, and takes `-allow <file>` for a reviewed false positive. `specsync park -m <note>` saves, sets the stage and leaves a note.
-- `specsync gates` runs the configured gates after trust and stamps the commit when a full run passes on a clean tree.
+- `specsync gates` runs the configured gates after trust and stamps the commit when a full run passes on a clean tree. `-if-stale` runs nothing when the stamp already names HEAD, so a `pre-push` hook can call it on every push (see `docs/flow-verbs.md`).
 - `specsync update` plans how to bring the branch current (the `sync:` strategy); `-apply` runs it,
   stops at a conflict, and `-push` publishes a rebase of a pushed branch only with `-force-with-lease`, leased on a freshly fetched sha; shared branches, and branches whose pull request state is open or unknown, are merged, never rewritten.
 - `specsync pr prep` checks tasks, freshness, the gate stamp and the size budget; `specsync pr open`
