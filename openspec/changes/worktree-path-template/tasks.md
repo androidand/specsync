@@ -23,4 +23,4 @@
 - contract: The key is documented once, and the feature list shows it.
 
 - [x] 3.1 `docs/flow-verbs.md` and the generated help name `worktrees.path`
-- [ ] 3.2 Update `site/features.json`; run `specsync changelog -fail-on-unlinked-commits`
+- [x] 3.2 Update `site/features.json`; run `specsync changelog -fail-on-unlinked-commits`

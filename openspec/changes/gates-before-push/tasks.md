@@ -13,4 +13,4 @@
 - contract: The pre-push recipe is documented once.
 
 - [x] 2.1 `docs/flow-verbs.md`: the `pre-push` hook recipe
-- [ ] 2.2 Update `site/features.json`; run `specsync changelog -fail-on-unlinked-commits`
+- [x] 2.2 Update `site/features.json`; run `specsync changelog -fail-on-unlinked-commits`
