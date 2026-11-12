@@ -16,6 +16,7 @@ type gatesCmd struct {
 	only     *string
 	with     *string
 	cont     *bool
+	ifStale  *bool
 	dryRun   *bool
 	asJSON   *bool
 }
@@ -34,12 +35,14 @@ func (*gatesCmd) Spec() Spec {
 			"Runs commands from openspec/specsync.yml, so nothing runs until `specsync trust -yes` has been given for that file",
 			"The stamp is written only for a full passing run on a clean tree; a new commit, a failed run or a partial run leaves no valid stamp",
 			"-dry-run lists the gates that would run and runs nothing",
+			"-if-stale runs nothing when the stamp already names HEAD on a clean tree, and otherwise behaves as a normal run",
 		},
 		Examples: []string{
 			"specsync gates -dry-run",
 			"specsync gates",
 			"specsync gates -with e2e",
 			"specsync gates -only lint,types -continue",
+			"specsync gates -if-stale   # in a pre-push hook: run the gates only when the commit has no passing stamp",
 		},
 	}
 }
@@ -49,6 +52,7 @@ func (cm *gatesCmd) Flags(fs *flag.FlagSet) {
 	cm.only = fs.String("only", "", "run only these gates (comma-separated names); a partial run never stamps")
 	cm.with = fs.String("with", "", "also run these optional gates (comma-separated names)")
 	cm.cont = fs.Bool("continue", false, "keep running after a gate fails")
+	cm.ifStale = fs.Bool("if-stale", false, "run nothing when the gates already passed for this commit on a clean tree (for a pre-push hook); not with -only")
 	cm.dryRun = fs.Bool("dry-run", false, "list the gates that would run and run nothing")
 	cm.asJSON = fs.Bool("json", false, "output as JSON")
 }
@@ -78,7 +82,7 @@ func (cm *gatesCmd) Run(ctx context.Context, args []string) error {
 	if len(issues) > 0 {
 		return fmt.Errorf("fix the config first (specsync doctor config): %s", issues[0])
 	}
-	opts := specsync.GateOptions{Dir: cwd, Root: root, Ways: ways, Only: splitList(*cm.only), With: splitList(*cm.with), Continue: *cm.cont, Out: os.Stdout}
+	opts := specsync.GateOptions{Dir: cwd, Root: root, Ways: ways, Only: splitList(*cm.only), With: splitList(*cm.with), Continue: *cm.cont, IfStale: *cm.ifStale, Out: os.Stdout}
 	if *cm.asJSON {
 		opts.Out = os.Stderr
 	}
@@ -113,6 +117,8 @@ func (cm *gatesCmd) Run(ctx context.Context, args []string) error {
 		switch {
 		case !rep.Passed:
 			fmt.Println("specsync: gates failed; no stamp")
+		case rep.Skipped:
+			fmt.Println("specsync: gates already passed for", rep.Head[:min(8, len(rep.Head))]+"; nothing to run")
 		case rep.Stamped:
 			fmt.Println("specsync: gates passed; stamped", rep.Head[:min(8, len(rep.Head))])
 		default:
