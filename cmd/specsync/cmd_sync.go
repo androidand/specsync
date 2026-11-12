@@ -276,11 +276,13 @@ func (cm *syncCmd) run(args []string) {
 	}
 	fmt.Println()
 	sliceFailed := false
+	var failed []string // "slug: reason", listed after the per-change output
 	for _, it := range res.Items {
 		if len(it.Providers) > 0 {
 			for _, pr := range it.Providers {
 				if pr.Error != nil {
-					fmt.Printf("  %-8s %s  (%s) — ERROR: %v\n", "skip", pr.ProviderName, pr.Slug, pr.Error)
+					fmt.Printf("  %-8s %s  (%s) — ERROR: %v\n", "failed", pr.ProviderName, pr.Slug, pr.Error)
+					failed = append(failed, fmt.Sprintf("%s [%s]: %v", pr.Slug, pr.ProviderName, pr.Error))
 					continue
 				}
 				verb := "updated"
@@ -334,7 +336,18 @@ func (cm *syncCmd) run(args []string) {
 			fmt.Printf("           ↳ closed state left unchanged (%s)\n", it.ClosedDeferred)
 		}
 	}
-	fmt.Printf("specsync: %d created, %d updated\n", res.Created, res.Updated)
+	summary := fmt.Sprintf("specsync: %d created, %d updated", res.Created, res.Updated)
+	if len(failed) > 0 {
+		summary += fmt.Sprintf(", %d failed", len(failed))
+	}
+	fmt.Println(summary)
+	if len(failed) > 0 {
+		fmt.Fprintln(os.Stderr, "\nspecsync: these changes did not sync:")
+		for _, f := range failed {
+			fmt.Fprintf(os.Stderr, "  - %s\n", f)
+		}
+		os.Exit(1)
+	}
 	if sliceFailed {
 		fmt.Fprintln(os.Stderr, "specsync: some slice steps failed; run again to retry them")
 		os.Exit(1)

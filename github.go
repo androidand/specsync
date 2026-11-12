@@ -182,6 +182,45 @@ func (p *GitHubProvider) renderBody(item WorkItem) string {
 // GitHubBodyLimit is GitHub's issue/PR body size limit, in characters.
 const GitHubBodyLimit = 65536
 
+// oversizedBodyError explains a body over GitHubBodyLimit: which change, how
+// big, the limit, the largest section, and what to do about it.
+func oversizedBodyError(slug, body string) error {
+	name, size := largestBodyPart(body)
+	return fmt.Errorf("%s: issue body is %d characters, over GitHub's %d limit (largest part: %s, %d characters). "+
+		"Split the change into smaller ones, or move finished task detail out of tasks.md and long notes into design.md",
+		slug, len(body), GitHubBodyLimit, name, size)
+}
+
+// largestBodyPart splits a rendered body at its <!-- specsync:section=NAME -->
+// markers and returns the biggest part. Text before the first marker is the
+// task checklist.
+func largestBodyPart(body string) (string, int) {
+	const open = "<!-- specsync:section="
+	name, best := "task checklist", 0
+	cur, start := "task checklist", 0
+	flush := func(end int) {
+		if end-start > best {
+			name, best = cur, end-start
+		}
+	}
+	for i := 0; ; {
+		j := strings.Index(body[i:], open)
+		if j < 0 {
+			break
+		}
+		j += i
+		flush(j)
+		k := strings.Index(body[j:], " -->")
+		if k < 0 {
+			break
+		}
+		cur, start = body[j+len(open):j+k], j
+		i = j + k
+	}
+	flush(len(body))
+	return name, best
+}
+
 // designCommentMarker is the identity anchor for design.md's overflow
 // comment, distinct from the issue-body marker so an idempotent upsert can
 // find the same comment again instead of duplicating it.
@@ -343,16 +382,23 @@ func (p *GitHubProvider) EnsureMarker(ctx context.Context, id, slug, body string
 }
 
 func (p *GitHubProvider) Push(ctx context.Context, item WorkItem, existing *Ref) (Ref, error) {
-	labels := desiredLabels(item)
-	if err := p.EnsureLabels(ctx, labels); err != nil {
-		return Ref{}, err
-	}
 	body := p.renderBody(item)
 
 	// Oversized design.md moves to a linked comment instead of the body.
 	designOverflow := strings.TrimSpace(item.DesignNotes) != "" && len(body) > GitHubBodyLimit
 	if designOverflow {
 		body = strings.Replace(body, designNotesSection(item.DesignNotes), designNotesStub(""), 1)
+	}
+
+	// Refuse a body GitHub would reject, before any network call: the size is
+	// known locally, and GitHub's own error names no change and no remedy.
+	if len(body) > GitHubBodyLimit {
+		return Ref{}, oversizedBodyError(item.Slug, body)
+	}
+
+	labels := desiredLabels(item)
+	if err := p.EnsureLabels(ctx, labels); err != nil {
+		return Ref{}, err
 	}
 
 	// Defend against duplicates: if we have no cached ref, look one up by
