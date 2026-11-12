@@ -617,6 +617,12 @@ func SaveChangeMetadata(dir string, m ChangeMetadata) error {
 		return nil
 	}
 
+	// MkdirAll would also create a missing change directory (and every
+	// ancestor), turning a mistyped slug into a stray directory. Callers
+	// validate the change first; refusing here is the backstop.
+	if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
+		return fmt.Errorf("change directory %s does not exist", dir)
+	}
 	if err := os.MkdirAll(metaDir, 0o755); err != nil {
 		return fmt.Errorf("create %s: %w", metaDir, err)
 	}

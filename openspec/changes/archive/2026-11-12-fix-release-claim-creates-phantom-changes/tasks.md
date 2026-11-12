@@ -19,8 +19,8 @@
        assert a non-zero exit and no directory created.
 
 - [x] 3. Record in `design.md` the taxonomy of what a bad invocation now does (refuse,
-       exit 1, no write) and note that `SaveChangeMetadata` stays a raw writer — the
-       guard lives at the "operate on an existing change" callers, not in the writer.
+       exit 1, no write) and state the boundary: callers validate, and
+       `SaveChangeMetadata` refuses a missing directory as a backstop.
        Validation: `design.md` states the boundary explicitly.
 
 - [x] 4. Pin the invariant on the commands that remain. `claim` and `release` no longer
@@ -29,3 +29,7 @@
        Validation: `TestMutatingCommandsRefuseUnknownChange` runs each against an
        unknown slug, asserts a non-zero exit and that no change directory is created;
        it goes red when `mutableChange` stops failing on a missing change.
+
+- [x] 5. Make `SaveChangeMetadata` refuse a directory that does not exist.
+       Validation: `TestSaveChangeMetadataRefusesMissingDir` fails without the guard
+       (the call succeeds and creates the directory) and passes with it.

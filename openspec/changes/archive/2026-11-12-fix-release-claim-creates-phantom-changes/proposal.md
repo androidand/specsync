@@ -60,8 +60,7 @@ the same, and any future invocation with a bad slug repeats the artifact.
 
 - Two functions in `cmd/specsync/main.go` gain a load-before-write step and an
   `-openspec` existence check.
-- `SaveChangeMetadata` is unchanged: it is a raw writer, and other callers
-  (set-stage/priority, tests) legitimately write into paths they have just created or
-  that already exist. The fix belongs at the callers that claim to operate on an
-  existing change.
+- `SaveChangeMetadata` refuses a directory that does not exist, as a backstop for any
+  caller that skips the load-first guard. Callers that scaffold a change create the
+  directory before saving.
 - No tracker, CLI summary, or other command changes.

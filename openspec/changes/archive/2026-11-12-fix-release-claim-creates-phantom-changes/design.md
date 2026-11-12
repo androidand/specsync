@@ -28,15 +28,13 @@ metadata-mutating subcommand already uses. It validates the slug, loads the chan
 `SaveChangeMetadata`. A bad slug now behaves like every other mutating command: exit 1,
 no disk change.
 
-## Boundary: the guard is at the caller, not the writer
+## Boundary: callers validate, the writer refuses as the backstop
 
-`SaveChangeMetadata` stays a raw writer. It is called by paths that have *just created*
-the directory themselves (set-stage/set-priority scaffolding) and by tests that write
-into freshly-made dirs; for those, `MkdirAll` is the intended behaviour. The contract
-"operate only on an existing change" belongs to the commands that *claim* to move an
-existing change — `release`, `claim`, and the close-state paths that already use
-`mutableChange`. Moving the check into `SaveChangeMetadata` would break those callers
-and hide their real errors, so it stays out.
+Commands that operate on an existing change load it first with `mutableChange`, which
+fails "change not found". `SaveChangeMetadata` additionally refuses a directory that
+does not exist, so a caller that skips the load fails with an error instead of
+`MkdirAll` creating the change directory and every ancestor. Callers that scaffold a
+change create the directory before saving metadata, so they are unaffected.
 
 ## Taxonomy of a bad invocation (post-fix)
 
