@@ -21,7 +21,10 @@ type Gate struct {
 
 type WorktreeConfig struct {
 	Dir, Branch string
-	Hooks       []string
+	// Path is a template for a new worktree's path ({dir} {repo} {slug} {issue} {name}). Empty keeps
+	// each command's own layout.
+	Path  string
+	Hooks []string
 	// Launcher creates new worktrees: "git" (default), "orca", or "auto"
 	// (Orca when it is installed).
 	Launcher string
@@ -83,7 +86,7 @@ func presetNames() string { return "minimal, pr-review, strict" }
 var topLevelKeys = []string{"board", "ideas_repo", "flow", "gates", "worktrees", "text", "cleanup", "sync", "save", "pr"}
 
 var sectionKeys = map[string][]string{
-	"worktrees": {"dir", "branch", "hooks", "launcher"},
+	"worktrees": {"dir", "branch", "path", "hooks", "launcher"},
 	"save":      {"forbid_trailers", "forbid_files"},
 	"pr":        {"confirm"},
 	"text":      append([]string{"profile", "headers", "filler", "template"}, textIntKeys...),
@@ -265,7 +268,12 @@ func (w *Ways) readSection(sec string, n *YNode, add addIssue) {
 	}
 	switch sec {
 	case "worktrees":
-		w.Worktrees = WorktreeConfig{Dir: n.Str("dir"), Branch: n.Str("branch"), Hooks: stringList("hooks"), Launcher: enum("launcher", "git", "orca", "auto")}
+		w.Worktrees = WorktreeConfig{Dir: n.Str("dir"), Branch: n.Str("branch"), Path: n.Str("path"), Hooks: stringList("hooks"), Launcher: enum("launcher", "git", "orca", "auto")}
+		if p := w.Worktrees.Path; p != "" {
+			for _, m := range checkWorktreePath(p) {
+				add(n.KeyLine["path"], "worktrees.path", "%s", m)
+			}
+		}
 	case "save":
 		w.Save = SaveConfig{ForbidTrailers: stringList("forbid_trailers"), ForbidFiles: stringList("forbid_files")}
 	case "pr":

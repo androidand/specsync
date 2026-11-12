@@ -804,6 +804,13 @@
           "description": "list the gates that would run and run nothing"
         },
         {
+          "name": "if-stale",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "run nothing when the gates already passed for this commit on a clean tree (for a pre-push hook); not with -only"
+        },
+        {
           "name": "json",
           "type": "boolean",
           "required": false,
@@ -835,13 +842,15 @@
       "safety_rules": [
         "Runs commands from openspec/specsync.yml, so nothing runs until `specsync trust -yes` has been given for that file",
         "The stamp is written only for a full passing run on a clean tree; a new commit, a failed run or a partial run leaves no valid stamp",
-        "-dry-run lists the gates that would run and runs nothing"
+        "-dry-run lists the gates that would run and runs nothing",
+        "-if-stale runs nothing when the stamp already names HEAD on a clean tree, and otherwise behaves as a normal run"
       ],
       "examples": [
         "specsync gates -dry-run",
         "specsync gates",
         "specsync gates -with e2e",
-        "specsync gates -only lint,types -continue"
+        "specsync gates -only lint,types -continue",
+        "specsync gates -if-stale   # in a pre-push hook: run the gates only when the commit has no passing stamp"
       ]
     },
     "idea": {
@@ -1855,7 +1864,7 @@
           "type": "string",
           "required": false,
           "default": "",
-          "description": "worktree base directory (default: $SPECSYNC_WORKTREE_DIR or ../worktrees)"
+          "description": "worktree base directory (default: $SPECSYNC_WORKTREE_DIR, else worktrees.dir in openspec/specsync.yml, else ../worktrees)"
         }
       ],
       "safety_rules": [

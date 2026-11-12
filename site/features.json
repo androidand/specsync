@@ -90,6 +90,11 @@
   },
   {
     "group": "collaborate",
+    "title": "Choose where worktrees go",
+    "body": "Set <code>worktrees.path</code> to a template such as <code>{dir}/{repo}/{name}</code>. <code>start</code> and <code>pull -worktree</code> then read the same config, so one change gets one worktree whichever command made it, and Orca's workspace name follows the template."
+  },
+  {
+    "group": "collaborate",
     "icon": "priority",
     "title": "Priority-driven dispatch",
     "body": "Set priorities (1-100) with <code>specsync set-priority my-change 85</code>. Agents respect priority when deciding what to work on next — humans direct focus."
@@ -176,6 +181,11 @@
     "icon": "audit",
     "title": "Archive audit",
     "body": "<code>specsync audit</code> cross-references archived changes against GitHub PRs to find archived-but-unmerged work. Add <code>-mark-shipped</code> to record the final lifecycle step."
+  },
+  {
+    "group": "ship",
+    "title": "Check before you push",
+    "body": "<code>specsync gates -if-stale</code> runs nothing when the gates already passed for this commit on a clean tree, and runs them otherwise. Call it from a <code>pre-push</code> hook so a commit nobody checked cannot leave by accident."
   },
   {
     "group": "ship",

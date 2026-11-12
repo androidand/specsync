@@ -62,7 +62,7 @@ func (cm *pullCmd) Flags(fs *flag.FlagSet) {
 	cm.statusMap = fs.String("status-map", "", "stage→Status overrides as stage=Name pairs, e.g. \"active=In Progress,archived=Done\" (default: $SPECSYNC_STATUS_MAP)")
 	cm.initFlag = fs.Bool("init", false, "when the repo has no openspec/, create a scratch one first (same as `specsync init`). Without it, pull fails and creates nothing")
 	cm.worktree = fs.Bool("worktree", false, "create or reuse a worktree and run pull inside it")
-	cm.worktreeDir = fs.String("worktree-dir", "", "worktree base directory (default: $SPECSYNC_WORKTREE_DIR or ../worktrees)")
+	cm.worktreeDir = fs.String("worktree-dir", "", "worktree base directory (default: $SPECSYNC_WORKTREE_DIR, else worktrees.dir in openspec/specsync.yml, else ../worktrees)")
 }
 
 func (cm *pullCmd) Run(_ context.Context, args []string) error {

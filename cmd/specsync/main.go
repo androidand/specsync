@@ -294,24 +294,22 @@ func (s *stringSlice) Set(v string) error {
 func runPullWithWorktree(issue, change, repo string, dryRun bool, project specsync.BoardTarget, worktreeDir string) {
 	ctx := context.Background()
 
-	if worktreeDir == "" {
-		worktreeDir = os.Getenv("SPECSYNC_WORKTREE_DIR")
-	}
-	if worktreeDir == "" {
-		worktreeDir = "../worktrees"
-	}
-
 	repoName, err := getRepoName(ctx, repo)
 	if err != nil {
 		fail(fmt.Errorf("worktree: %w", err))
 	}
 
-	worktreeName := repoName + "-" + issue
-	branchName := "feat/" + issue + "-" + change
-	if change == "" {
-		branchName = "feat/" + issue
+	// The same config `start` reads: worktrees.dir, worktrees.path and worktrees.branch. The
+	// -worktree-dir flag and $SPECSYNC_WORKTREE_DIR still win over worktrees.dir.
+	cwd0, err := os.Getwd()
+	if err != nil {
+		fail(err)
 	}
-	worktreePath := filepath.Join(worktreeDir, worktreeName)
+	ways, issues := specsync.LoadWays(specsync.RepoConfigRoot(ctx, cwd0))
+	if len(issues) > 0 {
+		fail(fmt.Errorf("fix the config first (specsync doctor config): %s", issues[0]))
+	}
+	worktreePath, branchName := specsync.PullWorktreePlan(ways, specsync.MainCheckout(cwd0), repoName, issue, change, worktreeDir, os.Getenv("SPECSYNC_WORKTREE_DIR"))
 
 	if dryRun {
 		fmt.Printf("DRY RUN — worktree setup:\n")

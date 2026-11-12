@@ -63,7 +63,7 @@ var runOrcaFn = func(ctx context.Context, dir string, argv []string) (string, er
 // --no-parent: a change is independent work, not a child of whatever Orca
 // workspace start runs in.
 func orcaCreateArgs(o StartOptions, branch, base string) []string {
-	argv := []string{o.Orca, "worktree", "create", "--name", o.Slug, "--branch", branch, "--base-branch", base, "--no-parent"}
+	argv := []string{o.Orca, "worktree", "create", "--name", orcaWorkspaceName(o.Ways.Worktrees, o.Issue, o.Slug), "--branch", branch, "--base-branch", base, "--no-parent"}
 	if o.Issue != "" {
 		argv = append(argv, "--issue", o.Issue)
 	}
@@ -122,14 +122,11 @@ func StartWork(ctx context.Context, o StartOptions) (StartResult, error) {
 	if _, err := gitIn(ctx, root, "check-ref-format", "--branch", res.Branch); err != nil {
 		return res, fmt.Errorf("the branch pattern %q gives %q, which is not a valid branch name", o.Ways.Worktrees.Branch, res.Branch)
 	}
-	dir := o.Ways.Worktrees.Dir
-	if dir == "" {
-		dir = DefaultWorktreeDir
+	if p, ok := WorktreePath(o.Ways.Worktrees, root, o.Issue, o.Slug); ok {
+		res.Path = p
+	} else {
+		res.Path = filepath.Join(resolveWorktreeDir(o.Ways.Worktrees.Dir, root), filepath.Base(root)+"-"+o.Slug)
 	}
-	if !filepath.IsAbs(dir) {
-		dir = filepath.Join(root, dir)
-	}
-	res.Path = filepath.Join(filepath.Clean(dir), filepath.Base(root)+"-"+o.Slug)
 
 	existing, err := listWorktrees(ctx, gitWorktreeListReal, root)
 	if err != nil {

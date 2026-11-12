@@ -20,6 +20,7 @@ type GateOptions struct {
 	Only     []string // run exactly these gates; never stamps
 	With     []string // optional gates to include
 	Continue bool     // keep running after a failure
+	IfStale  bool     // run nothing when the stamp already names HEAD on a clean tree
 	Out      io.Writer
 }
 
@@ -37,6 +38,7 @@ type GateReport struct {
 	Results []GateResult `json:"gates"`
 	Passed  bool         `json:"passed"`
 	Stamped bool         `json:"stamped"`
+	Skipped bool         `json:"skipped,omitempty"`
 	Head    string       `json:"head,omitempty"`
 	Note    string       `json:"note,omitempty"`
 }
@@ -130,12 +132,28 @@ func RunGates(ctx context.Context, o GateOptions) (GateReport, error) {
 	if len(o.Ways.Gates) == 0 {
 		return rep, fmt.Errorf("no gates are configured: add a gates: list to %s", SpecSyncConfigPath)
 	}
+	if o.IfStale && len(o.Only) > 0 {
+		return rep, fmt.Errorf("-if-stale cannot be combined with -only: a partial run never leaves a stamp")
+	}
 	gates, err := selectGates(o.Ways, o.Only, o.With)
 	if err != nil {
 		return rep, err
 	}
 	if len(gates) == 0 {
 		return rep, fmt.Errorf("no required gates are configured; name optional ones with -with or -only")
+	}
+	if o.IfStale {
+		// A fresh stamp on a clean tree means these gates already passed on exactly this commit, so a
+		// hook can call this on every push. Nothing runs, so no trust is needed.
+		if top, err := gitIn(ctx, o.Dir, "rev-parse", "--show-toplevel"); err == nil {
+			head, herr := gitIn(ctx, top, "rev-parse", "HEAD")
+			st, serr := gitIn(ctx, top, "status", "--porcelain", "--untracked-files=normal")
+			if herr == nil && serr == nil && st == "" && GatesPassedAt(ctx, top, head) {
+				rep.Head, rep.Passed, rep.Stamped, rep.Skipped = head, true, true, true
+				rep.Note = "the gates already passed for this commit; nothing to run"
+				return rep, nil
+			}
+		}
 	}
 	cmds := make([]string, len(gates))
 	for i, g := range gates {

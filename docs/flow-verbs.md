@@ -6,7 +6,7 @@ judgement in it and call these verbs for the mechanics. Local conventions move t
 
 | Your script does | Call | Config |
 |---|---|---|
-| create a worktree and branch, run setup | `specsync start <slug>` | `worktrees.dir`, `worktrees.branch`, `worktrees.hooks`, `worktrees.launcher` |
+| create a worktree and branch, run setup | `specsync start <slug>` | `worktrees.dir`, `worktrees.path`, `worktrees.branch`, `worktrees.hooks`, `worktrees.launcher` |
 | write the issue | `specsync new <title>` | the text standard under `text:` |
 | commit, refuse secrets and trailers, push | `specsync save -m ... [-push]` | `save.forbid_trailers`, `save.forbid_files` |
 | lint, types, tests, then remember it passed | `specsync gates` | `gates:` |
@@ -21,3 +21,32 @@ Things to know:
 - `pr open` never pushes and refuses unless `pr prep` passes. Only a failed size check can be waived,
   with `-confirm oversized`.
 - Every verb has a dry run, and `specsync next` still names the step you are on.
+
+## Where worktrees go
+
+By default `start` makes `<dir>/<repo>-<slug>` and `pull -worktree` makes `<dir>/<repo>-<issue>`.
+Set `worktrees.path` to choose one layout for both:
+
+```yaml
+worktrees:
+  dir: ../worktrees
+  path: "{dir}/{repo}/{name}"   # {name} is <issue>-<slug>, or <slug> without an issue
+```
+
+Placeholders: `{dir}`, `{repo}`, `{slug}`, `{issue}`, `{name}`. A template must contain `{slug}` or
+`{name}`. With the Orca launcher, Orca gets the template's last folder as the workspace name, so a
+layout that Orca also produces stays the same whichever tool creates the worktree.
+
+## Run the gates before every push
+
+`specsync gates -if-stale` runs nothing when the gates already passed for this commit on a clean
+tree, and runs them otherwise. Call it from a `pre-push` hook:
+
+```sh
+#!/bin/sh
+# <git-dir>/hooks/pre-push, or the hooks folder your repo already uses; make it executable
+exec specsync gates -if-stale
+```
+
+A failed gate stops the push. `git push --no-verify` is git's own way around a hook. `-if-stale`
+cannot be combined with `-only`, because a partial run never leaves a stamp.

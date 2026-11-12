@@ -176,3 +176,77 @@ func TestGatesRunAtTheRepoTopAndStampFromASubdirectory(t *testing.T) {
 		t.Fatal("the stamp must be valid when read from the subdirectory too")
 	}
 }
+
+func gateLog(t *testing.T) string {
+	t.Helper()
+	b, _ := os.ReadFile(filepath.Join(gateLogDir, "order.log"))
+	return string(b)
+}
+
+func TestGatesIfStaleRunsNothingWhenTheStampNamesHeadOnACleanTree(t *testing.T) {
+	dir := gateRepo(t, gateConfig)
+	if _, err := Trust(dir); err != nil {
+		t.Fatal(err)
+	}
+	if rep, _, _ := runGatesIn(t, dir, GateOptions{}); !rep.Stamped {
+		t.Fatal("expected a stamp")
+	}
+	before := gateLog(t)
+	// A skip needs no trust: nothing is run.
+	t.Setenv(TrustFileEnv, filepath.Join(t.TempDir(), "other-trust.json"))
+	rep, _, err := runGatesIn(t, dir, GateOptions{IfStale: true})
+	if err != nil || !rep.Passed || !rep.Skipped {
+		t.Fatalf("a fresh stamp must skip: %v %+v", err, rep)
+	}
+	if gateLog(t) != before {
+		t.Fatalf("no gate may run when the stamp is fresh: %q", gateLog(t))
+	}
+}
+
+func TestGatesIfStaleRunsAfterANewCommit(t *testing.T) {
+	dir := gateRepo(t, gateConfig)
+	if _, err := Trust(dir); err != nil {
+		t.Fatal(err)
+	}
+	runGatesIn(t, dir, GateOptions{})
+	commitFile(t, dir, "b.txt", "b")
+	before := gateLog(t)
+	rep, _, err := runGatesIn(t, dir, GateOptions{IfStale: true})
+	if err != nil || !rep.Passed || rep.Skipped || !rep.Stamped {
+		t.Fatalf("a new commit must run the gates and stamp: %v %+v", err, rep)
+	}
+	if gateLog(t) == before {
+		t.Fatal("the gates must have run")
+	}
+}
+
+func TestGatesIfStaleRunsOnADirtyTreeEvenWithAStampOnHead(t *testing.T) {
+	dir := gateRepo(t, gateConfig)
+	if _, err := Trust(dir); err != nil {
+		t.Fatal(err)
+	}
+	runGatesIn(t, dir, GateOptions{})
+	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("changed"), 0o644)
+	before := gateLog(t)
+	rep, _, err := runGatesIn(t, dir, GateOptions{IfStale: true})
+	if err != nil || rep.Skipped {
+		t.Fatalf("a dirty tree must not skip: %v %+v", err, rep)
+	}
+	if gateLog(t) == before {
+		t.Fatal("the gates must have run on the dirty tree")
+	}
+}
+
+func TestGatesIfStaleWithOnlyIsRefusedAndRunsNothing(t *testing.T) {
+	dir := gateRepo(t, gateConfig)
+	if _, err := Trust(dir); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := runGatesIn(t, dir, GateOptions{IfStale: true, Only: []string{"one"}})
+	if err == nil || !strings.Contains(err.Error(), "-only") {
+		t.Fatalf("got %v", err)
+	}
+	if gateLog(t) != "" {
+		t.Fatal("nothing may run")
+	}
+}
