@@ -19,15 +19,37 @@ var StatusTableHeader = []string{"Issue", "What", "PR", "State", "Checks", "Revi
 // span more than one. A row whose pull request lookup did not happen reads
 // "Unknown" in the PR column, not "Not opened".
 func StatusTableRows(rows []ChangeTopology, current string) [][]string {
-	many, clash := manyRepos(rows), tableClashes(rows)
+	return newTableCtx(rows).cells(rows, current)
+}
+
+// tableCtx is what the whole table decides once and every row then uses: each
+// row's issues, whether the rows span several repositories, and which short
+// repository names clash.
+type tableCtx struct {
+	issues [][]rowIssue
+	many   bool
+	clash  map[string]bool
+}
+
+func newTableCtx(rows []ChangeTopology) tableCtx {
+	c := tableCtx{issues: make([][]rowIssue, len(rows)), many: manyRepos(rows)}
+	for i, r := range rows {
+		c.issues[i] = rowIssues(r)
+	}
+	c.clash = tableClashes(rows, c.issues)
+	return c
+}
+
+func (c tableCtx) cells(rows []ChangeTopology, current string) [][]string {
+	many, clash := c.many, c.clash
 	out := make([][]string, 0, len(rows))
-	for _, r := range rows {
+	for i, r := range rows {
 		mark := ""
 		if current != "" && RowKey(r) == current {
 			mark = "▶ "
 		}
 		cells := []string{
-			mark + tableIssue(r, many, clash), tableWhat(r), tablePR(r), tableState(r),
+			mark + tableIssue(c.issues[i], r, many, clash), tableWhat(r), tablePR(r), tableState(r),
 			tableChecks(r.PR), tableReview(r.PR), tableSize(r),
 		}
 		for i := range cells {
@@ -42,11 +64,12 @@ func StatusTableRows(rows []ChangeTopology, current string) [][]string {
 // (0 means no limit). Long cells wrap at spaces. With hyperlinks, issue and
 // request numbers are written as terminal hyperlinks (OSC 8) to their pages.
 func RenderStatusTable(rows []ChangeTopology, current string, width int, hyperlinks bool) string {
+	c := newTableCtx(rows)
 	var links []rowLinks
 	if hyperlinks {
-		links = statusTableLinks(rows)
+		links = c.links(rows)
 	}
-	return renderGrid(StatusTableHeader, StatusTableRows(rows, current), width, links)
+	return renderGrid(StatusTableHeader, c.cells(rows, current), width, links)
 }
 
 // tableLink is one number in a cell and the page it names.
@@ -65,11 +88,13 @@ type rowLinks struct {
 	PR     *tableLink
 }
 
-func statusTableLinks(rows []ChangeTopology) []rowLinks {
-	many, clash := manyRepos(rows), tableClashes(rows)
+func statusTableLinks(rows []ChangeTopology) []rowLinks { return newTableCtx(rows).links(rows) }
+
+func (c tableCtx) links(rows []ChangeTopology) []rowLinks {
+	many, clash := c.many, c.clash
 	out := make([]rowLinks, len(rows))
 	for i, r := range rows {
-		out[i].Issues = issueLinks(r, many, clash)
+		out[i].Issues = issueLinks(c.issues[i], r, many, clash)
 		if r.PR != nil && safeURL(r.PR.URL) != "" {
 			out[i].PR = &tableLink{Label: fmt.Sprintf("#%d", r.PR.Number), URL: safeURL(r.PR.URL), Kind: "PR",
 				Num: strconv.Itoa(r.PR.Number), Repo: shortRepo(r.Repo), ShowRepo: many}
@@ -215,7 +240,7 @@ func rowIssues(r ChangeTopology) []rowIssue {
 // tableClashes is the set of lower-cased short repository names that more than
 // one repository in the whole table answers to ("me/api" and "org/api"): those
 // are written with their owner everywhere, in every row and in -urls.
-func tableClashes(rows []ChangeTopology) map[string]bool {
+func tableClashes(rows []ChangeTopology, issues [][]rowIssue) map[string]bool {
 	owners := map[string]map[string]bool{} // short name -> lower-cased full names
 	note := func(repo string) {
 		if repo == "" {
@@ -227,9 +252,9 @@ func tableClashes(rows []ChangeTopology) map[string]bool {
 		}
 		owners[short][strings.ToLower(repo)] = true
 	}
-	for _, r := range rows {
+	for i, r := range rows {
 		note(r.Repo)
-		for _, f := range rowIssues(r) {
+		for _, f := range issues[i] {
 			note(f.repo)
 		}
 	}
@@ -245,8 +270,7 @@ func tableClashes(rows []ChangeTopology) map[string]bool {
 // issueLinks lists a row's issues as cell links. A repository is named when the
 // table spans several, when the issue is in another one than the row's, and
 // with its owner when its short name clashes with another repository's.
-func issueLinks(r ChangeTopology, many bool, clash map[string]bool) []tableLink {
-	found := rowIssues(r)
+func issueLinks(found []rowIssue, r ChangeTopology, many bool, clash map[string]bool) []tableLink {
 	out := make([]tableLink, len(found))
 	for i, f := range found {
 		other := f.repo != "" && !strings.EqualFold(f.repo, r.Repo)
@@ -272,8 +296,8 @@ func issuePageURL(requestURL, repo, id string) string {
 	return scheme + "://" + host + "/" + repo + "/issues/" + id
 }
 
-func tableIssue(r ChangeTopology, many bool, clash map[string]bool) string {
-	links := issueLinks(r, many, clash)
+func tableIssue(found []rowIssue, r ChangeTopology, many bool, clash map[string]bool) string {
+	links := issueLinks(found, r, many, clash)
 	if len(links) == 0 {
 		return "–"
 	}
@@ -310,6 +334,9 @@ func tableState(r ChangeTopology) string {
 	pr := r.PR
 	if pr == nil {
 		state := "Local"
+		if r.Branch == "" && r.Local == nil {
+			return "No branch" // a change nobody has started: nothing local to describe
+		}
 		if l := r.Local; l != nil {
 			switch {
 			case l.StatusUnavailable: // git status failed, so the counts below mean nothing
@@ -531,56 +558,97 @@ func renderGrid(header []string, rows [][]string, width int, links []rowLinks) s
 }
 
 // wrapCell splits text into lines at most width terminal columns wide, breaking
-// at spaces; a word longer than width is cut between characters.
+// at spaces; a word longer than width is cut between characters, never inside
+// one (a base character with its marks, variation selector or joiner sequence).
 func wrapCell(text string, width int) []string {
 	if width <= 0 || displayWidth(text) <= width {
 		return []string{text}
 	}
 	var lines []string
-	cur := ""
+	cur, curW := "", 0
 	flush := func() {
 		if cur != "" {
 			lines = append(lines, cur)
-			cur = ""
+			cur, curW = "", 0
 		}
 	}
 	for _, word := range strings.Fields(text) {
-		for displayWidth(word) > width {
+		ww := displayWidth(word)
+		if ww > width {
 			flush()
-			cut := 0
-			for i, r := range word {
-				end := i + utf8.RuneLen(r)
-				if displayWidth(word[:end]) > width && cut > 0 {
-					break
+			var piece strings.Builder
+			pieceW := 0
+			for _, cl := range clusters(word) {
+				cw := displayWidth(cl)
+				if pieceW+cw > width && pieceW > 0 {
+					lines = append(lines, piece.String())
+					piece.Reset()
+					pieceW = 0
 				}
-				cut = end
+				piece.WriteString(cl)
+				pieceW += cw
 			}
-			lines = append(lines, word[:cut])
-			word = word[cut:]
+			cur, curW = piece.String(), pieceW
+			continue
 		}
 		switch {
 		case cur == "":
-			cur = word
-		case displayWidth(cur)+1+displayWidth(word) <= width:
-			cur += " " + word
+			cur, curW = word, ww
+		case curW+1+ww <= width:
+			cur, curW = cur+" "+word, curW+1+ww
 		default:
 			flush()
-			cur = word
+			cur, curW = word, ww
 		}
 	}
 	flush()
 	return lines
 }
 
-// displayWidth is how many terminal columns text takes. A variation selector
+// clusters splits s into characters as a terminal draws them: a base rune with
+// the zero-width runes after it (combining marks, variation selectors, joiners),
+// a joiner pulling in the rune after it, and a regional indicator pair (a flag).
+func clusters(s string) []string {
+	var out []string
+	rs := []rune(s)
+	for i := 0; i < len(rs); {
+		j := i + 1
+		if isRegionalIndicator(rs[i]) && j < len(rs) && isRegionalIndicator(rs[j]) {
+			j++
+		}
+		for j < len(rs) {
+			switch {
+			case runeWidth(rs[j]) == 0:
+				if rs[j] == 0x200D && j+1 < len(rs) {
+					j++ // the joiner pulls in what it joins
+				}
+				j++
+			default:
+				goto done
+			}
+		}
+	done:
+		out = append(out, string(rs[i:j]))
+		i = j
+	}
+	return out
+}
+
+func isRegionalIndicator(r rune) bool { return r >= 0x1F1E6 && r <= 0x1F1FF }
+
+// displayWidth is how many terminal columns text takes. A joiner makes what
+// follows part of the glyph before it, as in a family emoji. A variation selector
 // (U+FE0F) asks for the emoji form of the symbol before it, which is wide;
 // after a letter or ASCII it changes nothing.
 func displayWidth(s string) int {
 	n, prev := 0, rune(0)
 	for _, r := range s {
-		if r == 0xFE0F && prev > 0x7F && !unicode.IsLetter(prev) && runeWidth(prev) == 1 {
+		switch {
+		case prev == 0x200D:
+			// the rune a joiner joins is drawn as part of the glyph before it
+		case r == 0xFE0F && prev > 0x7F && !unicode.IsLetter(prev) && runeWidth(prev) == 1:
 			n++ // the emoji form of a narrow symbol takes two columns
-		} else {
+		default:
 			n += runeWidth(r)
 		}
 		prev = r
@@ -606,6 +674,7 @@ func runeWidth(r rune) int {
 		r >= 0x1F680 && r <= 0x1F6FF,
 		r >= 0x1F900 && r <= 0x1F9FF,
 		r >= 0x1FA70 && r <= 0x1FAFF,
+		r >= 0x1F7E0 && r <= 0x1F7EB, r == 0x1F7F0,
 		r >= 0x20000 && r <= 0x3FFFD,
 		r == 0x1F004, r == 0x1F0CF, r == 0x1F18E, r >= 0x1F191 && r <= 0x1F19A, r >= 0x1F200 && r <= 0x1F2FF:
 		return 2
@@ -750,7 +819,7 @@ func StatusTableNotes(rows []ChangeTopology, status []string, related *RelatedWo
 			if inStatus[reason] {
 				continue
 			}
-			if m := reasonRepo.FindStringSubmatch(reason); m != nil && !shown[strings.ToLower(m[1])] {
+			if repo := reasonRepoOf(reason); repo != "" && !shown[strings.ToLower(repo)] {
 				continue
 			}
 			notes = append(notes, "incomplete: "+plainCell(reason))
@@ -765,8 +834,26 @@ func StatusTableNotes(rows []ChangeTopology, status []string, related *RelatedWo
 	return notes
 }
 
-// reasonRepo finds the repository a status reason is about ("... for owner/repo: ...").
-var reasonRepo = regexp.MustCompile(`\bfor (\S+/\S+?):`)
+// repoReasons are the status reasons that are about one repository, and where
+// in them it is named. Only these are matched, never any text with a slash in
+// it: "local state unavailable for feat/243-x: ..." names a branch.
+var repoReasons = []*regexp.Regexp{
+	regexp.MustCompile(`^request state omitted for (\S+): `),
+	regexp.MustCompile(`^request listing for (\S+) may be truncated`),
+	regexp.MustCompile(`^reviewers unavailable for ([^\s#]+): `),
+	regexp.MustCompile(`^reviewers unavailable for ([^\s#]+)#\d+: `),
+	regexp.MustCompile(`^reviewers of ([^\s#]+)#\d+ may be incomplete`),
+}
+
+// reasonRepoOf returns the repository a known kind of reason is about, else "".
+func reasonRepoOf(reason string) string {
+	for _, re := range repoReasons {
+		if m := re.FindStringSubmatch(reason); m != nil {
+			return m[1]
+		}
+	}
+	return ""
+}
 
 func countRequestsUnknown(rows []ChangeTopology) int {
 	n := 0

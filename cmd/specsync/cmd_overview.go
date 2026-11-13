@@ -105,15 +105,16 @@ func (cm *overviewCmd) Run(_ context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	rows := overviewRows(ov)
 	if *cm.table || *cm.asJSON {
-		ov.Status = append(ov.Status, specsync.AttachReviewers(context.Background(), overviewRows(ov), nil)...)
+		ov.Status = append(ov.Status, attachReviewers(context.Background(), rows, true, *cm.state)...)
 	}
 	if *cm.asJSON {
 		emitJSON(ov)
 		return nil
 	}
 	if *cm.table {
-		printStatusTable(overviewRows(ov), "", ov.Status, *cm.urls, nil)
+		printStatusTable(rows, "", ov.Status, *cm.urls, nil)
 		return nil
 	}
 	printOverview(ov)

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os/exec"
 	"strings"
 	"testing"
@@ -83,6 +84,21 @@ func TestTableWidthOrder(t *testing.T) {
 		asked = false
 		if got := pickTableWidth(c.columns, term(c.terminal)); got != c.want || asked != c.asks {
 			t.Errorf("%s: width %d (terminal asked: %v), want %d (asked: %v)", c.name, got, asked, c.want, c.asks)
+		}
+	}
+}
+
+// status and overview share one gate: reviewers are fetched only when the output
+// needs them and never offline.
+func TestAttachReviewersGate(t *testing.T) {
+	pr := &specsync.ChangeRequest{Number: 1, State: "open"}
+	rows := []specsync.ChangeTopology{{Repo: "acme/portal", PR: pr}}
+	for _, c := range []struct {
+		wanted bool
+		state  string
+	}{{false, "on"}, {true, "off"}} {
+		if notes := attachReviewers(context.Background(), rows, c.wanted, c.state); len(notes) != 0 || pr.ReviewersKnown {
+			t.Errorf("wanted=%v state=%s: notes %v, known %v; nothing should have been asked", c.wanted, c.state, notes, pr.ReviewersKnown)
 		}
 	}
 }

@@ -4,8 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 )
 
 func two(n int) *int { return &n }
@@ -285,68 +289,137 @@ func TestTableStateSurvivesAnEmptyRequestState(t *testing.T) {
 	}
 }
 
-// The response of reviewersQuery: a user request carries login, a team request
-// name and slug; latestOpinionatedReviews holds each reviewer's latest approval,
-// change request or dismissal, never a comment.
+// The response of reviewersQuery: the repository holds one aliased field per
+// request. A user or a bot request carries login, a team name and slug;
+// latestOpinionatedReviews holds each reviewer's latest approval, change
+// request or dismissal, never a comment. A request not found is null.
 func TestParseReviewers(t *testing.T) {
-	const raw = `{"data":{"repository":{"pullRequests":{"nodes":[
-	  {"number":5,
-	   "reviewRequests":{"nodes":[
+	const raw = `{"data":{"repository":{
+	  "pr5":{"number":5,
+	   "reviewRequests":{"totalCount":4,"nodes":[
 	     {"requestedReviewer":{"__typename":"User","login":"bob"}},
+	     {"requestedReviewer":{"__typename":"Bot","login":"copilot-pull-request-reviewer"}},
 	     {"requestedReviewer":{"__typename":"Team","name":"Core Devs","slug":"core-devs"}},
 	     {"requestedReviewer":{}}]},
-	   "latestOpinionatedReviews":{"nodes":[
+	   "latestOpinionatedReviews":{"totalCount":4,"nodes":[
 	     {"author":{"login":"zed"},"state":"CHANGES_REQUESTED"},
 	     {"author":{"login":"ann"},"state":"APPROVED"},
 	     {"author":{"login":"di"},"state":"DISMISSED"},
 	     {"author":null,"state":"APPROVED"}]}},
-	  {"number":6,"reviewRequests":{"nodes":[]},"latestOpinionatedReviews":{"nodes":[]}}
-	]}}}}`
+	  "pr6":{"number":6,"reviewRequests":{"totalCount":0,"nodes":[]},"latestOpinionatedReviews":{"totalCount":0,"nodes":[]}},
+	  "pr9":null
+	}}}`
 	got, err := parseReviewers(raw)
 	if err != nil {
 		t.Fatal(err)
 	}
 	five := got[5]
-	if strings.Join(five.Requested, ",") != "bob,team:core-devs" {
-		t.Errorf("requested = %v", five.Requested)
+	if strings.Join(five.Requested, ",") != "bob,copilot-pull-request-reviewer,team:core-devs" {
+		t.Errorf("requested = %v (a bot request must not be lost)", five.Requested)
 	}
 	want := []ChangeRequestReview{{"ann", "approved"}, {"di", "dismissed"}, {"zed", "changes_requested"}}
 	if len(five.Reviews) != 3 || five.Reviews[0] != want[0] || five.Reviews[1] != want[1] || five.Reviews[2] != want[2] {
 		t.Errorf("reviews = %v, want %v", five.Reviews, want)
 	}
-	if r, ok := got[6]; !ok || len(r.Requested) != 0 || len(r.Reviews) != 0 {
+	if five.Incomplete {
+		t.Error("complete lists were marked incomplete")
+	}
+	if r, ok := got[6]; !ok || len(r.Requested) != 0 || len(r.Reviews) != 0 || r.Incomplete {
 		t.Errorf("request 6 = %+v, %v", r, ok)
+	}
+	if _, ok := got[9]; ok {
+		t.Error("a request that was not found is in the result")
 	}
 	if _, err := parseReviewers("not json"); err == nil {
 		t.Error("a bad response parsed")
 	}
 }
 
-func TestGitHubReviewersAsksOneGraphQLCall(t *testing.T) {
+// A list the provider cut short at its page size is said to be incomplete.
+func TestParseReviewersFlagsCutShortLists(t *testing.T) {
+	const raw = `{"data":{"repository":{"pr1":{"number":1,
+	  "reviewRequests":{"totalCount":31,"nodes":[{"requestedReviewer":{"login":"bob"}}]},
+	  "latestOpinionatedReviews":{"totalCount":1,"nodes":[{"author":{"login":"ann"},"state":"APPROVED"}]}}}}}`
+	got, _ := parseReviewers(raw)
+	if !got[1].Incomplete {
+		t.Errorf("31 requests with 1 returned was not flagged: %+v", got[1])
+	}
+}
+
+func TestReviewersQueryNamesRequestsByNumberAndAsksForBots(t *testing.T) {
+	q := reviewersQuery([]int{40, 7})
+	for _, want := range []string{"pr40:pullRequest(number:40)", "pr7:pullRequest(number:7)", "... on Bot{login}", "... on Team{name slug}", "latestOpinionatedReviews", "totalCount"} {
+		if !strings.Contains(q, want) {
+			t.Errorf("query lacks %q:\n%s", want, q)
+		}
+	}
+	if strings.Contains(q, "pullRequests(") {
+		t.Error("the query lists pull requests instead of naming the ones shown")
+	}
+}
+
+func TestGitHubReviewersBatchesCalls(t *testing.T) {
 	var calls [][]string
 	run := func(_ context.Context, args ...string) (string, error) {
 		calls = append(calls, args)
-		return `{"data":{"repository":{"pullRequests":{"nodes":[{"number":1,"reviewRequests":{"nodes":[]},"latestOpinionatedReviews":{"nodes":[{"author":{"login":"ann"},"state":"APPROVED"}]}}]}}}}`, nil
+		return `{"data":{"repository":{"pr1":{"number":1,"reviewRequests":{"totalCount":0,"nodes":[]},"latestOpinionatedReviews":{"totalCount":1,"nodes":[{"author":{"login":"ann"},"state":"APPROVED"}]}}}}}`, nil
 	}
-	got, err := NewGitHubProviderFuncWithRepo("acme/portal", run).Reviewers(context.Background())
+	p := NewGitHubProviderFuncWithRepo("acme/portal", run)
+	got, err := p.Reviewers(context.Background(), []int{1})
 	if err != nil || len(calls) != 1 || calls[0][0] != "api" || calls[0][1] != "graphql" || got[1].Reviews[0].Reviewer != "ann" {
 		t.Errorf("calls %v, result %+v, err %v", calls, got, err)
+	}
+	calls = nil
+	many := make([]int, 85)
+	for i := range many {
+		many[i] = i + 1
+	}
+	if _, err := p.Reviewers(context.Background(), many); err != nil || len(calls) != 3 {
+		t.Errorf("85 requests took %d calls (err %v), want 3 batches of at most %d", len(calls), err, reviewersBatch)
+	}
+}
+
+// The real cause is returned, not "repo is not owner/name".
+func TestGitHubReviewersReturnsTheResolveError(t *testing.T) {
+	run := func(_ context.Context, args ...string) (string, error) { return "", errors.New("no git remote here") }
+	_, err := NewGitHubProviderFuncWithRepo("", run).Reviewers(context.Background(), []int{1})
+	if err == nil || !strings.Contains(err.Error(), "no git remote here") {
+		t.Errorf("error = %v, want the resolver's cause", err)
 	}
 }
 
 type fakeReviewers struct {
 	by    map[int]RequestReviewers
 	err   error
-	calls *int
+	calls *[][]int
 }
 
-func (f fakeReviewers) Reviewers(context.Context) (map[int]RequestReviewers, error) {
-	*f.calls++
+func (f fakeReviewers) Reviewers(_ context.Context, numbers []int) (map[int]RequestReviewers, error) {
+	if f.calls != nil {
+		*f.calls = append(*f.calls, numbers)
+	}
 	return f.by, f.err
 }
 
+type memReviewerCache struct {
+	m    map[string]map[int]RequestReviewers
+	gets int
+}
+
+func (c *memReviewerCache) Get(repo string) (map[int]RequestReviewers, bool) {
+	c.gets++
+	v, ok := c.m[repo]
+	return v, ok
+}
+func (c *memReviewerCache) Put(repo string, by map[int]RequestReviewers) {
+	if c.m == nil {
+		c.m = map[string]map[int]RequestReviewers{}
+	}
+	c.m[repo] = by
+}
+
 // Reviewers are fetched once per repository that has an open request among the
-// rows given, and only for those; the requests are updated in place.
+// rows given, naming exactly those requests; the requests are updated in place.
 func TestAttachReviewersFollowsTheRowsShown(t *testing.T) {
 	open := func(n int) *ChangeRequest { return &ChangeRequest{Number: n, State: "open"} }
 	a1, a2, b1, merged := open(1), open(2), open(1), &ChangeRequest{Number: 3, State: "merged"}
@@ -354,49 +427,151 @@ func TestAttachReviewersFollowsTheRowsShown(t *testing.T) {
 		{Repo: "acme/portal", PR: a1}, {Repo: "Acme/Portal", PR: a2}, {Repo: "acme/api", PR: b1},
 		{Repo: "acme/web", PR: merged}, {Repo: "acme/none"}, {Repo: "", PR: open(9)}, {Repo: "acme/portal", PR: a1},
 	}
-	asked := map[string]int{}
+	var mu sync.Mutex
+	asked := map[string][][]int{}
 	source := func(repo string) ReviewerSource {
-		key := strings.ToLower(repo)
-		n := 0
-		return &countingSource{inner: fakeReviewers{calls: &n, by: map[int]RequestReviewers{
-			1: {Requested: []string{"bob"}, Reviews: []ChangeRequestReview{{"ann", "approved"}}}}}, n: &n, asked: asked, key: key}
+		var calls [][]int
+		return recordingSource{fakeReviewers{calls: &calls, by: map[int]RequestReviewers{
+			1: {Requested: []string{"bob"}, Reviews: []ChangeRequestReview{{"ann", "approved"}}}, 2: {}}},
+			func(n []int) {
+				mu.Lock()
+				asked[strings.ToLower(repo)] = append(asked[strings.ToLower(repo)], n)
+				mu.Unlock()
+			}}
 	}
-	if status := AttachReviewers(context.Background(), rows, source); len(status) != 0 {
-		t.Errorf("status = %v", status)
+	if notes := AttachReviewers(context.Background(), rows, ReviewerOptions{Source: source}); len(notes) != 0 {
+		t.Errorf("notes = %v", notes)
 	}
-	if asked["acme/portal"] != 1 || asked["acme/api"] != 1 || len(asked) != 2 {
+	if len(asked) != 2 || len(asked["acme/portal"]) != 1 || len(asked["acme/api"]) != 1 {
 		t.Errorf("provider calls = %v, want one each for acme/portal and acme/api", asked)
 	}
-	if !a1.ReviewersKnown || a1.ReviewRequests[0] != "bob" || a1.Reviews[0].Reviewer != "ann" || !b1.ReviewersKnown {
-		t.Errorf("open requests not filled: %+v %+v", a1, b1)
+	if got := asked["acme/portal"][0]; len(got) != 2 || got[0] != 1 || got[1] != 2 {
+		t.Errorf("acme/portal was asked for %v, want exactly requests 1 and 2", got)
 	}
-	if a2.ReviewersKnown {
-		t.Error("a request the provider did not list was marked known")
+	if !a1.ReviewersKnown || a1.ReviewRequests[0] != "bob" || a1.Reviews[0].Reviewer != "ann" || !b1.ReviewersKnown || !a2.ReviewersKnown {
+		t.Errorf("open requests not filled: %+v %+v %+v", a1, a2, b1)
 	}
 	if merged.ReviewersKnown {
 		t.Error("a merged request was filled")
 	}
 }
 
-type countingSource struct {
+type recordingSource struct {
 	inner fakeReviewers
-	n     *int
-	asked map[string]int
-	key   string
+	on    func([]int)
 }
 
-func (c *countingSource) Reviewers(ctx context.Context) (map[int]RequestReviewers, error) {
-	c.asked[c.key]++
-	return c.inner.Reviewers(ctx)
+func (r recordingSource) Reviewers(ctx context.Context, n []int) (map[int]RequestReviewers, error) {
+	r.on(n)
+	return r.inner.Reviewers(ctx, n)
 }
 
 func TestAttachReviewersFailureClaimsNothing(t *testing.T) {
 	pr := &ChangeRequest{Number: 1, State: "open"}
-	n := 0
-	status := AttachReviewers(context.Background(), []ChangeTopology{{Repo: "acme/portal", PR: pr}},
-		func(string) ReviewerSource { return fakeReviewers{err: errors.New("boom"), calls: &n} })
-	if pr.ReviewersKnown || len(status) != 1 || !strings.Contains(status[0], "reviewers unavailable for acme/portal") {
-		t.Errorf("known=%v status=%v", pr.ReviewersKnown, status)
+	notes := AttachReviewers(context.Background(), []ChangeTopology{{Repo: "acme/portal", PR: pr}},
+		ReviewerOptions{Source: func(string) ReviewerSource { return fakeReviewers{err: errors.New("boom")} }})
+	if pr.ReviewersKnown || len(notes) != 1 || !strings.Contains(notes[0], "reviewers unavailable for acme/portal") {
+		t.Errorf("known=%v notes=%v", pr.ReviewersKnown, notes)
+	}
+}
+
+// A request the provider did not return, and a list it cut short, are said.
+func TestAttachReviewersNotesWhatIsMissingOrIncomplete(t *testing.T) {
+	missing, cut, fine := &ChangeRequest{Number: 1, State: "open"}, &ChangeRequest{Number: 2, State: "open"}, &ChangeRequest{Number: 3, State: "open"}
+	rows := []ChangeTopology{{Repo: "acme/portal", PR: missing}, {Repo: "acme/portal", PR: cut}, {Repo: "acme/portal", PR: fine}}
+	by := map[int]RequestReviewers{2: {Incomplete: true}, 3: {}}
+	notes := AttachReviewers(context.Background(), rows, ReviewerOptions{Source: func(string) ReviewerSource { return fakeReviewers{by: by} }})
+	want := []string{
+		"reviewers unavailable for acme/portal#1: the provider did not return it",
+		"reviewers of acme/portal#2 may be incomplete: the provider returned only part of the list",
+	}
+	if strings.Join(notes, "\n") != strings.Join(want, "\n") {
+		t.Errorf("notes\n got %q\nwant %q", notes, want)
+	}
+	if missing.ReviewersKnown || !cut.ReviewersKnown || !fine.ReviewersKnown {
+		t.Errorf("known: missing=%v cut=%v fine=%v", missing.ReviewersKnown, cut.ReviewersKnown, fine.ReviewersKnown)
+	}
+}
+
+// Offline asks nobody; on reuses what is cached; fresh refetches and stores.
+func TestAttachReviewersFollowsTheStateRules(t *testing.T) {
+	var calls [][]int
+	source := func(string) ReviewerSource {
+		return fakeReviewers{calls: &calls, by: map[int]RequestReviewers{1: {Requested: []string{"bob"}}}}
+	}
+	row := func() ([]ChangeTopology, *ChangeRequest) {
+		pr := &ChangeRequest{Number: 1, State: "open"}
+		return []ChangeTopology{{Repo: "acme/portal", PR: pr}}, pr
+	}
+	cache := &memReviewerCache{}
+
+	rows, pr := row()
+	AttachReviewers(context.Background(), rows, ReviewerOptions{Source: source, Cache: cache, Offline: true})
+	if len(calls) != 0 || cache.gets != 0 || pr.ReviewersKnown {
+		t.Errorf("offline: calls=%d cache reads=%d known=%v", len(calls), cache.gets, pr.ReviewersKnown)
+	}
+
+	rows, pr = row()
+	AttachReviewers(context.Background(), rows, ReviewerOptions{Source: source, Cache: cache})
+	if len(calls) != 1 || !pr.ReviewersKnown || cache.m["acme/portal"][1].Requested[0] != "bob" {
+		t.Errorf("on, empty cache: calls=%d known=%v cache=%v", len(calls), pr.ReviewersKnown, cache.m)
+	}
+
+	rows, pr = row()
+	AttachReviewers(context.Background(), rows, ReviewerOptions{Source: source, Cache: cache})
+	if len(calls) != 1 || !pr.ReviewersKnown || pr.ReviewRequests[0] != "bob" {
+		t.Errorf("on, warm cache: calls=%d known=%v", len(calls), pr.ReviewersKnown)
+	}
+
+	rows, _ = row()
+	AttachReviewers(context.Background(), rows, ReviewerOptions{Source: source, Cache: cache, Refresh: true})
+	if len(calls) != 2 {
+		t.Errorf("fresh: calls=%d, want a refetch", len(calls))
+	}
+
+	// A cache entry that lacks a request shown is a miss.
+	other := &ChangeRequest{Number: 7, State: "open"}
+	AttachReviewers(context.Background(), []ChangeTopology{{Repo: "acme/portal", PR: other}}, ReviewerOptions{Source: source, Cache: cache})
+	if len(calls) != 3 {
+		t.Errorf("a cache entry without request 7 counted as a hit: calls=%d", len(calls))
+	}
+}
+
+// Reviewer data lives in its own cache. The listing cache clears it on the way
+// in and out, so an entry written by an older binary shows nothing nobody
+// fetched in this run.
+func TestListingCacheDropsReviewerFields(t *testing.T) {
+	c := &FileRequestCache{Dir: t.TempDir(), TTL: time.Minute}
+	c.Put("acme/portal", ChangeRequestSet{Requests: []ChangeRequest{{Number: 1, State: "open", ReviewersKnown: true,
+		ReviewRequests: []string{"bob"}, Reviews: []ChangeRequestReview{{"ann", "approved"}}}}})
+	got, ok := c.Get("acme/portal")
+	if !ok || got.Requests[0].ReviewersKnown || len(got.Requests[0].Reviews) != 0 || len(got.Requests[0].ReviewRequests) != 0 {
+		t.Errorf("listing cache kept reviewer fields: %+v", got.Requests)
+	}
+	// An entry an older binary wrote, with the fields in it.
+	old := `{"fetchedAt":"` + time.Now().Format(time.RFC3339) + `","requests":[{"number":1,"state":"open","reviewersKnown":true,"reviewRequests":["bob"],"reviews":[{"reviewer":"ann","state":"approved"}],"checks":{"pass":0,"fail":0,"pending":0},"size":{"files":0,"additions":0,"deletions":0}}]}`
+	if err := os.WriteFile(c.path("acme/old"), []byte(old), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, ok = c.Get("acme/old")
+	if !ok || got.Requests[0].ReviewersKnown || len(got.Requests[0].Reviews) != 0 {
+		t.Errorf("an old entry's reviewers survived: %+v", got.Requests)
+	}
+}
+
+func TestFileReviewerCacheHonoursTheTTL(t *testing.T) {
+	now := time.Now()
+	c := &FileReviewerCache{FileRequestCache{Dir: t.TempDir(), TTL: time.Minute, now: func() time.Time { return now }}}
+	c.Put("acme/portal", map[int]RequestReviewers{1: {Requested: []string{"bob"}}})
+	if got, ok := c.Get("acme/portal"); !ok || got[1].Requested[0] != "bob" {
+		t.Errorf("fresh entry: %v, %v", got, ok)
+	}
+	now = now.Add(2 * time.Minute)
+	if _, ok := c.Get("acme/portal"); ok {
+		t.Error("an entry older than the TTL was served")
+	}
+	if _, ok := c.Get("acme/other"); ok {
+		t.Error("a miss was a hit")
 	}
 }
 
@@ -692,5 +867,96 @@ func TestCellsDropBidiAndFormatCharacters(t *testing.T) {
 	}
 	if !strings.Contains(cell, "\U0001F468\u200d\U0001F469") {
 		t.Errorf("the emoji joiner was dropped: %q", cell)
+	}
+}
+
+func TestNoBranchIsNotLocal(t *testing.T) {
+	r := ChangeTopology{Slug: "x", Title: "Not started"}
+	if got := tableState(r); got != "No branch" {
+		t.Errorf("state = %q, want No branch", got)
+	}
+	r.Branch = "feat/1-x"
+	if got := tableState(r); got != "Local" {
+		t.Errorf("a branch with no local state = %q, want Local", got)
+	}
+	r.Branch, r.Local = "", &LocalState{Upstream: "origin/x"}
+	if got := tableState(r); got != "Local, clean" {
+		t.Errorf("local state without a branch name = %q", got)
+	}
+}
+
+// Only the reasons that really are about a repository are filtered by
+// repository: a branch name with a slash in a reason is not one.
+func TestNotesKeepReasonsThatOnlyLookLikeRepositories(t *testing.T) {
+	rows := []ChangeTopology{{Repo: "acme/portal"}}
+	rel := &RelatedWork{Incomplete: []string{
+		"local state unavailable for feat/243-x: boom",
+		"request state omitted for acme/elsewhere: nope",
+		"reviewers unavailable for acme/elsewhere#4: the provider did not return it",
+		"request listing for acme/elsewhere may be truncated; older requests can be missing",
+		"request state omitted for Acme/Portal: shown repo, spelt differently",
+	}}
+	got := StatusTableNotes(rows, nil, rel)
+	want := []string{
+		"incomplete: local state unavailable for feat/243-x: boom",
+		"incomplete: request state omitted for Acme/Portal: shown repo, spelt differently",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("notes\n got %q\nwant %q", got, want)
+	}
+}
+
+func TestDisplayWidthOfFlagsJoinersAndColouredCircles(t *testing.T) {
+	for s, want := range map[string]int{
+		"🇸🇪": 2, "🇸": 1, // a flag is a pair of regional indicators: two columns, each alone one
+		"🟠": 2, "🟫": 2, "🟰": 2, // 1F7E0-1F7EB and the heavy equals sign
+		"👨\u200d👩": 2, "👨\u200d👩\u200d👧": 2, // a joined sequence is one glyph
+	} {
+		if got := displayWidth(s); got != want {
+			t.Errorf("displayWidth(%q) = %d, want %d", s, got, want)
+		}
+	}
+}
+
+// A character is never cut from its variation selector, joiner or marks.
+func TestWrapCellNeverSplitsACharacter(t *testing.T) {
+	for name, word := range map[string]string{
+		"vs16":   strings.Repeat("☀\ufe0f", 6),
+		"zwj":    strings.Repeat("👨\u200d👩\u200d👧", 4),
+		"marks":  strings.Repeat("e\u0301", 9),
+		"flags":  strings.Repeat("🇸🇪", 5),
+		"narrow": strings.Repeat("x", 25),
+	} {
+		lines := wrapCell(word, 5)
+		if strings.Join(lines, "") != word {
+			t.Errorf("%s: wrapping lost text: %q", name, lines)
+		}
+		for _, l := range lines {
+			if displayWidth(l) > 5 {
+				t.Errorf("%s: line %q is %d columns, want at most 5", name, l, displayWidth(l))
+			}
+			if strings.HasPrefix(l, "\ufe0f") || strings.HasPrefix(l, "\u200d") || strings.HasPrefix(l, "\u0301") {
+				t.Errorf("%s: line %q starts with a combining character", name, l)
+			}
+		}
+	}
+}
+
+// A table of many rows is laid out in one pass: the per-table facts are
+// computed once, not per row.
+func TestRenderStatusTableOfManyRowsIsFast(t *testing.T) {
+	var rows []ChangeTopology
+	for i := 0; i < 400; i++ {
+		r := tableRow(strconv.Itoa(i+1), strings.Repeat("a long title ", 8), &ChangeRequest{Number: i + 1000, State: "open",
+			URL: "https://github.com/acme/portal/pull/" + strconv.Itoa(i+1000), Closes: []string{"1", "2", "3"}})
+		rows = append(rows, r)
+	}
+	start := time.Now()
+	out := RenderStatusTable(rows, "", 120, true)
+	if d := time.Since(start); d > 2*time.Second {
+		t.Errorf("400 rows took %v", d)
+	}
+	if strings.Count(out, "\n") < 400 {
+		t.Error("rows are missing")
 	}
 }

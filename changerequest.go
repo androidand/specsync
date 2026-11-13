@@ -77,15 +77,19 @@ type ChangeRequestSet struct {
 // RequestReviewers is who is asked to review one request and each reviewer's
 // standing verdict.
 type RequestReviewers struct {
-	Requested []string
-	Reviews   []ChangeRequestReview
+	Requested []string              `json:"requested,omitempty"`
+	Reviews   []ChangeRequestReview `json:"reviews,omitempty"`
+	// Incomplete is true when the provider holds more reviewers or reviews
+	// than it returned, so the lists may be missing some.
+	Incomplete bool `json:"incomplete,omitempty"`
 }
 
-// ReviewerSource is an optional provider capability: who reviews the repo's
-// open requests, by request number. It is a separate call because the data is
-// large, and only the table and JSON output need it.
+// ReviewerSource is an optional provider capability: who reviews the given
+// requests of the repo, by request number. It is a separate call because the
+// data is large, and only the table and JSON output need it. A number the
+// provider does not know is absent from the result.
 type ReviewerSource interface {
-	Reviewers(ctx context.Context) (map[int]RequestReviewers, error)
+	Reviewers(ctx context.Context, numbers []int) (map[int]RequestReviewers, error)
 }
 
 // ChangeRequestSource is an optional provider capability: list a repo's

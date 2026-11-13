@@ -125,13 +125,13 @@ func (cm *statusCmd) run(args []string) {
 		related = relatedWork(ctx, topo.Changes[0], *state)
 	}
 
-	if (*cm.table || *asJSON) && *state != "off" {
+	{
 		// Reviewers are fetched for the rows that will be shown, and no others.
 		shown := append([]specsync.ChangeTopology(nil), topo.Changes...)
 		if related != nil {
 			shown = specsync.RelatedRows(topo.Changes[0], related)
 		}
-		topo.Status = append(topo.Status, specsync.AttachReviewers(ctx, shown, nil)...)
+		topo.Status = append(topo.Status, attachReviewers(ctx, shown, *cm.table || *asJSON, *state)...)
 	}
 
 	switch {
@@ -567,4 +567,24 @@ func printStatusTable(rows []specsync.ChangeTopology, current string, status []s
 func stdoutIsTerminal() bool {
 	fi, err := os.Stdout.Stat()
 	return err == nil && fi.Mode()&os.ModeCharDevice != 0 && os.Getenv("TERM") != "dumb"
+}
+
+func reviewerCache() specsync.ReviewerCache {
+	if c := specsync.DefaultReviewerCache(); c != nil {
+		return c
+	}
+	return nil
+}
+
+// attachReviewers fills in reviewers for rows when the output needs them (the
+// table and JSON), under the same -state rule as the request listing: on reuses
+// recent data, fresh refetches, off asks nobody. Both status and overview call
+// it, so they cannot disagree.
+func attachReviewers(ctx context.Context, rows []specsync.ChangeTopology, wanted bool, state string) []string {
+	if !wanted {
+		return nil
+	}
+	return specsync.AttachReviewers(ctx, rows, specsync.ReviewerOptions{
+		Cache: reviewerCache(), Refresh: state == "fresh", Offline: state == "off",
+	})
 }
