@@ -15,11 +15,7 @@ var StatusTableHeader = []string{"Issue", "What", "PR", "State", "Checks", "Revi
 // the order given. The repository is named in the Issue cell only when the rows
 // span more than one.
 func StatusTableRows(rows []ChangeTopology, current string) [][]string {
-	repos := map[string]bool{}
-	for _, r := range rows {
-		repos[r.Repo] = true
-	}
-	many := len(repos) > 1
+	many := manyRepos(rows)
 	out := make([][]string, 0, len(rows))
 	for _, r := range rows {
 		mark := ""
@@ -35,42 +31,128 @@ func StatusTableRows(rows []ChangeTopology, current string) [][]string {
 }
 
 // RenderStatusTable draws rows as a box table no wider than width columns
-// (0 means no limit). Long cells wrap at spaces.
-func RenderStatusTable(rows []ChangeTopology, current string, width int) string {
-	return renderGrid(StatusTableHeader, StatusTableRows(rows, current), width)
+// (0 means no limit). Long cells wrap at spaces. With hyperlinks, issue and
+// request numbers are written as terminal hyperlinks (OSC 8) to their pages.
+func RenderStatusTable(rows []ChangeTopology, current string, width int, hyperlinks bool) string {
+	var links [][]tableLink
+	if hyperlinks {
+		links = statusTableLinks(rows)
+	}
+	return renderGrid(StatusTableHeader, StatusTableRows(rows, current), width, links)
 }
 
-func tableIssue(r ChangeTopology, withRepo bool) string {
-	var ids []string
-	add := func(id string) {
+// statusTableLinks is the links of each row, issue cell then request cell.
+func statusTableLinks(rows []ChangeTopology) [][]tableLink {
+	many := manyRepos(rows)
+	out := make([][]tableLink, len(rows))
+	for i, r := range rows {
+		out[i] = issueLinks(r, many)
+		if r.PR != nil && r.PR.URL != "" {
+			out[i] = append(out[i], tableLink{fmt.Sprintf("#%d", r.PR.Number), r.PR.URL})
+		}
+	}
+	return out
+}
+
+// StatusTableURLs lists the page of every issue and request in the table, one
+// "label  url" per line, for pasting where terminal hyperlinks do not survive.
+func StatusTableURLs(rows []ChangeTopology) []string {
+	var out []string
+	seen := map[string]bool{}
+	many := manyRepos(rows)
+	for i, r := range rows {
+		prLabel := ""
+		if r.PR != nil {
+			prLabel = fmt.Sprintf("PR #%d", r.PR.Number)
+		}
+		for _, l := range statusTableLinks(rows)[i] {
+			label := l.Label
+			if prLabel != "" && l.URL == r.PR.URL {
+				label = prLabel
+				if many && r.Repo != "" {
+					label = r.Repo[strings.LastIndex(r.Repo, "/")+1:] + " " + prLabel
+				}
+			}
+			if l.URL == "" || seen[l.URL] {
+				continue
+			}
+			seen[l.URL] = true
+			out = append(out, label+"  "+l.URL)
+		}
+	}
+	return out
+}
+
+func manyRepos(rows []ChangeTopology) bool {
+	repos := map[string]bool{}
+	for _, r := range rows {
+		repos[r.Repo] = true
+	}
+	return len(repos) > 1
+}
+
+// tableLink is a label in a cell and the page it names.
+type tableLink struct{ Label, URL string }
+
+// issueLinks lists the issues a row stands for: its own and those its request
+// closes, each with its page when the tracker or the request says where it is.
+func issueLinks(r ChangeTopology, withRepo bool) []tableLink {
+	var out []tableLink
+	add := func(id, url string) {
 		if id == "" {
 			return
 		}
-		id = "#" + id
-		for _, have := range ids {
-			if strings.HasSuffix(have, id) {
+		label := "#" + id
+		for _, have := range out {
+			if strings.HasSuffix(have.Label, label) {
 				return
 			}
 		}
 		if withRepo && r.Repo != "" {
-			id = r.Repo[strings.LastIndex(r.Repo, "/")+1:] + id
+			label = r.Repo[strings.LastIndex(r.Repo, "/")+1:] + label
 		}
-		ids = append(ids, id)
+		out = append(out, tableLink{label, url})
 	}
 	if r.Issue != nil {
-		add(r.Issue.ID)
+		add(r.Issue.ID, r.Issue.URL)
 	}
 	if r.PR != nil {
 		closes := append([]string(nil), r.PR.Closes...)
 		sort.Strings(closes)
-		for _, c := range closes {
-			add(c)
+		for _, id := range closes {
+			add(id, closedIssueURL(r.PR, id))
 		}
 	}
-	if len(ids) == 0 {
+	return out
+}
+
+// closedIssueURL names the page of an issue a request closes: the repository
+// the request says when it does, else the request's own.
+func closedIssueURL(pr *ChangeRequest, id string) string {
+	for _, ref := range pr.ClosesRefs {
+		if repo, n, ok := strings.Cut(ref, "#"); ok && n == id {
+			if base, _, ok := strings.Cut(pr.URL, "://"); ok {
+				host, _, _ := strings.Cut(strings.TrimPrefix(pr.URL, base+"://"), "/")
+				return base + "://" + host + "/" + repo + "/issues/" + id
+			}
+		}
+	}
+	if i := strings.LastIndex(pr.URL, "/pull/"); i > 0 {
+		return pr.URL[:i] + "/issues/" + id
+	}
+	return ""
+}
+
+func tableIssue(r ChangeTopology, withRepo bool) string {
+	links := issueLinks(r, withRepo)
+	if len(links) == 0 {
 		return "–"
 	}
-	return strings.Join(ids, " + ")
+	labels := make([]string, len(links))
+	for i, l := range links {
+		labels[i] = l.Label
+	}
+	return strings.Join(labels, " + ")
 }
 
 func tableWhat(r ChangeTopology) string {
@@ -228,7 +310,7 @@ func tableSize(r ChangeTopology) string {
 
 // renderGrid draws a box table. Columns shrink, widest first, until the table
 // fits width; their cells wrap at spaces.
-func renderGrid(header []string, rows [][]string, width int) string {
+func renderGrid(header []string, rows [][]string, width int, links [][]tableLink) string {
 	n := len(header)
 	w := make([]int, n)
 	all := append([][]string{header}, rows...)
@@ -266,7 +348,7 @@ func renderGrid(header []string, rows [][]string, width int) string {
 		}
 		return l + strings.Join(segs, m) + r + "\n"
 	}
-	line := func(row []string) string {
+	line := func(row []string, ls []tableLink) string {
 		cells := make([][]string, n)
 		height := 1
 		for i := range row {
@@ -283,7 +365,7 @@ func renderGrid(header []string, rows [][]string, width int) string {
 				if h < len(cells[i]) {
 					text = cells[i][h]
 				}
-				fmt.Fprintf(&b, " %s%s │", text, strings.Repeat(" ", w[i]-utf8.RuneCountInString(text)))
+				fmt.Fprintf(&b, " %s%s │", linkify(text, ls), strings.Repeat(" ", w[i]-utf8.RuneCountInString(text)))
 			}
 			b.WriteString("\n")
 		}
@@ -291,13 +373,17 @@ func renderGrid(header []string, rows [][]string, width int) string {
 	}
 	var b strings.Builder
 	b.WriteString(rule("┌", "┬", "┐"))
-	b.WriteString(line(header))
+	b.WriteString(line(header, nil))
 	b.WriteString(rule("├", "┼", "┤"))
 	for i, row := range rows {
 		if i > 0 {
 			b.WriteString(rule("├", "┼", "┤"))
 		}
-		b.WriteString(line(row))
+		var ls []tableLink
+		if i < len(links) {
+			ls = links[i]
+		}
+		b.WriteString(line(row, ls))
 	}
 	b.WriteString(rule("└", "┴", "┘"))
 	return b.String()
@@ -363,4 +449,33 @@ func RelatedRows(current ChangeTopology, rel *RelatedWork) []ChangeTopology {
 	add(rel.Blocks)
 	add(rel.Linked)
 	return rows
+}
+
+// linkify wraps each label found in text in a terminal hyperlink. A label
+// followed by a digit is a longer number, so it is left alone.
+func linkify(text string, links []tableLink) string {
+	for _, l := range links {
+		if l.URL == "" {
+			continue
+		}
+		var b strings.Builder
+		rest := text
+		for {
+			i := strings.Index(rest, l.Label)
+			if i < 0 {
+				b.WriteString(rest)
+				break
+			}
+			end := i + len(l.Label)
+			b.WriteString(rest[:i])
+			if end < len(rest) && rest[end] >= '0' && rest[end] <= '9' {
+				b.WriteString(l.Label)
+			} else {
+				b.WriteString("\x1b]8;;" + l.URL + "\x1b\\" + l.Label + "\x1b]8;;\x1b\\")
+			}
+			rest = rest[end:]
+		}
+		text = b.String()
+	}
+	return text
 }

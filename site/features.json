@@ -33,7 +33,7 @@
     "group": "plan",
     "icon": "flow",
     "title": "Status as a table",
-    "body": "<code>specsync status -table</code> prints the work, its related issues and their pull requests as one table: state, checks, requested reviewers, review verdicts and size. <code>overview -table</code> does the same across repositories."
+    "body": "<code>specsync status -table</code> prints the work, its related issues and their pull requests as one table: state, checks, requested reviewers, review verdicts and size, with clickable links to each issue and pull request. <code>overview -table</code> does the same across repositories."
   },
   {
     "group": "plan",

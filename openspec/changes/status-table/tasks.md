@@ -12,10 +12,13 @@
 - [x] 2.3 `overview -table`, under the same filters as `overview`
 - [x] 2.4 A row without a pull request shows `not opened` and its local state
 
+- [x] 2.5 Link issue and request numbers: terminal hyperlinks on a terminal, `-urls` for a plain list
+
 ## 3. Tests
 
 - [x] 3.1 Golden table for: approved, review requested, changes requested, failing checks, pending checks, no checks, no pull request, merged
 - [x] 3.2 Several issues on one pull request; the repository is named when rows span repositories
+- [x] 3.4 Hyperlinks add no width and appear only when asked; `-urls` lists issue and request pages; a number inside a longer one is not linked
 - [x] 3.3 The new fields round-trip through JSON; an old cache entry without them still loads
 
 ## 4. Docs

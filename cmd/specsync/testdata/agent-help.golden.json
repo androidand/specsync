@@ -1475,6 +1475,13 @@
           "required": false,
           "default": false,
           "description": "only work under no epic"
+        },
+        {
+          "name": "urls",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "with -table, list the issue and pull request URLs under the table"
         }
       ],
       "safety_rules": [
@@ -2797,6 +2804,13 @@
           "required": false,
           "default": false,
           "description": "print the work, its related issues and their pull requests as one table with checks and review state"
+        },
+        {
+          "name": "urls",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "with -table, list the issue and pull request URLs under the table (the table links them itself on a terminal)"
         }
       ],
       "safety_rules": [
@@ -2806,6 +2820,7 @@
         "specsync status",
         "specsync status -everything",
         "specsync status -table",
+        "specsync status -table -urls",
         "specsync status -change my-change -json",
         "specsync status -state=off",
         "specsync status -state=fresh",

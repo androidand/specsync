@@ -95,7 +95,7 @@ func TestStatusTableNamesRepoWhenRowsSpanRepos(t *testing.T) {
 
 func TestRenderStatusTableWrapsToWidth(t *testing.T) {
 	row := tableRow("42", strings.Repeat("long words ", 12), &ChangeRequest{Number: 7, State: "open"})
-	out := RenderStatusTable([]ChangeTopology{row}, "", 80)
+	out := RenderStatusTable([]ChangeTopology{row}, "", 80, false)
 	for _, l := range strings.Split(strings.TrimRight(out, "\n"), "\n") {
 		if n := len([]rune(l)); n > 80 {
 			t.Fatalf("line is %d wide, want at most 80:\n%s", n, out)
@@ -137,5 +137,61 @@ func TestChangeRequestReviewFieldsRoundTrip(t *testing.T) {
 	}
 	if len(old.Reviews) != 0 || len(old.ReviewRequests) != 0 || old.Title != "" {
 		t.Errorf("old cache entry gained fields: %+v", old)
+	}
+}
+
+func linkedRow() ChangeTopology {
+	r := tableRow("42", "Add thing", &ChangeRequest{Number: 7, State: "open", URL: "https://github.com/acme/portal/pull/7",
+		Closes: []string{"42", "9"}, ClosesRefs: []string{"acme/portal#42", "acme/portal#9"}})
+	r.Issue.URL = "https://github.com/acme/portal/issues/42"
+	return r
+}
+
+func TestStatusTableURLsNameIssueAndRequest(t *testing.T) {
+	got := StatusTableURLs([]ChangeTopology{linkedRow()})
+	want := []string{
+		"#42  https://github.com/acme/portal/issues/42",
+		"#9  https://github.com/acme/portal/issues/9",
+		"PR #7  https://github.com/acme/portal/pull/7",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("urls\n got %q\nwant %q", got, want)
+	}
+}
+
+func TestRenderStatusTableHyperlinksOnlyWhenAsked(t *testing.T) {
+	rows := []ChangeTopology{linkedRow()}
+	plain := RenderStatusTable(rows, "", 0, false)
+	if strings.Contains(plain, "\x1b") {
+		t.Errorf("plain table has escapes:\n%q", plain)
+	}
+	linked := RenderStatusTable(rows, "", 0, true)
+	for _, want := range []string{
+		"\x1b]8;;https://github.com/acme/portal/pull/7\x1b\\#7\x1b]8;;\x1b\\",
+		"\x1b]8;;https://github.com/acme/portal/issues/42\x1b\\#42\x1b]8;;\x1b\\",
+		"\x1b]8;;https://github.com/acme/portal/issues/9\x1b\\#9\x1b]8;;\x1b\\",
+	} {
+		if !strings.Contains(linked, want) {
+			t.Errorf("missing link %q in\n%q", want, linked)
+		}
+	}
+	// Escapes take no width: every line still draws the same box.
+	strip := func(s string) string {
+		for strings.Contains(s, "\x1b]8;;") {
+			i := strings.Index(s, "\x1b]8;;")
+			j := strings.Index(s[i:], "\x1b\\") + i + 2
+			s = s[:i] + s[j:]
+		}
+		return s
+	}
+	if strip(linked) != plain {
+		t.Errorf("hyperlinks changed the layout:\n%s\nvs\n%s", strip(linked), plain)
+	}
+}
+
+func TestLinkifyLeavesLongerNumbersAlone(t *testing.T) {
+	got := linkify("#7 #70", []tableLink{{"#7", "u"}})
+	if strings.Count(got, "\x1b]8;;u") != 1 || !strings.HasSuffix(got, " #70") {
+		t.Errorf("linkify = %q", got)
 	}
 }

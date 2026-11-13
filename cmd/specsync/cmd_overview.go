@@ -15,7 +15,7 @@ import (
 type overviewCmd struct {
 	root, epic, repo, stage, state      *string
 	mine, attention, unattached, asJSON *bool
-	table                               *bool
+	table, urls                         *bool
 	budget                              *string
 	exclude                             stringSlice
 	sessions                            sessionFlags
@@ -56,6 +56,7 @@ func (cm *overviewCmd) Flags(fs *flag.FlagSet) {
 	cm.unattached = fs.Bool("unattached", false, "only work under no epic")
 	cm.asJSON = fs.Bool("json", false, "output as JSON")
 	cm.table = fs.Bool("table", false, "print all work as one table with checks and review state")
+	cm.urls = fs.Bool("urls", false, "with -table, list the issue and pull request URLs under the table")
 	cm.budget = fs.String("budget", "", "advisory size budget for the size flags, e.g. files=15,lines=400,commits=30 (default: each change's budget line, then $SPECSYNC_BUDGET, then built-in limits)")
 	fs.Var(&cm.exclude, "exclude", "glob of paths left out of the size counts (repeatable)")
 	cm.sessions = addSessionFlags(fs)
@@ -109,7 +110,7 @@ func (cm *overviewCmd) Run(_ context.Context, args []string) error {
 		}
 		rows = append(rows, ov.NoEpic...)
 		rows = append(rows, ov.Unlinked...)
-		printStatusTable(rows, "", ov.Status, "ok")
+		printStatusTable(rows, "", ov.Status, "ok", *cm.urls)
 		return nil
 	}
 	printOverview(ov)

@@ -22,7 +22,7 @@ type statusCmd struct {
 	all, asJSON      *bool
 	state            *string
 	everything       *bool
-	table            *bool
+	table, urls      *bool
 	budget           *string
 	exclude          stringSlice
 	sessions         sessionFlags
@@ -41,6 +41,7 @@ func (*statusCmd) Spec() Spec {
 			"specsync status",
 			"specsync status -everything",
 			"specsync status -table",
+			"specsync status -table -urls",
 			"specsync status -change my-change -json",
 			"specsync status -state=off",
 			"specsync status -state=fresh",
@@ -55,6 +56,7 @@ func (cm *statusCmd) Flags(fs *flag.FlagSet) {
 	cm.all = fs.Bool("all", false, "include archived changes")
 	cm.asJSON = fs.Bool("json", false, "output as JSON")
 	cm.table = fs.Bool("table", false, "print the work, its related issues and their pull requests as one table with checks and review state")
+	cm.urls = fs.Bool("urls", false, "with -table, list the issue and pull request URLs under the table (the table links them itself on a terminal)")
 	cm.everything = fs.Bool("everything", false, "list every change instead of the current work")
 	cm.budget = fs.String("budget", "", "advisory size budget for the size flags, e.g. files=15,lines=400,commits=30 (default: the change's budget line, then $SPECSYNC_BUDGET, then built-in limits)")
 	fs.Var(&cm.exclude, "exclude", "glob of paths left out of the size counts (repeatable), e.g. go.sum")
@@ -127,7 +129,7 @@ func (cm *statusCmd) run(args []string) {
 		if current && len(topo.Changes) == 1 {
 			rows, key = specsync.RelatedRows(topo.Changes[0], related), specsync.RowKey(topo.Changes[0])
 		}
-		printStatusTable(rows, key, topo.Status, topo.RequestState)
+		printStatusTable(rows, key, topo.Status, topo.RequestState, *cm.urls)
 	case current && len(topo.Changes) == 1:
 		printCurrentStatus(topo.Changes[0], topo.RequestState == "ok")
 		printRelated(related)
@@ -500,11 +502,16 @@ func tableWidth() int {
 
 // printStatusTable prints rows as the status table, then why anything is
 // missing. requestState "ok" is the only state in which "Not opened" is known.
-func printStatusTable(rows []specsync.ChangeTopology, current string, status []string, requestState string) {
+func printStatusTable(rows []specsync.ChangeTopology, current string, status []string, requestState string, urls bool) {
 	if len(rows) == 0 {
 		fmt.Println("No work resolved.")
 	} else {
-		fmt.Print(specsync.RenderStatusTable(rows, current, tableWidth()))
+		fmt.Print(specsync.RenderStatusTable(rows, current, tableWidth(), stdoutIsTerminal()))
+		if urls {
+			for _, u := range specsync.StatusTableURLs(rows) {
+				fmt.Println(u)
+			}
+		}
 	}
 	if requestState != "" && requestState != "ok" {
 		fmt.Printf("status: pull requests were not looked up (%s), so \"Not opened\" may be wrong\n", requestState)
@@ -512,4 +519,11 @@ func printStatusTable(rows []specsync.ChangeTopology, current string, status []s
 	for _, s := range status {
 		fmt.Println("status:", s)
 	}
+}
+
+// stdoutIsTerminal reports whether output goes to a terminal, where hyperlink
+// escapes work; piped or redirected output stays plain text.
+func stdoutIsTerminal() bool {
+	fi, err := os.Stdout.Stat()
+	return err == nil && fi.Mode()&os.ModeCharDevice != 0 && os.Getenv("TERM") != "dumb"
 }
