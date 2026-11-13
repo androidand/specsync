@@ -60,6 +60,10 @@ type ChangeTopology struct {
 	dir string
 	// PR is the change request on the row's branch, from the work provider.
 	PR *ChangeRequest `json:"pr,omitempty"`
+	// RequestsUnknown is true when the row's branch or issue could have a request
+	// but the lookup did not happen or failed (-state=off, no remote, a failed
+	// call), so a missing PR block means "unknown", not "none".
+	RequestsUnknown bool `json:"requestsUnknown,omitempty"`
 	// LastNote is the last line of the change's discoveries.md.
 	LastNote string `json:"lastNote,omitempty"`
 	// Sessions are the provider's sessions whose cwd is inside Worktree, most
@@ -144,10 +148,6 @@ type TopologyOptions struct {
 	// RefreshRequests skips reading it (the fresh listing is still stored).
 	Cache           RequestCache
 	RefreshRequests bool
-	// Reviewers asks for who is asked to review each open request and each
-	// reviewer's verdict. It costs one more provider call per repository, so
-	// only the table and JSON output ask for it.
-	Reviewers bool
 
 	// changeRequests lists one repo's requests. nil set means the provider
 	// cannot list them, which is silent. The default asks the GitHub provider.
@@ -214,9 +214,6 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 			set, err := src.ChangeRequests(ctx)
 			if err != nil {
 				return nil, err
-			}
-			if gh, ok := src.(*GitHubProvider); ok && opts.Reviewers {
-				set = gh.WithReviewers(ctx, set)
 			}
 			return &set, nil
 		}
@@ -363,7 +360,7 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 		var got *ChangeRequestSet
 		var err error
 		if opts.Cache != nil && !opts.RefreshRequests {
-			if cached, ok := opts.Cache.Get(repo); ok && (cached.Reviewers || !opts.Reviewers) {
+			if cached, ok := opts.Cache.Get(repo); ok {
 				got = &cached
 			}
 		}
@@ -401,6 +398,8 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 			if set := requestsFor(row.Repo); set != nil {
 				cr = set.ForBranch(row.Branch)
 				row.PR = cr
+			} else {
+				row.RequestsUnknown = true
 			}
 		}
 
@@ -516,6 +515,8 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 		}
 		if row.Branch != "" {
 			enrich(&row)
+		} else if row.Issue != nil && requestsFor(row.Repo) == nil {
+			row.RequestsUnknown = true // a request could exist for the issue, but could not be looked up
 		}
 
 		for _, link := range c.Links {

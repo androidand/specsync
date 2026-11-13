@@ -236,91 +236,84 @@ func (c ghCheck) outcome() (name, outcome string) {
 	return c.Name, "fail"
 }
 
-// ghReviewers is one open request's reviewer data from `gh pr list`.
-type ghReviewers struct {
-	Number         int `json:"number"`
-	ReviewRequests []struct {
-		Login string `json:"login"`
-		Slug  string `json:"slug"`
-		Name  string `json:"name"`
-	} `json:"reviewRequests"`
-	Reviews []struct {
-		Author struct {
-			Login string `json:"login"`
-		} `json:"author"`
-		State       string `json:"state"`
-		SubmittedAt string `json:"submittedAt"`
-	} `json:"reviews"`
-}
+const reviewersQuery = `query($owner:String!,$name:String!){repository(owner:$owner,name:$name){` +
+	`pullRequests(states:OPEN,first:100,orderBy:{field:UPDATED_AT,direction:DESC}){nodes{number ` +
+	`reviewRequests(first:30){nodes{requestedReviewer{__typename ... on User{login} ... on Mannequin{login} ... on Team{name slug}}}} ` +
+	`latestOpinionatedReviews(first:50){nodes{author{login} state}}}}}}`
 
-// WithReviewers fills in who is asked to review each open request and each
-// reviewer's standing verdict, with one extra gh call limited to open requests.
-// The listing carries `latestReviews`, but that keeps a reviewer's latest
-// review of any kind, so a comment written after an approval would hide it;
-// here each reviewer's latest approval, change request or dismissal stands and
-// comments are ignored. A failed call leaves the requests as they were, with
-// ReviewersKnown false, rather than claiming nobody reviewed.
-func (p *GitHubProvider) WithReviewers(ctx context.Context, set ChangeRequestSet) ChangeRequestSet {
-	limit := p.changeRequestLimit
-	if limit == 0 {
-		limit = defaultChangeRequestLimit
+// Reviewers returns, for each open request, who is asked to review it and each
+// reviewer's standing verdict, from one GraphQL call. It uses
+// latestOpinionatedReviews, a reviewer's latest approval, change request or
+// dismissal, so a later comment does not hide an approval, and the list does
+// not run into the 100-review cap of `gh pr list --json reviews`, which returns
+// the oldest 100 reviews of a request.
+func (p *GitHubProvider) Reviewers(ctx context.Context) (map[int]RequestReviewers, error) {
+	repo, _ := p.resolveRepo(ctx)
+	owner, name, ok := strings.Cut(repo, "/")
+	if !ok {
+		return nil, fmt.Errorf("repo %q is not owner/name", repo)
 	}
-	args := append([]string{"pr", "list"}, p.repoFlag()...)
-	args = append(args, "--state", "open", "--limit", strconv.Itoa(limit), "--json", "number,reviewRequests,reviews")
-	out, err := p.run(ctx, args...)
+	out, err := p.run(ctx, "api", "graphql", "-f", "query="+reviewersQuery, "-f", "owner="+owner, "-f", "name="+name)
 	if err != nil {
-		return set
+		return nil, err
 	}
-	var raw []ghReviewers
-	if err := json.Unmarshal([]byte(out), &raw); err != nil {
-		return set
-	}
-	by := map[int]ghReviewers{}
-	for _, r := range raw {
-		by[r.Number] = r
-	}
-	reqs := make([]ChangeRequest, len(set.Requests))
-	copy(reqs, set.Requests)
-	for i := range reqs {
-		r, ok := by[reqs[i].Number]
-		if !ok || reqs[i].State != "open" {
-			continue
-		}
-		reqs[i].ReviewersKnown = true
-		reqs[i].ReviewRequests, reqs[i].Reviews = r.standing()
-	}
-	set.Requests = reqs
-	set.Reviewers = true
-	return set
+	return parseReviewers(out)
 }
 
-// standing is who is asked to review and each reviewer's latest opinionated review.
-func (r ghReviewers) standing() (asked []string, reviews []ChangeRequestReview) {
-	for _, q := range r.ReviewRequests {
-		switch {
-		case q.Login != "":
-			asked = append(asked, q.Login)
-		case q.Slug != "":
-			asked = append(asked, "team:"+q.Slug)
-		case q.Name != "":
-			asked = append(asked, "team:"+q.Name)
-		}
+// parseReviewers reads the reviewersQuery response.
+func parseReviewers(out string) (map[int]RequestReviewers, error) {
+	var resp struct {
+		Data struct {
+			Repository struct {
+				PullRequests struct {
+					Nodes []struct {
+						Number         int `json:"number"`
+						ReviewRequests struct {
+							Nodes []struct {
+								Reviewer struct {
+									Login string `json:"login"`
+									Name  string `json:"name"`
+									Slug  string `json:"slug"`
+								} `json:"requestedReviewer"`
+							} `json:"nodes"`
+						} `json:"reviewRequests"`
+						Latest struct {
+							Nodes []struct {
+								Author struct {
+									Login string `json:"login"`
+								} `json:"author"`
+								State string `json:"state"`
+							} `json:"nodes"`
+						} `json:"latestOpinionatedReviews"`
+					} `json:"nodes"`
+				} `json:"pullRequests"`
+			} `json:"repository"`
+		} `json:"data"`
 	}
-	asked = sortedUnique(asked)
-	type verdict struct{ state, at string }
-	latest := map[string]verdict{}
-	for _, v := range r.Reviews {
-		state := strings.ToLower(v.State)
-		if v.Author.Login == "" || (state != "approved" && state != "changes_requested" && state != "dismissed") {
-			continue
-		}
-		if have, ok := latest[v.Author.Login]; !ok || v.SubmittedAt >= have.at {
-			latest[v.Author.Login] = verdict{state, v.SubmittedAt}
-		}
+	if err := json.Unmarshal([]byte(out), &resp); err != nil {
+		return nil, fmt.Errorf("parse graphql: %w", err)
 	}
-	for who, v := range latest {
-		reviews = append(reviews, ChangeRequestReview{Reviewer: who, State: v.state})
+	res := map[int]RequestReviewers{}
+	for _, pr := range resp.Data.Repository.PullRequests.Nodes {
+		var rr RequestReviewers
+		for _, q := range pr.ReviewRequests.Nodes {
+			switch {
+			case q.Reviewer.Login != "":
+				rr.Requested = append(rr.Requested, q.Reviewer.Login)
+			case q.Reviewer.Slug != "":
+				rr.Requested = append(rr.Requested, "team:"+q.Reviewer.Slug)
+			case q.Reviewer.Name != "":
+				rr.Requested = append(rr.Requested, "team:"+q.Reviewer.Name)
+			}
+		}
+		rr.Requested = sortedUnique(rr.Requested)
+		for _, v := range pr.Latest.Nodes {
+			if v.Author.Login != "" {
+				rr.Reviews = append(rr.Reviews, ChangeRequestReview{Reviewer: v.Author.Login, State: strings.ToLower(v.State)})
+			}
+		}
+		sort.Slice(rr.Reviews, func(i, j int) bool { return rr.Reviews[i].Reviewer < rr.Reviews[j].Reviewer })
+		res[pr.Number] = rr
 	}
-	sort.Slice(reviews, func(i, j int) bool { return reviews[i].Reviewer < reviews[j].Reviewer })
-	return asked, reviews
+	return res, nil
 }

@@ -72,8 +72,20 @@ type ChangeRequestSet struct {
 	Truncated bool
 	// Repo is the repository the listing came from.
 	Repo string
-	// Reviewers is true when the open requests carry reviewer data.
-	Reviewers bool
+}
+
+// RequestReviewers is who is asked to review one request and each reviewer's
+// standing verdict.
+type RequestReviewers struct {
+	Requested []string
+	Reviews   []ChangeRequestReview
+}
+
+// ReviewerSource is an optional provider capability: who reviews the repo's
+// open requests, by request number. It is a separate call because the data is
+// large, and only the table and JSON output need it.
+type ReviewerSource interface {
+	Reviewers(ctx context.Context) (map[int]RequestReviewers, error)
 }
 
 // ChangeRequestSource is an optional provider capability: list a repo's

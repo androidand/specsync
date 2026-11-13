@@ -68,7 +68,7 @@ func TestStatusTableCells(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := StatusTableRows([]ChangeTopology{c.row}, "", true)[0]
+			got := StatusTableRows([]ChangeTopology{c.row}, "")[0]
 			if strings.Join(got, "|") != strings.Join(c.want, "|") {
 				t.Errorf("cells\n got %q\nwant %q", got, c.want)
 			}
@@ -79,7 +79,7 @@ func TestStatusTableCells(t *testing.T) {
 func TestStatusTableSeveralIssuesOnePR(t *testing.T) {
 	pr := &ChangeRequest{Number: 26, State: "open", Closes: []string{"4015", "3800"}}
 	row := tableRow("4015", "Job output", pr)
-	got := StatusTableRows([]ChangeTopology{row}, "", true)[0][0]
+	got := StatusTableRows([]ChangeTopology{row}, "")[0][0]
 	if got != "#3800 + #4015" && got != "#4015 + #3800" {
 		t.Errorf("issue cell = %q, want both issues", got)
 	}
@@ -90,7 +90,7 @@ func TestStatusTableNamesRepoWhenRowsSpanRepos(t *testing.T) {
 	b := tableRow("2", "B", nil)
 	b.Repo = "acme/api"
 	b.Issue.Provider = "github:acme/api"
-	cells := StatusTableRows([]ChangeTopology{a, b}, RowKey(a), true)
+	cells := StatusTableRows([]ChangeTopology{a, b}, RowKey(a))
 	if cells[0][0] != "▶ portal#1" || cells[1][0] != "api#2" {
 		t.Errorf("issue cells = %q, %q", cells[0][0], cells[1][0])
 	}
@@ -98,7 +98,7 @@ func TestStatusTableNamesRepoWhenRowsSpanRepos(t *testing.T) {
 
 func TestRenderStatusTableWrapsToWidth(t *testing.T) {
 	row := tableRow("42", strings.Repeat("long words ", 12), &ChangeRequest{Number: 7, State: "open"})
-	out := RenderStatusTable([]ChangeTopology{row}, "", 80, false, true)
+	out := RenderStatusTable([]ChangeTopology{row}, "", 80, false)
 	for _, l := range strings.Split(strings.TrimRight(out, "\n"), "\n") {
 		if n := len([]rune(l)); n > 80 {
 			t.Fatalf("line is %d wide, want at most 80:\n%s", n, out)
@@ -164,11 +164,11 @@ func TestStatusTableURLsNameIssueAndRequest(t *testing.T) {
 
 func TestRenderStatusTableHyperlinksOnlyWhenAsked(t *testing.T) {
 	rows := []ChangeTopology{linkedRow()}
-	plain := RenderStatusTable(rows, "", 0, false, true)
+	plain := RenderStatusTable(rows, "", 0, false)
 	if strings.Contains(plain, "\x1b") {
 		t.Errorf("plain table has escapes:\n%q", plain)
 	}
-	linked := RenderStatusTable(rows, "", 0, true, true)
+	linked := RenderStatusTable(rows, "", 0, true)
 	for _, want := range []string{
 		"\x1b]8;;https://github.com/acme/portal/pull/7\x1b\\#7\x1b]8;;\x1b\\",
 		"\x1b]8;;https://github.com/acme/portal/issues/42\x1b\\#42\x1b]8;;\x1b\\",
@@ -206,7 +206,7 @@ const oscOpen = "\x1b]8;;"
 func linkTargets(t *testing.T, row ChangeTopology) map[int][]string {
 	t.Helper()
 	rows := []ChangeTopology{row}
-	cells := StatusTableRows(rows, "", true)
+	cells := StatusTableRows(rows, "")
 	links := statusTableLinks(rows)
 	out := map[int][]string{}
 	for col := range cells[0] {
@@ -257,7 +257,7 @@ func TestCrossRepoClosedIssueKeepsItsRepo(t *testing.T) {
 	row := tableRow("5", "Add thing", &ChangeRequest{Number: 7, State: "open", URL: "https://github.com/acme/portal/pull/7",
 		Closes: []string{"5"}, ClosesRefs: []string{"acme/api#5"}})
 	row.Issue.URL = "https://github.com/acme/portal/issues/5"
-	if got := StatusTableRows([]ChangeTopology{row}, "", true)[0][0]; got != "#5 + api#5" {
+	if got := StatusTableRows([]ChangeTopology{row}, "")[0][0]; got != "#5 + api#5" {
 		t.Errorf("issue cell = %q, want %q", got, "#5 + api#5")
 	}
 	got := StatusTableURLs([]ChangeTopology{row})
@@ -272,7 +272,7 @@ func TestCrossRepoClosedIssueKeepsItsRepo(t *testing.T) {
 	// Same issue named both ways is one issue.
 	row.Issue = &TopologyIssue{ID: "5"}
 	row.PR.ClosesRefs = []string{"acme/portal#5"}
-	if got := StatusTableRows([]ChangeTopology{row}, "", true)[0][0]; got != "#5" {
+	if got := StatusTableRows([]ChangeTopology{row}, "")[0][0]; got != "#5" {
 		t.Errorf("same issue twice: cell = %q, want #5", got)
 	}
 }
@@ -280,66 +280,123 @@ func TestCrossRepoClosedIssueKeepsItsRepo(t *testing.T) {
 // Regression: a request with no state (an old cache, another provider) renders.
 func TestTableStateSurvivesAnEmptyRequestState(t *testing.T) {
 	row := tableRow("1", "x", &ChangeRequest{Number: 1})
-	if got := StatusTableRows([]ChangeTopology{row}, "", true)[0][3]; got != "Unknown" {
+	if got := StatusTableRows([]ChangeTopology{row}, "")[0][3]; got != "Unknown" {
 		t.Errorf("state cell = %q, want Unknown", got)
 	}
 }
 
-// The shapes below are what `gh pr list --json reviewRequests,reviews` returns:
-// a user request carries login, a team request carries name and slug. A review
-// is a comment, an approval, a change request or a dismissal; only the last
-// three say what the reviewer thinks, and a later comment changes none of them.
-func TestReviewersStandingFromGhJSON(t *testing.T) {
-	const raw = `{
-	  "number": 5,
-	  "reviewRequests": [
-	    {"__typename": "User", "login": "bob"},
-	    {"__typename": "Team", "name": "Core Devs", "slug": "core-devs"}
-	  ],
-	  "reviews": [
-	    {"author": {"login": "ann"}, "state": "APPROVED", "submittedAt": "2026-11-10T10:00:00Z"},
-	    {"author": {"login": "ann"}, "state": "COMMENTED", "submittedAt": "2026-11-11T10:00:00Z"},
-	    {"author": {"login": "cy"}, "state": "CHANGES_REQUESTED", "submittedAt": "2026-11-10T10:00:00Z"},
-	    {"author": {"login": "cy"}, "state": "APPROVED", "submittedAt": "2026-11-12T10:00:00Z"},
-	    {"author": {"login": "di"}, "state": "APPROVED", "submittedAt": "2026-11-10T10:00:00Z"},
-	    {"author": {"login": "di"}, "state": "DISMISSED", "submittedAt": "2026-11-11T10:00:00Z"},
-	    {"author": {"login": "zed"}, "state": "COMMENTED", "submittedAt": "2026-11-10T10:00:00Z"},
-	    {"author": {"login": ""}, "state": "APPROVED", "submittedAt": "2026-11-10T10:00:00Z"}
-	  ]
-	}`
-	var gh ghReviewers
-	if err := json.Unmarshal([]byte(raw), &gh); err != nil {
+// The response of reviewersQuery: a user request carries login, a team request
+// name and slug; latestOpinionatedReviews holds each reviewer's latest approval,
+// change request or dismissal, never a comment.
+func TestParseReviewers(t *testing.T) {
+	const raw = `{"data":{"repository":{"pullRequests":{"nodes":[
+	  {"number":5,
+	   "reviewRequests":{"nodes":[
+	     {"requestedReviewer":{"__typename":"User","login":"bob"}},
+	     {"requestedReviewer":{"__typename":"Team","name":"Core Devs","slug":"core-devs"}},
+	     {"requestedReviewer":{}}]},
+	   "latestOpinionatedReviews":{"nodes":[
+	     {"author":{"login":"zed"},"state":"CHANGES_REQUESTED"},
+	     {"author":{"login":"ann"},"state":"APPROVED"},
+	     {"author":{"login":"di"},"state":"DISMISSED"},
+	     {"author":null,"state":"APPROVED"}]}},
+	  {"number":6,"reviewRequests":{"nodes":[]},"latestOpinionatedReviews":{"nodes":[]}}
+	]}}}}`
+	got, err := parseReviewers(raw)
+	if err != nil {
 		t.Fatal(err)
 	}
-	asked, reviews := gh.standing()
-	if strings.Join(asked, ",") != "bob,team:core-devs" {
-		t.Errorf("review requests = %v", asked)
+	five := got[5]
+	if strings.Join(five.Requested, ",") != "bob,team:core-devs" {
+		t.Errorf("requested = %v", five.Requested)
 	}
-	want := []ChangeRequestReview{{"ann", "approved"}, {"cy", "approved"}, {"di", "dismissed"}}
-	if len(reviews) != 3 || reviews[0] != want[0] || reviews[1] != want[1] || reviews[2] != want[2] {
-		t.Errorf("reviews = %v, want %v", reviews, want)
+	want := []ChangeRequestReview{{"ann", "approved"}, {"di", "dismissed"}, {"zed", "changes_requested"}}
+	if len(five.Reviews) != 3 || five.Reviews[0] != want[0] || five.Reviews[1] != want[1] || five.Reviews[2] != want[2] {
+		t.Errorf("reviews = %v, want %v", five.Reviews, want)
+	}
+	if r, ok := got[6]; !ok || len(r.Requested) != 0 || len(r.Reviews) != 0 {
+		t.Errorf("request 6 = %+v, %v", r, ok)
+	}
+	if _, err := parseReviewers("not json"); err == nil {
+		t.Error("a bad response parsed")
 	}
 }
 
-func TestWithReviewersFillsOpenRequestsOnly(t *testing.T) {
+func TestGitHubReviewersAsksOneGraphQLCall(t *testing.T) {
+	var calls [][]string
 	run := func(_ context.Context, args ...string) (string, error) {
-		if !strings.Contains(strings.Join(args, " "), "--state open") || !strings.Contains(strings.Join(args, " "), "number,reviewRequests,reviews") {
-			t.Errorf("unexpected gh call %v", args)
-		}
-		return `[{"number":1,"reviewRequests":[{"login":"bob"}],"reviews":[{"author":{"login":"ann"},"state":"APPROVED","submittedAt":"2026-11-10T10:00:00Z"}]}]`, nil
+		calls = append(calls, args)
+		return `{"data":{"repository":{"pullRequests":{"nodes":[{"number":1,"reviewRequests":{"nodes":[]},"latestOpinionatedReviews":{"nodes":[{"author":{"login":"ann"},"state":"APPROVED"}]}}]}}}}`, nil
 	}
-	set := ChangeRequestSet{Requests: []ChangeRequest{{Number: 1, State: "open"}, {Number: 2, State: "merged"}}}
-	got := NewGitHubProviderFuncWithRepo("acme/portal", run).WithReviewers(context.Background(), set)
-	if !got.Reviewers || !got.Requests[0].ReviewersKnown || got.Requests[0].Reviews[0].Reviewer != "ann" || got.Requests[0].ReviewRequests[0] != "bob" {
-		t.Errorf("open request not filled: %+v", got)
+	got, err := NewGitHubProviderFuncWithRepo("acme/portal", run).Reviewers(context.Background())
+	if err != nil || len(calls) != 1 || calls[0][0] != "api" || calls[0][1] != "graphql" || got[1].Reviews[0].Reviewer != "ann" {
+		t.Errorf("calls %v, result %+v, err %v", calls, got, err)
 	}
-	if got.Requests[1].ReviewersKnown || set.Requests[0].ReviewersKnown {
-		t.Errorf("a merged request was filled or the input was changed: %+v / %+v", got.Requests[1], set.Requests[0])
+}
+
+type fakeReviewers struct {
+	by    map[int]RequestReviewers
+	err   error
+	calls *int
+}
+
+func (f fakeReviewers) Reviewers(context.Context) (map[int]RequestReviewers, error) {
+	*f.calls++
+	return f.by, f.err
+}
+
+// Reviewers are fetched once per repository that has an open request among the
+// rows given, and only for those; the requests are updated in place.
+func TestAttachReviewersFollowsTheRowsShown(t *testing.T) {
+	open := func(n int) *ChangeRequest { return &ChangeRequest{Number: n, State: "open"} }
+	a1, a2, b1, merged := open(1), open(2), open(1), &ChangeRequest{Number: 3, State: "merged"}
+	rows := []ChangeTopology{
+		{Repo: "acme/portal", PR: a1}, {Repo: "Acme/Portal", PR: a2}, {Repo: "acme/api", PR: b1},
+		{Repo: "acme/web", PR: merged}, {Repo: "acme/none"}, {Repo: "", PR: open(9)}, {Repo: "acme/portal", PR: a1},
 	}
-	// A failed call claims nothing.
-	failing := func(context.Context, ...string) (string, error) { return "", errors.New("boom") }
-	if got := NewGitHubProviderFuncWithRepo("acme/portal", failing).WithReviewers(context.Background(), set); got.Reviewers || got.Requests[0].ReviewersKnown {
-		t.Errorf("a failed lookup marked reviewers known: %+v", got)
+	asked := map[string]int{}
+	source := func(repo string) ReviewerSource {
+		key := strings.ToLower(repo)
+		n := 0
+		return &countingSource{inner: fakeReviewers{calls: &n, by: map[int]RequestReviewers{
+			1: {Requested: []string{"bob"}, Reviews: []ChangeRequestReview{{"ann", "approved"}}}}}, n: &n, asked: asked, key: key}
+	}
+	if status := AttachReviewers(context.Background(), rows, source); len(status) != 0 {
+		t.Errorf("status = %v", status)
+	}
+	if asked["acme/portal"] != 1 || asked["acme/api"] != 1 || len(asked) != 2 {
+		t.Errorf("provider calls = %v, want one each for acme/portal and acme/api", asked)
+	}
+	if !a1.ReviewersKnown || a1.ReviewRequests[0] != "bob" || a1.Reviews[0].Reviewer != "ann" || !b1.ReviewersKnown {
+		t.Errorf("open requests not filled: %+v %+v", a1, b1)
+	}
+	if a2.ReviewersKnown {
+		t.Error("a request the provider did not list was marked known")
+	}
+	if merged.ReviewersKnown {
+		t.Error("a merged request was filled")
+	}
+}
+
+type countingSource struct {
+	inner fakeReviewers
+	n     *int
+	asked map[string]int
+	key   string
+}
+
+func (c *countingSource) Reviewers(ctx context.Context) (map[int]RequestReviewers, error) {
+	c.asked[c.key]++
+	return c.inner.Reviewers(ctx)
+}
+
+func TestAttachReviewersFailureClaimsNothing(t *testing.T) {
+	pr := &ChangeRequest{Number: 1, State: "open"}
+	n := 0
+	status := AttachReviewers(context.Background(), []ChangeTopology{{Repo: "acme/portal", PR: pr}},
+		func(string) ReviewerSource { return fakeReviewers{err: errors.New("boom"), calls: &n} })
+	if pr.ReviewersKnown || len(status) != 1 || !strings.Contains(status[0], "reviewers unavailable for acme/portal") {
+		t.Errorf("known=%v status=%v", pr.ReviewersKnown, status)
 	}
 }
 
@@ -361,7 +418,7 @@ func TestIssueInTrackerRepoIsNotCountedTwice(t *testing.T) {
 	row.Repo = "acme/api"
 	row.Issue.Provider = "github:acme/portal"
 	row.Issue.URL = "https://github.com/acme/portal/issues/9"
-	if got := StatusTableRows([]ChangeTopology{row}, "", true)[0][0]; got != "portal#9" {
+	if got := StatusTableRows([]ChangeTopology{row}, "")[0][0]; got != "portal#9" {
 		t.Errorf("issue cell = %q, want portal#9", got)
 	}
 	want := []string{
@@ -389,7 +446,7 @@ func TestStatusTableLocalStateWording(t *testing.T) {
 func TestStatusTableIssueRepoCaseAndControlChars(t *testing.T) {
 	r := tableRow("42", "evil\n\x1b]0;pwned\x07title", &ChangeRequest{Number: 7, State: "open",
 		URL: "https://github.com/Acme/Portal/pull/7", Closes: []string{"42"}, ClosesRefs: []string{"Acme/Portal#42"}})
-	cells := StatusTableRows([]ChangeTopology{r}, "", true)[0]
+	cells := StatusTableRows([]ChangeTopology{r}, "")[0]
 	if cells[0] != "#42" {
 		t.Errorf("issue cell = %q, want one #42 despite repository name case", cells[0])
 	}
@@ -398,14 +455,15 @@ func TestStatusTableIssueRepoCaseAndControlChars(t *testing.T) {
 	}
 }
 
-// Without request lookups an absent request is unknown, not "not opened".
-func TestPRCellIsUnknownWhenRequestsWereNotLooked(t *testing.T) {
+// A row whose request lookup did not happen is unknown, not "not opened".
+func TestPRCellIsUnknownWhenTheLookupDidNotHappen(t *testing.T) {
 	row := tableRow("1", "x", nil)
-	if got := StatusTableRows([]ChangeTopology{row}, "", false)[0][2]; got != "Unknown" {
-		t.Errorf("PR cell = %q, want Unknown", got)
-	}
-	if got := StatusTableRows([]ChangeTopology{row}, "", true)[0][2]; got != "Not opened" {
+	if got := StatusTableRows([]ChangeTopology{row}, "")[0][2]; got != "Not opened" {
 		t.Errorf("PR cell = %q, want Not opened", got)
+	}
+	row.RequestsUnknown = true
+	if got := StatusTableRows([]ChangeTopology{row}, "")[0][2]; got != "Unknown" {
+		t.Errorf("PR cell = %q, want Unknown", got)
 	}
 }
 
@@ -414,13 +472,18 @@ func TestPRCellIsUnknownWhenRequestsWereNotLooked(t *testing.T) {
 func TestClosesWithoutRepoDoesNotDuplicateANamedOne(t *testing.T) {
 	row := tableRow("1", "x", &ChangeRequest{Number: 3, State: "open", URL: "https://github.com/acme/portal/pull/3",
 		Closes: []string{"5", "9"}, ClosesRefs: []string{"acme/other#5"}})
-	if got := StatusTableRows([]ChangeTopology{row}, "", true)[0][0]; got != "#1 + other#5 + #9" {
+	if got := StatusTableRows([]ChangeTopology{row}, "")[0][0]; got != "#1 + other#5 + #9" {
 		t.Errorf("issue cell = %q, want %q", got, "#1 + other#5 + #9")
 	}
 }
 
 func TestDisplayWidthCountsColumns(t *testing.T) {
-	for s, want := range map[string]int{"abc": 3, "日本語": 6, "✨ x": 4, "e\u0301": 1, "": 0} {
+	for s, want := range map[string]int{
+		"abc": 3, "日本語": 6, "✨ x": 4, "e\u0301": 1, "": 0,
+		"☕": 2, "⏳": 2, "🩷": 2, "🫶": 2, "⚡": 2, "❌": 2, // wide symbols and the newer emoji blocks
+		"☀": 1, "☀\ufe0f": 2, "❤\ufe0f": 2, // VS16 asks for the wide emoji form
+		"\ufe0f": 0, "a\ufe0f": 1,
+	} {
 		if got := displayWidth(s); got != want {
 			t.Errorf("displayWidth(%q) = %d, want %d", s, got, want)
 		}
@@ -432,7 +495,7 @@ func TestDisplayWidthCountsColumns(t *testing.T) {
 func TestGridStaysAlignedWithWideCharacters(t *testing.T) {
 	row := tableRow("1", "✨ 日本語のタイトル feat: add the thing", &ChangeRequest{Number: 2, State: "open"})
 	for _, width := range []int{0, 70} {
-		out := RenderStatusTable([]ChangeTopology{row}, "", width, false, true)
+		out := RenderStatusTable([]ChangeTopology{row}, "", width, false)
 		lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
 		for _, l := range lines {
 			if displayWidth(l) != displayWidth(lines[0]) {
@@ -473,7 +536,7 @@ func TestTableStateOfRowsWithoutARequest(t *testing.T) {
 
 func TestCellsDropControlCharacters(t *testing.T) {
 	row := tableRow("1", "evil\x1b]0;owned\x07 title\nline two", &ChangeRequest{Number: 2, State: "open"})
-	cell := StatusTableRows([]ChangeTopology{row}, "", true)[0][1]
+	cell := StatusTableRows([]ChangeTopology{row}, "")[0][1]
 	if strings.ContainsAny(cell, "\x1b\x07\n") || !strings.Contains(cell, "title line two") {
 		t.Errorf("cell = %q", cell)
 	}
@@ -489,7 +552,7 @@ func TestSafeURLRefusesAnythingBut(t *testing.T) {
 		}
 	}
 	row := tableRow("1", "x", &ChangeRequest{Number: 2, State: "open", URL: "https://h/p\x1b\\evil"})
-	if out := RenderStatusTable([]ChangeTopology{row}, "", 0, true, true); strings.Contains(out, "\x1b") {
+	if out := RenderStatusTable([]ChangeTopology{row}, "", 0, true); strings.Contains(out, "\x1b") {
 		t.Errorf("an unsafe URL reached the output: %q", out)
 	}
 	if urls := StatusTableURLs([]ChangeTopology{row}); len(urls) != 0 {
@@ -503,7 +566,7 @@ func TestRepositoryCaseDoesNotMatter(t *testing.T) {
 	row := tableRow("42", "x", &ChangeRequest{Number: 7, State: "open", Closes: []string{"42"}, ClosesRefs: []string{"acme/portal#42"}})
 	row.Repo = "Acme/Portal"
 	row.Issue.Provider = "github:Acme/Portal"
-	if got := StatusTableRows([]ChangeTopology{row}, "", true)[0][0]; got != "#42" {
+	if got := StatusTableRows([]ChangeTopology{row}, "")[0][0]; got != "#42" {
 		t.Errorf("issue cell = %q, want #42", got)
 	}
 	a, b := tableRow("1", "a", nil), tableRow("2", "b", nil)
@@ -527,18 +590,18 @@ func TestClashingShortRepoNamesStayDistinct(t *testing.T) {
 	row.Repo = "me/api"
 	row.Issue.Provider = "github:me/api"
 	row.Issue.URL = "https://github.com/me/api/issues/3"
-	cell := StatusTableRows([]ChangeTopology{row}, "", true)[0][0]
-	if cell != "#3 + org/api#3" {
-		t.Errorf("issue cell = %q, want the other repository's owner named", cell)
+	cell := StatusTableRows([]ChangeTopology{row}, "")[0][0]
+	if cell != "me/api#3 + org/api#3" {
+		t.Errorf("issue cell = %q, want both owners named: two repositories answer to api", cell)
 	}
 	// Two foreign repositories that share a short name clash with each other.
 	row.PR.ClosesRefs = []string{"org/api#3", "x/api#3"}
 	row.PR.Closes = []string{"3", "3"}
-	if got := StatusTableRows([]ChangeTopology{row}, "", true)[0][0]; got != "#3 + org/api#3 + x/api#3" {
+	if got := StatusTableRows([]ChangeTopology{row}, "")[0][0]; got != "me/api#3 + org/api#3 + x/api#3" {
 		t.Errorf("issue cell = %q", got)
 	}
 	row.PR.ClosesRefs, row.PR.Closes = []string{"org/api#3"}, []string{"3"}
-	linked := RenderStatusTable([]ChangeTopology{row}, "", 0, true, true)
+	linked := RenderStatusTable([]ChangeTopology{row}, "", 0, true)
 	if strings.Count(linked, oscOpen+"https://github.com/me/api/issues/3") != 1 || strings.Count(linked, oscOpen+"https://github.com/org/api/issues/3") != 1 {
 		t.Errorf("each issue should link once to its own page:\n%q", linked)
 	}
@@ -552,5 +615,82 @@ func TestRelatedUnresolvedListsRowlessItems(t *testing.T) {
 	}
 	if (*RelatedWork)(nil).Unresolved() != nil {
 		t.Error("nil related has unresolved items")
+	}
+}
+
+// Which repositories answer to "api" is decided over the whole table, so rows
+// that never share a row still tell me/api from org/api, in cells and in -urls.
+func TestShortNameClashAcrossRowsNamesOwners(t *testing.T) {
+	mk := func(repo, issueNum string) ChangeTopology {
+		r := tableRow(issueNum, "t"+issueNum, &ChangeRequest{Number: 12, State: "open", URL: "https://github.com/" + repo + "/pull/12"})
+		r.Repo = repo
+		r.Issue.Provider = "github:" + repo
+		r.Issue.URL = "https://github.com/" + repo + "/issues/" + issueNum
+		return r
+	}
+	rows := []ChangeTopology{mk("me/api", "5"), mk("org/api", "5"), mk("me/web", "7")}
+	cells := StatusTableRows(rows, "")
+	if cells[0][0] != "me/api#5" || cells[1][0] != "org/api#5" || cells[2][0] != "web#7" {
+		t.Errorf("issue cells = %q, %q, %q", cells[0][0], cells[1][0], cells[2][0])
+	}
+	got := StatusTableURLs(rows)
+	want := []string{
+		"me/api issue #5   https://github.com/me/api/issues/5",
+		"me/api PR #12     https://github.com/me/api/pull/12",
+		"org/api issue #5  https://github.com/org/api/issues/5",
+		"org/api PR #12    https://github.com/org/api/pull/12",
+		"web issue #7      https://github.com/me/web/issues/7",
+		"web PR #12        https://github.com/me/web/pull/12",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("urls\n got %q\nwant %q", got, want)
+	}
+}
+
+func TestStatusTableNotes(t *testing.T) {
+	rows := []ChangeTopology{
+		{Repo: "acme/portal", RequestsUnknown: true},
+		{Repo: "acme/portal", PR: &ChangeRequest{Number: 1, State: "open"}},
+		{Repo: "acme/api"},
+	}
+	status := []string{"request state omitted for acme/portal: boom"}
+	rel := &RelatedWork{
+		Incomplete: []string{
+			"request state omitted for acme/portal: boom", // status already says it
+			"request state omitted for acme/api: slow",
+			"request state omitted for acme/elsewhere: nope", // no row of it is shown
+			"clone /w/x has no origin",
+		},
+		Linked: []RelatedItem{{Key: "acme/api#4"}},
+	}
+	got := StatusTableNotes(rows, status, rel)
+	want := []string{
+		"status: pull requests were not looked up for 1 of 3 rows, shown as Unknown",
+		"incomplete: request state omitted for acme/api: slow",
+		"incomplete: clone /w/x has no origin",
+		"status: acme/api#4 is related but was not found in the workspace, so it has no row",
+		"status: request state omitted for acme/portal: boom",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("notes\n got %q\nwant %q", got, want)
+	}
+	if n := StatusTableNotes(rows[1:2], nil, nil); len(n) != 0 {
+		t.Errorf("a table with nothing unknown has notes: %q", n)
+	}
+}
+
+// Bidirectional controls reorder a line: a row could be made to read as
+// something else. They are dropped; joiners that emoji need are kept.
+func TestCellsDropBidiAndFormatCharacters(t *testing.T) {
+	title := "safe\u202e\u2066reversed\u2069\u200f text\u00adend \U0001F468\u200d\U0001F469"
+	row := tableRow("1", title, &ChangeRequest{Number: 2, State: "open"})
+	cell := StatusTableRows([]ChangeTopology{row}, "")[0][1]
+	for _, bad := range []string{"\u202e", "\u2066", "\u2069", "\u200f", "\u00ad"} {
+		if strings.Contains(cell, bad) {
+			t.Errorf("cell kept %U: %q", []rune(bad)[0], cell)
+		}
+	}
+	if !strings.Contains(cell, "\U0001F468\u200d\U0001F469") {
+		t.Errorf("the emoji joiner was dropped: %q", cell)
 	}
 }

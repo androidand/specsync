@@ -2,6 +2,7 @@ package specsync
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -15,10 +16,10 @@ var StatusTableHeader = []string{"Issue", "What", "PR", "State", "Checks", "Revi
 // StatusTableRows turns work rows into table cells, one line per row. current
 // is the RowKey to mark with an arrow; empty marks nothing. Rows are shown in
 // the order given. The repository is named in the Issue cell only when the rows
-// span more than one. requestsKnown is false when pull requests were not looked
-// up, so a row without one reads "Unknown" instead of "Not opened".
-func StatusTableRows(rows []ChangeTopology, current string, requestsKnown bool) [][]string {
-	many := manyRepos(rows)
+// span more than one. A row whose pull request lookup did not happen reads
+// "Unknown" in the PR column, not "Not opened".
+func StatusTableRows(rows []ChangeTopology, current string) [][]string {
+	many, clash := manyRepos(rows), tableClashes(rows)
 	out := make([][]string, 0, len(rows))
 	for _, r := range rows {
 		mark := ""
@@ -26,7 +27,7 @@ func StatusTableRows(rows []ChangeTopology, current string, requestsKnown bool) 
 			mark = "▶ "
 		}
 		cells := []string{
-			mark + tableIssue(r, many), tableWhat(r), tablePR(r, requestsKnown), tableState(r),
+			mark + tableIssue(r, many, clash), tableWhat(r), tablePR(r), tableState(r),
 			tableChecks(r.PR), tableReview(r.PR), tableSize(r),
 		}
 		for i := range cells {
@@ -40,12 +41,12 @@ func StatusTableRows(rows []ChangeTopology, current string, requestsKnown bool) 
 // RenderStatusTable draws rows as a box table no wider than width columns
 // (0 means no limit). Long cells wrap at spaces. With hyperlinks, issue and
 // request numbers are written as terminal hyperlinks (OSC 8) to their pages.
-func RenderStatusTable(rows []ChangeTopology, current string, width int, hyperlinks, requestsKnown bool) string {
+func RenderStatusTable(rows []ChangeTopology, current string, width int, hyperlinks bool) string {
 	var links []rowLinks
 	if hyperlinks {
 		links = statusTableLinks(rows)
 	}
-	return renderGrid(StatusTableHeader, StatusTableRows(rows, current, requestsKnown), width, links)
+	return renderGrid(StatusTableHeader, StatusTableRows(rows, current), width, links)
 }
 
 // tableLink is one number in a cell and the page it names.
@@ -65,13 +66,16 @@ type rowLinks struct {
 }
 
 func statusTableLinks(rows []ChangeTopology) []rowLinks {
-	many := manyRepos(rows)
+	many, clash := manyRepos(rows), tableClashes(rows)
 	out := make([]rowLinks, len(rows))
 	for i, r := range rows {
-		out[i].Issues = issueLinks(r, many)
+		out[i].Issues = issueLinks(r, many, clash)
 		if r.PR != nil && safeURL(r.PR.URL) != "" {
 			out[i].PR = &tableLink{Label: fmt.Sprintf("#%d", r.PR.Number), URL: safeURL(r.PR.URL), Kind: "PR",
 				Num: strconv.Itoa(r.PR.Number), Repo: shortRepo(r.Repo), ShowRepo: many}
+			if clash[strings.ToLower(shortRepo(r.Repo))] {
+				out[i].PR.Repo, out[i].PR.ShowRepo = r.Repo, true
+			}
 		}
 	}
 	return out
@@ -147,12 +151,13 @@ func manyRepos(rows []ChangeTopology) bool {
 
 func shortRepo(repo string) string { return repo[strings.LastIndex(repo, "/")+1:] }
 
-// issueLinks lists the issues a row stands for: its own and those its request
-// closes, each in the repository that holds it and with its page when known.
-// An issue is the same issue only if repository and number both match.
-func issueLinks(r ChangeTopology, many bool) []tableLink {
-	type issue struct{ repo, id, url string }
-	var found []issue
+// rowIssue is one issue a row stands for, in the repository that holds it.
+type rowIssue struct{ repo, id, url string }
+
+// rowIssues lists the issues a row stands for: its own and those its request
+// closes. An issue is the same issue only if repository and number both match.
+func rowIssues(r ChangeTopology) []rowIssue {
+	var found []rowIssue
 	seen := map[string]bool{}
 	add := func(repo, id, url string) {
 		key := strings.ToLower(repo) + "#" + id // GitHub repository names are case-insensitive
@@ -160,7 +165,7 @@ func issueLinks(r ChangeTopology, many bool) []tableLink {
 			return
 		}
 		seen[key] = true
-		found = append(found, issue{repo, id, url})
+		found = append(found, rowIssue{repo, id, url})
 	}
 	if r.Issue != nil {
 		// The issue may live in a tracker repository other than the code's.
@@ -171,10 +176,10 @@ func issueLinks(r ChangeTopology, many bool) []tableLink {
 		add(repo, r.Issue.ID, r.Issue.URL)
 	}
 	if pr := r.PR; pr != nil {
-		var closed []issue
+		var closed []rowIssue
 		for _, ref := range pr.ClosesRefs {
 			if repo, id, ok := strings.Cut(ref, "#"); ok {
-				closed = append(closed, issue{repo, id, ""})
+				closed = append(closed, rowIssue{repo, id, ""})
 			}
 		}
 		// Closes and ClosesRefs are not index-aligned: the request names a
@@ -186,7 +191,7 @@ func issueLinks(r ChangeTopology, many bool) []tableLink {
 		}
 		for _, id := range pr.Closes {
 			if !named[id] {
-				closed = append(closed, issue{r.Repo, id, ""})
+				closed = append(closed, rowIssue{r.Repo, id, ""})
 			}
 		}
 		sort.SliceStable(closed, func(i, j int) bool {
@@ -204,28 +209,55 @@ func issueLinks(r ChangeTopology, many bool) []tableLink {
 			add(c.repo, c.id, issuePageURL(pr.URL, c.repo, c.id))
 		}
 	}
+	return found
+}
+
+// tableClashes is the set of lower-cased short repository names that more than
+// one repository in the whole table answers to ("me/api" and "org/api"): those
+// are written with their owner everywhere, in every row and in -urls.
+func tableClashes(rows []ChangeTopology) map[string]bool {
+	owners := map[string]map[string]bool{} // short name -> lower-cased full names
+	note := func(repo string) {
+		if repo == "" {
+			return
+		}
+		short := strings.ToLower(shortRepo(repo))
+		if owners[short] == nil {
+			owners[short] = map[string]bool{}
+		}
+		owners[short][strings.ToLower(repo)] = true
+	}
+	for _, r := range rows {
+		note(r.Repo)
+		for _, f := range rowIssues(r) {
+			note(f.repo)
+		}
+	}
+	clash := map[string]bool{}
+	for short, full := range owners {
+		if len(full) > 1 {
+			clash[short] = true
+		}
+	}
+	return clash
+}
+
+// issueLinks lists a row's issues as cell links. A repository is named when the
+// table spans several, when the issue is in another one than the row's, and
+// with its owner when its short name clashes with another repository's.
+func issueLinks(r ChangeTopology, many bool, clash map[string]bool) []tableLink {
+	found := rowIssues(r)
 	out := make([]tableLink, len(found))
 	for i, f := range found {
 		other := f.repo != "" && !strings.EqualFold(f.repo, r.Repo)
-		label := "#" + f.id
-		if (many || other) && f.repo != "" {
+		label, repo := "#"+f.id, shortRepo(f.repo)
+		switch {
+		case f.repo != "" && clash[strings.ToLower(shortRepo(f.repo))]:
+			label, repo = f.repo+"#"+f.id, f.repo
+		case (many || other) && f.repo != "":
 			label = shortRepo(f.repo) + label
 		}
-		out[i] = tableLink{Label: label, URL: safeURL(f.url), Kind: "issue", Num: f.id, Repo: shortRepo(f.repo), ShowRepo: many || other}
-	}
-	// Two repositories can share a short name ("me/api", "org/api"): then the
-	// labels that clash name the owner too, so they stay distinct.
-	count := map[string]int{}
-	for _, l := range out {
-		count[l.Label]++
-	}
-	for i, f := range found {
-		other := f.repo != "" && !strings.EqualFold(f.repo, r.Repo)
-		sameShortName := other && strings.EqualFold(shortRepo(f.repo), shortRepo(r.Repo))
-		if (count[out[i].Label] > 1 || sameShortName) && f.repo != "" {
-			out[i].Label = f.repo + "#" + f.id
-			out[i].Repo = f.repo
-		}
+		out[i] = tableLink{Label: label, URL: safeURL(f.url), Kind: "issue", Num: f.id, Repo: repo, ShowRepo: many || other || repo != shortRepo(f.repo)}
 	}
 	return out
 }
@@ -240,8 +272,8 @@ func issuePageURL(requestURL, repo, id string) string {
 	return scheme + "://" + host + "/" + repo + "/issues/" + id
 }
 
-func tableIssue(r ChangeTopology, many bool) string {
-	links := issueLinks(r, many)
+func tableIssue(r ChangeTopology, many bool, clash map[string]bool) string {
+	links := issueLinks(r, many, clash)
 	if len(links) == 0 {
 		return "–"
 	}
@@ -264,9 +296,9 @@ func tableWhat(r ChangeTopology) string {
 	return "–"
 }
 
-func tablePR(r ChangeTopology, requestsKnown bool) string {
+func tablePR(r ChangeTopology) string {
 	if r.PR == nil {
-		if !requestsKnown {
+		if r.RequestsUnknown {
 			return "Unknown"
 		}
 		return "Not opened"
@@ -515,13 +547,13 @@ func wrapCell(text string, width int) []string {
 	for _, word := range strings.Fields(text) {
 		for displayWidth(word) > width {
 			flush()
-			cut, cols := 0, 0
+			cut := 0
 			for i, r := range word {
-				if cols+runeWidth(r) > width && cols > 0 {
+				end := i + utf8.RuneLen(r)
+				if displayWidth(word[:end]) > width && cut > 0 {
 					break
 				}
-				cols += runeWidth(r)
-				cut = i + utf8.RuneLen(r)
+				cut = end
 			}
 			lines = append(lines, word[:cut])
 			word = word[cut:]
@@ -540,11 +572,18 @@ func wrapCell(text string, width int) []string {
 	return lines
 }
 
-// displayWidth is how many terminal columns text takes.
+// displayWidth is how many terminal columns text takes. A variation selector
+// (U+FE0F) asks for the emoji form of the symbol before it, which is wide;
+// after a letter or ASCII it changes nothing.
 func displayWidth(s string) int {
-	n := 0
+	n, prev := 0, rune(0)
 	for _, r := range s {
-		n += runeWidth(r)
+		if r == 0xFE0F && prev > 0x7F && !unicode.IsLetter(prev) && runeWidth(prev) == 1 {
+			n++ // the emoji form of a narrow symbol takes two columns
+		} else {
+			n += runeWidth(r)
+		}
+		prev = r
 	}
 	return n
 }
@@ -566,12 +605,35 @@ func runeWidth(r rune) int {
 		r >= 0x1F300 && r <= 0x1F64F,
 		r >= 0x1F680 && r <= 0x1F6FF,
 		r >= 0x1F900 && r <= 0x1F9FF,
+		r >= 0x1FA70 && r <= 0x1FAFF,
 		r >= 0x20000 && r <= 0x3FFFD,
-		r == 0x2705, r == 0x2728, r == 0x274C, r == 0x274E, r == 0x2753, r == 0x2757, r == 0x26A1, r == 0x2B50:
+		r == 0x1F004, r == 0x1F0CF, r == 0x1F18E, r >= 0x1F191 && r <= 0x1F19A, r >= 0x1F200 && r <= 0x1F2FF:
+		return 2
+	}
+	if r >= 0x231A && r <= 0x2B55 && wideSymbols[r] {
 		return 2
 	}
 	return 1
 }
+
+// wideSymbols are the symbols below U+2B56 that default to the wide emoji form.
+var wideSymbols = func() map[rune]bool {
+	m := map[rune]bool{}
+	for _, span := range [][2]rune{
+		{0x231A, 0x231B}, {0x23E9, 0x23EC}, {0x23F0, 0x23F0}, {0x23F3, 0x23F3}, {0x25FD, 0x25FE},
+		{0x2614, 0x2615}, {0x2648, 0x2653}, {0x267F, 0x267F}, {0x2693, 0x2693}, {0x26A1, 0x26A1},
+		{0x26AA, 0x26AB}, {0x26BD, 0x26BE}, {0x26C4, 0x26C5}, {0x26CE, 0x26CE}, {0x26D4, 0x26D4},
+		{0x26EA, 0x26EA}, {0x26F2, 0x26F3}, {0x26F5, 0x26F5}, {0x26FA, 0x26FA}, {0x26FD, 0x26FD},
+		{0x2705, 0x2705}, {0x270A, 0x270B}, {0x2728, 0x2728}, {0x274C, 0x274C}, {0x274E, 0x274E},
+		{0x2753, 0x2755}, {0x2757, 0x2757}, {0x2795, 0x2797}, {0x27B0, 0x27B0}, {0x27BF, 0x27BF},
+		{0x2B1B, 0x2B1C}, {0x2B50, 0x2B50}, {0x2B55, 0x2B55},
+	} {
+		for r := span[0]; r <= span[1]; r++ {
+			m[r] = true
+		}
+	}
+	return m
+}()
 
 // RelatedRows lists the rows for the status table: the current work first,
 // then the epic's children, what blocks it, what it blocks and what is linked,
@@ -663,4 +725,55 @@ func linkify(text string, links []tableLink) string {
 
 func isLabelRune(r rune) bool {
 	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '#' || r == '_'
+}
+
+// StatusTableNotes lists what to say under the table, each line starting with
+// "status:" or "incomplete:": how many rows have no pull request lookup, the
+// related-work reasons that concern the rows shown, related items that resolved
+// to no row, and status. A reason that status already carries is not repeated,
+// and one about a repository no row belongs to is left out.
+func StatusTableNotes(rows []ChangeTopology, status []string, related *RelatedWork) []string {
+	var notes []string
+	if n := countRequestsUnknown(rows); n > 0 {
+		notes = append(notes, fmt.Sprintf("status: pull requests were not looked up for %d of %d rows, shown as Unknown", n, len(rows)))
+	}
+	inStatus := map[string]bool{}
+	for _, s := range status {
+		inStatus[s] = true
+	}
+	shown := map[string]bool{}
+	for _, r := range rows {
+		shown[strings.ToLower(r.Repo)] = true
+	}
+	if related != nil {
+		for _, reason := range related.Incomplete {
+			if inStatus[reason] {
+				continue
+			}
+			if m := reasonRepo.FindStringSubmatch(reason); m != nil && !shown[strings.ToLower(m[1])] {
+				continue
+			}
+			notes = append(notes, "incomplete: "+plainCell(reason))
+		}
+		for _, key := range related.Unresolved() {
+			notes = append(notes, "status: "+plainCell(key)+" is related but was not found in the workspace, so it has no row")
+		}
+	}
+	for _, s := range status {
+		notes = append(notes, "status: "+plainCell(s))
+	}
+	return notes
+}
+
+// reasonRepo finds the repository a status reason is about ("... for owner/repo: ...").
+var reasonRepo = regexp.MustCompile(`\bfor (\S+/\S+?):`)
+
+func countRequestsUnknown(rows []ChangeTopology) int {
+	n := 0
+	for _, r := range rows {
+		if r.RequestsUnknown && r.PR == nil {
+			n++
+		}
+	}
+	return n
 }

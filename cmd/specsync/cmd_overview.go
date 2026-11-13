@@ -92,7 +92,6 @@ func (cm *overviewCmd) Run(_ context.Context, args []string) error {
 			LocalOnly:       *cm.state == "off",
 			Cache:           requestCache(),
 			RefreshRequests: *cm.state == "fresh",
-			Reviewers:       *cm.table || *cm.asJSON,
 			Budget:          *cm.budget,
 			Exclude:         cm.exclude,
 		},
@@ -106,18 +105,15 @@ func (cm *overviewCmd) Run(_ context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	if *cm.table || *cm.asJSON {
+		ov.Status = append(ov.Status, specsync.AttachReviewers(context.Background(), overviewRows(ov), nil)...)
+	}
 	if *cm.asJSON {
 		emitJSON(ov)
 		return nil
 	}
 	if *cm.table {
-		var rows []specsync.ChangeTopology
-		for _, g := range ov.Epics {
-			rows = append(rows, g.Items...)
-		}
-		rows = append(rows, ov.NoEpic...)
-		rows = append(rows, ov.Unlinked...)
-		printStatusTable(rows, "", ov.Status, ov.RequestState, *cm.urls, nil)
+		printStatusTable(overviewRows(ov), "", ov.Status, *cm.urls, nil)
 		return nil
 	}
 	printOverview(ov)
@@ -211,4 +207,14 @@ func printWorkRow(r specsync.ChangeTopology, indent, mark string) {
 	if r.LastNote != "" {
 		fmt.Println(sub + "note: " + r.LastNote)
 	}
+}
+
+// overviewRows is every row of an overview, in the order it prints them.
+func overviewRows(ov *specsync.Overview) []specsync.ChangeTopology {
+	var rows []specsync.ChangeTopology
+	for _, g := range ov.Epics {
+		rows = append(rows, g.Items...)
+	}
+	rows = append(rows, ov.NoEpic...)
+	return append(rows, ov.Unlinked...)
 }

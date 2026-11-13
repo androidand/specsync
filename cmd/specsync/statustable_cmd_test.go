@@ -8,14 +8,19 @@ import (
 	specsync "github.com/androidand/specsync"
 )
 
-// A table built without pull request lookups must say "Not opened" may be wrong.
-func TestStatusTableWarnsWhenPullRequestsWereNotLooked(t *testing.T) {
-	rows := []specsync.ChangeTopology{{Slug: "a", Title: "A", Repo: "acme/portal"}}
-	for state, warns := range map[string]bool{"ok": false, "": false, "off": true, "omitted": true} {
-		out := captureStdout(t, func() { printStatusTable(rows, "", nil, state, false, nil) })
-		if got := strings.Contains(out, "pull requests were not looked up"); got != warns {
-			t.Errorf("request state %q: warning shown = %v, want %v\n%s", state, got, warns, out)
-		}
+// A row whose pull request lookup did not happen says so under the table.
+func TestStatusTableSaysWhenLookupsDidNotHappen(t *testing.T) {
+	rows := []specsync.ChangeTopology{
+		{Slug: "a", Title: "A", Repo: "acme/portal", RequestsUnknown: true},
+		{Slug: "b", Title: "B", Repo: "acme/api"},
+	}
+	out := captureStdout(t, func() { printStatusTable(rows, "", nil, false, nil) })
+	if !strings.Contains(out, "pull requests were not looked up for 1 of 2 rows") || !strings.Contains(out, "Unknown") || !strings.Contains(out, "Not opened") {
+		t.Errorf("one row unknown, one not:\n%s", out)
+	}
+	out = captureStdout(t, func() { printStatusTable(rows[1:], "", nil, false, nil) })
+	if strings.Contains(out, "not looked up") {
+		t.Errorf("nothing unknown, yet a warning:\n%s", out)
 	}
 }
 
@@ -34,12 +39,12 @@ func TestUrlsNeedsTable(t *testing.T) {
 // The table path must report what printRelated does: reasons a source was
 // incomplete, and related work that resolved to no row.
 func TestStatusTablePrintsRelatedWarnings(t *testing.T) {
-	rows := []specsync.ChangeTopology{{Slug: "a", Title: "A", Repo: "acme/portal"}}
+	rows := []specsync.ChangeTopology{{Slug: "a", Title: "A", Repo: "acme/portal"}, {Slug: "b", Title: "B", Repo: "acme/api"}}
 	rel := &specsync.RelatedWork{
 		Incomplete: []string{"request state omitted for acme/api: boom"},
 		Linked:     []specsync.RelatedItem{{Key: "acme/api#4"}},
 	}
-	out := captureStdout(t, func() { printStatusTable(rows, "", nil, "ok", false, rel) })
+	out := captureStdout(t, func() { printStatusTable(rows, "", nil, false, rel) })
 	for _, want := range []string{"incomplete: request state omitted for acme/api: boom", "acme/api#4 is related but was not found"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output lacks %q:\n%s", want, out)

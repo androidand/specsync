@@ -13,7 +13,8 @@
 - [x] 2.4 A row without a pull request shows `not opened` and its local state
 - [x] 2.5 Link issue and request numbers: terminal hyperlinks on a terminal, each only in its own cell; `-urls` for an aligned plain list, which needs `-table`
 - [x] 2.6 An issue is identified by repository and number: a closed issue in another repository is shown with its repository and its own page
-- [x] 2.7 Fetch reviewers in one open-only call, only for `-table` and `-json`; cache entries record whether they hold them; unknown reviewers read `Unknown`
+- [x] 2.7 Fetch reviewers through a `ReviewerSource` (one GraphQL call per repository among the rows shown), only for `-table` and `-json`; unknown reviewers read `Unknown`
+- [x] 2.11 Know per row whether its pull request lookup happened (`requestsUnknown`); say how many rows lack one under the table
 - [x] 2.8 Print related-work warnings under the table; reject `-table` with `-json`
 - [x] 2.9 Sanitize cell text, link only safe URLs, name the owner when short repository names clash, treat repository names case-insensitively
 - [x] 2.10 Count display columns, and fit the real terminal width

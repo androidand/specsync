@@ -52,7 +52,7 @@ func goldenRows() []ChangeTopology {
 var BranchSize0 = LocalState{Upstream: "origin/x", Ahead: 2, Size: &BranchSize{Files: 3, Additions: 10, Deletions: 1, Commits: 2}}
 
 func TestStatusTableGolden(t *testing.T) {
-	got := RenderStatusTable(goldenRows(), "", 0, false, true)
+	got := RenderStatusTable(goldenRows(), "", 0, false)
 	path := filepath.Join("testdata", "status-table.golden")
 	if *updateStatusTableGolden {
 		if err := os.WriteFile(path, []byte(got), 0o644); err != nil {
