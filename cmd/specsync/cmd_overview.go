@@ -68,6 +68,9 @@ func (cm *overviewCmd) Run(_ context.Context, args []string) error {
 		return err
 	}
 	checkArgs(fs, args, 0)
+	if *cm.urls && !*cm.table {
+		return fmt.Errorf("-urls needs -table")
+	}
 	if !validState(*cm.state) {
 		return fmt.Errorf("-state must be on, fresh or off, got %q", *cm.state)
 	}
@@ -110,7 +113,7 @@ func (cm *overviewCmd) Run(_ context.Context, args []string) error {
 		}
 		rows = append(rows, ov.NoEpic...)
 		rows = append(rows, ov.Unlinked...)
-		printStatusTable(rows, "", ov.Status, "ok", *cm.urls)
+		printStatusTable(rows, "", ov.Status, ov.RequestState, *cm.urls)
 		return nil
 	}
 	printOverview(ov)

@@ -8,7 +8,7 @@ Asking "where does this work stand?" means one question per issue and per pull r
 
 - `specsync status -table` prints one row per issue and pull request tied to the current work: the change's issue, the issues related to it, and every pull request that closes one. Columns: issue, what, pull request, state, checks, review, size.
 - Each pull request carries the reviewers it requested and each reviewer's latest verdict, so the review column reads `approved`, `changes requested`, or `review requested from <login>`.
-- Issue and pull request numbers link to their pages: as terminal hyperlinks when output is a terminal, and with `-urls` as a plain `label  url` list under the table, for pasting into chat or a pull request.
+- Issue and pull request numbers link to their pages: as terminal hyperlinks when output is a terminal, and with `-urls` as a plain `label  url` list under the table, for pasting into chat or a pull request. An issue in another repository than its request's is named with that repository.
 - `-json` carries the same fields, so an agent can build any other view.
 - `overview -table` prints the same table for every repository it covers.
 - A row with no pull request says so (`not opened`) and still shows the local state of the branch.

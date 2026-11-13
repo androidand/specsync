@@ -150,9 +150,9 @@ func linkedRow() ChangeTopology {
 func TestStatusTableURLsNameIssueAndRequest(t *testing.T) {
 	got := StatusTableURLs([]ChangeTopology{linkedRow()})
 	want := []string{
-		"#42  https://github.com/acme/portal/issues/42",
-		"#9  https://github.com/acme/portal/issues/9",
-		"PR #7  https://github.com/acme/portal/pull/7",
+		"issue #42  https://github.com/acme/portal/issues/42",
+		"issue #9   https://github.com/acme/portal/issues/9",
+		"PR #7      https://github.com/acme/portal/pull/7",
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Errorf("urls\n got %q\nwant %q", got, want)
@@ -190,8 +190,133 @@ func TestRenderStatusTableHyperlinksOnlyWhenAsked(t *testing.T) {
 }
 
 func TestLinkifyLeavesLongerNumbersAlone(t *testing.T) {
-	got := linkify("#7 #70", []tableLink{{"#7", "u"}})
+	got := linkify("#7 #70", []tableLink{{Label: "#7", URL: "u"}})
 	if strings.Count(got, "\x1b]8;;u") != 1 || !strings.HasSuffix(got, " #70") {
 		t.Errorf("linkify = %q", got)
+	}
+}
+
+const oscOpen = "\x1b]8;;"
+
+// linkTargets returns, per column, the URLs hyperlinked in that column of the
+// first row of a rendered table.
+func linkTargets(t *testing.T, row ChangeTopology) map[int][]string {
+	t.Helper()
+	rows := []ChangeTopology{row}
+	cells := StatusTableRows(rows, "")
+	links := statusTableLinks(rows)
+	out := map[int][]string{}
+	for col := range cells[0] {
+		text := linkify(cells[0][col], cellLinks(&links[0], col))
+		for rest := text; ; {
+			i := strings.Index(rest, oscOpen)
+			if i < 0 {
+				break
+			}
+			rest = rest[i+len(oscOpen):]
+			j := strings.Index(rest, "\x1b\\")
+			if url := rest[:j]; url != "" { // the closing escape has an empty target
+				out[col] = append(out[col], url)
+			}
+			rest = rest[j:]
+		}
+	}
+	return out
+}
+
+// Regression: an issue and a request with the same number must each link to
+// their own page, and only in their own column.
+func TestLinksStaySeparatePerCellWhenNumbersMatch(t *testing.T) {
+	row := tableRow("9", "Fix #9 and #7", &ChangeRequest{Number: 9, State: "open", URL: "https://github.com/acme/portal/pull/9",
+		Closes: []string{"9"}, ClosesRefs: []string{"acme/portal#9"}})
+	row.Issue.URL = "https://github.com/acme/portal/issues/9"
+	got := linkTargets(t, row)
+	if len(got) != 2 || len(got[0]) != 1 || got[0][0] != "https://github.com/acme/portal/issues/9" ||
+		len(got[2]) != 1 || got[2][0] != "https://github.com/acme/portal/pull/9" {
+		t.Errorf("links per column = %v, want the issue page in Issue and the pull page in PR only", got)
+	}
+}
+
+func TestLinkifyOnlyLinksWholeNumbers(t *testing.T) {
+	for _, text := range []string{"portal#7", "x#7", "a7", "#7a", "#77", "##7"} {
+		if got := linkify(text, []tableLink{{Label: "#7", URL: "u"}}); got != text {
+			t.Errorf("linkify(%q) = %q, want it left alone", text, got)
+		}
+	}
+	if got := linkify("▶ #7", []tableLink{{Label: "#7", URL: "u"}}); !strings.Contains(got, oscOpen+"u") {
+		t.Errorf("a number after the marker is not linked: %q", got)
+	}
+}
+
+// Regression: a closed issue in another repository is neither merged into nor
+// hidden by an issue with the same number here, and it names its repository.
+func TestCrossRepoClosedIssueKeepsItsRepo(t *testing.T) {
+	row := tableRow("5", "Add thing", &ChangeRequest{Number: 7, State: "open", URL: "https://github.com/acme/portal/pull/7",
+		Closes: []string{"5"}, ClosesRefs: []string{"acme/api#5"}})
+	row.Issue.URL = "https://github.com/acme/portal/issues/5"
+	if got := StatusTableRows([]ChangeTopology{row}, "")[0][0]; got != "#5 + api#5" {
+		t.Errorf("issue cell = %q, want %q", got, "#5 + api#5")
+	}
+	got := StatusTableURLs([]ChangeTopology{row})
+	want := []string{
+		"issue #5      https://github.com/acme/portal/issues/5",
+		"api issue #5  https://github.com/acme/api/issues/5",
+		"PR #7         https://github.com/acme/portal/pull/7",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("urls\n got %q\nwant %q", got, want)
+	}
+	// Same issue named both ways is one issue.
+	row.Issue = &TopologyIssue{ID: "5"}
+	row.PR.ClosesRefs = []string{"acme/portal#5"}
+	if got := StatusTableRows([]ChangeTopology{row}, "")[0][0]; got != "#5" {
+		t.Errorf("same issue twice: cell = %q, want #5", got)
+	}
+}
+
+// Regression: a request with no state (an old cache, another provider) renders.
+func TestTableStateSurvivesAnEmptyRequestState(t *testing.T) {
+	row := tableRow("1", "x", &ChangeRequest{Number: 1})
+	if got := StatusTableRows([]ChangeTopology{row}, "")[0][3]; got != "Unknown" {
+		t.Errorf("state cell = %q, want Unknown", got)
+	}
+}
+
+// The shapes below are what `gh pr list --json reviewRequests,latestReviews`
+// returns: a user request carries login, a team request carries name and slug.
+func TestToChangeRequestReadsReviewersFromGhJSON(t *testing.T) {
+	const raw = `{
+	  "number": 5, "url": "https://github.com/acme/portal/pull/5", "title": "T", "state": "OPEN",
+	  "reviewRequests": [
+	    {"__typename": "User", "login": "bob"},
+	    {"__typename": "Team", "name": "Core Devs", "slug": "core-devs"}
+	  ],
+	  "latestReviews": [
+	    {"author": {"login": "zed"}, "state": "COMMENTED"},
+	    {"author": {"login": "ann"}, "state": "APPROVED"},
+	    {"author": {"login": "cy"}, "state": "DISMISSED"},
+	    {"author": {"login": ""}, "state": "APPROVED"}
+	  ]
+	}`
+	var gh ghChangeRequest
+	if err := json.Unmarshal([]byte(raw), &gh); err != nil {
+		t.Fatal(err)
+	}
+	cr := gh.toChangeRequest()
+	if strings.Join(cr.ReviewRequests, ",") != "bob,team:core-devs" {
+		t.Errorf("review requests = %v", cr.ReviewRequests)
+	}
+	want := []ChangeRequestReview{{"ann", "approved"}, {"cy", "dismissed"}, {"zed", "commented"}}
+	if len(cr.Reviews) != 3 || cr.Reviews[0] != want[0] || cr.Reviews[1] != want[1] || cr.Reviews[2] != want[2] {
+		t.Errorf("reviews = %v, want %v", cr.Reviews, want)
+	}
+	if cr.Title != "T" {
+		t.Errorf("title = %q", cr.Title)
+	}
+	// Commented and dismissed reviews decide nothing.
+	cr.State = "open"
+	cr.Reviews = cr.Reviews[1:]
+	if got := tableReview(&cr); got != "No review; requested from bob, team:core-devs" && got != "requested from bob, team:core-devs" {
+		t.Errorf("review cell = %q", got)
 	}
 }

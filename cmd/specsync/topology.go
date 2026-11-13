@@ -76,6 +76,9 @@ func (cm *statusCmd) run(args []string) {
 		fail(err)
 	}
 	checkArgs(fs, args, 0)
+	if *cm.urls && !*cm.table {
+		fail(fmt.Errorf("-urls needs -table"))
+	}
 	if !validState(*state) {
 		fail(fmt.Errorf("-state must be on, fresh or off, got %q", *state))
 	}
