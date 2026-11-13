@@ -58,3 +58,26 @@ func TestTableAndJSONCannotBeCombined(t *testing.T) {
 		}
 	}
 }
+
+func TestTableWidthOrder(t *testing.T) {
+	asked := false
+	term := func(n int) func() int { return func() int { asked = true; return n } }
+	for _, c := range []struct {
+		name, columns string
+		terminal      int
+		want          int
+		asks          bool
+	}{
+		{"COLUMNS beats the terminal", "200", 90, 200, false},
+		{"the terminal beats the default", "", 90, 90, true},
+		{"not a terminal falls back", "", 0, 140, true},
+		{"junk COLUMNS is ignored", "wide", 90, 90, true},
+		{"zero COLUMNS is ignored", "0", 90, 90, true},
+		{"negative COLUMNS is ignored", "-5", 0, 140, true},
+	} {
+		asked = false
+		if got := pickTableWidth(c.columns, term(c.terminal)); got != c.want || asked != c.asks {
+			t.Errorf("%s: width %d (terminal asked: %v), want %d (asked: %v)", c.name, got, asked, c.want, c.asks)
+		}
+	}
+}

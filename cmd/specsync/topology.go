@@ -501,22 +501,37 @@ func printRelatedItem(it specsync.RelatedItem, branch, current string) {
 	printWorkRow(*it.Row, branch, mark)
 }
 
-// tableWidth is the widest the status table may be: the terminal's width when
-// output goes to one, else $COLUMNS, else 140. Shells set COLUMNS but rarely
-// export it, so the terminal is asked directly.
+// tableWidth is the widest the status table may be: $COLUMNS when set, else the
+// terminal's width when output goes to one, else 140. Shells set COLUMNS but
+// rarely export it, so the terminal is asked directly; an explicit COLUMNS wins.
 func tableWidth() int {
-	if stdoutIsTerminal() {
+	return pickTableWidth(os.Getenv("COLUMNS"), func() int {
+		if !stdoutIsTerminal() {
+			return 0
+		}
 		cmd := exec.Command("stty", "size")
 		cmd.Stdin = os.Stdout
-		if out, err := cmd.Output(); err == nil {
-			if f := strings.Fields(string(out)); len(f) == 2 {
-				if n, err := strconv.Atoi(f[1]); err == nil && n > 0 {
-					return n
-				}
+		out, err := cmd.Output()
+		if err != nil {
+			return 0
+		}
+		if f := strings.Fields(string(out)); len(f) == 2 {
+			if n, err := strconv.Atoi(f[1]); err == nil {
+				return n
 			}
 		}
+		return 0
+	})
+}
+
+// pickTableWidth applies the order: a positive columns value, then the
+// terminal's width (0 when unknown or not a terminal), then 140. The terminal
+// is only asked when columns says nothing.
+func pickTableWidth(columns string, terminal func() int) int {
+	if n, err := strconv.Atoi(columns); err == nil && n > 0 {
+		return n
 	}
-	if n, err := strconv.Atoi(os.Getenv("COLUMNS")); err == nil && n > 0 {
+	if n := terminal(); n > 0 {
 		return n
 	}
 	return 140
