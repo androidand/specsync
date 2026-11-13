@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 
@@ -495,8 +496,21 @@ func printRelatedItem(it specsync.RelatedItem, branch, current string) {
 	printWorkRow(*it.Row, branch, mark)
 }
 
-// tableWidth is the widest the status table may be: $COLUMNS, else 140.
+// tableWidth is the widest the status table may be: the terminal's width when
+// output goes to one, else $COLUMNS, else 140. Shells set COLUMNS but rarely
+// export it, so the terminal is asked directly.
 func tableWidth() int {
+	if stdoutIsTerminal() {
+		cmd := exec.Command("stty", "size")
+		cmd.Stdin = os.Stdout
+		if out, err := cmd.Output(); err == nil {
+			if f := strings.Fields(string(out)); len(f) == 2 {
+				if n, err := strconv.Atoi(f[1]); err == nil && n > 0 {
+					return n
+				}
+			}
+		}
+	}
 	if n, err := strconv.Atoi(os.Getenv("COLUMNS")); err == nil && n > 0 {
 		return n
 	}
@@ -509,7 +523,7 @@ func printStatusTable(rows []specsync.ChangeTopology, current string, status []s
 	if len(rows) == 0 {
 		fmt.Println("No work resolved.")
 	} else {
-		fmt.Print(specsync.RenderStatusTable(rows, current, tableWidth(), stdoutIsTerminal()))
+		fmt.Print(specsync.RenderStatusTable(rows, current, tableWidth(), stdoutIsTerminal(), requestState == "" || requestState == "ok"))
 		if urls {
 			for _, u := range specsync.StatusTableURLs(rows) {
 				fmt.Println(u)

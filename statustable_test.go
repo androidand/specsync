@@ -66,7 +66,7 @@ func TestStatusTableCells(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := StatusTableRows([]ChangeTopology{c.row}, "")[0]
+			got := StatusTableRows([]ChangeTopology{c.row}, "", true)[0]
 			if strings.Join(got, "|") != strings.Join(c.want, "|") {
 				t.Errorf("cells\n got %q\nwant %q", got, c.want)
 			}
@@ -77,7 +77,7 @@ func TestStatusTableCells(t *testing.T) {
 func TestStatusTableSeveralIssuesOnePR(t *testing.T) {
 	pr := &ChangeRequest{Number: 26, State: "open", Closes: []string{"4015", "3800"}}
 	row := tableRow("4015", "Job output", pr)
-	got := StatusTableRows([]ChangeTopology{row}, "")[0][0]
+	got := StatusTableRows([]ChangeTopology{row}, "", true)[0][0]
 	if got != "#3800 + #4015" && got != "#4015 + #3800" {
 		t.Errorf("issue cell = %q, want both issues", got)
 	}
@@ -88,7 +88,7 @@ func TestStatusTableNamesRepoWhenRowsSpanRepos(t *testing.T) {
 	b := tableRow("2", "B", nil)
 	b.Repo = "acme/api"
 	b.Issue.Provider = "github:acme/api"
-	cells := StatusTableRows([]ChangeTopology{a, b}, RowKey(a))
+	cells := StatusTableRows([]ChangeTopology{a, b}, RowKey(a), true)
 	if cells[0][0] != "▶ portal#1" || cells[1][0] != "api#2" {
 		t.Errorf("issue cells = %q, %q", cells[0][0], cells[1][0])
 	}
@@ -96,7 +96,7 @@ func TestStatusTableNamesRepoWhenRowsSpanRepos(t *testing.T) {
 
 func TestRenderStatusTableWrapsToWidth(t *testing.T) {
 	row := tableRow("42", strings.Repeat("long words ", 12), &ChangeRequest{Number: 7, State: "open"})
-	out := RenderStatusTable([]ChangeTopology{row}, "", 80, false)
+	out := RenderStatusTable([]ChangeTopology{row}, "", 80, false, true)
 	for _, l := range strings.Split(strings.TrimRight(out, "\n"), "\n") {
 		if n := len([]rune(l)); n > 80 {
 			t.Fatalf("line is %d wide, want at most 80:\n%s", n, out)
@@ -162,11 +162,11 @@ func TestStatusTableURLsNameIssueAndRequest(t *testing.T) {
 
 func TestRenderStatusTableHyperlinksOnlyWhenAsked(t *testing.T) {
 	rows := []ChangeTopology{linkedRow()}
-	plain := RenderStatusTable(rows, "", 0, false)
+	plain := RenderStatusTable(rows, "", 0, false, true)
 	if strings.Contains(plain, "\x1b") {
 		t.Errorf("plain table has escapes:\n%q", plain)
 	}
-	linked := RenderStatusTable(rows, "", 0, true)
+	linked := RenderStatusTable(rows, "", 0, true, true)
 	for _, want := range []string{
 		"\x1b]8;;https://github.com/acme/portal/pull/7\x1b\\#7\x1b]8;;\x1b\\",
 		"\x1b]8;;https://github.com/acme/portal/issues/42\x1b\\#42\x1b]8;;\x1b\\",
@@ -204,7 +204,7 @@ const oscOpen = "\x1b]8;;"
 func linkTargets(t *testing.T, row ChangeTopology) map[int][]string {
 	t.Helper()
 	rows := []ChangeTopology{row}
-	cells := StatusTableRows(rows, "")
+	cells := StatusTableRows(rows, "", true)
 	links := statusTableLinks(rows)
 	out := map[int][]string{}
 	for col := range cells[0] {
@@ -255,7 +255,7 @@ func TestCrossRepoClosedIssueKeepsItsRepo(t *testing.T) {
 	row := tableRow("5", "Add thing", &ChangeRequest{Number: 7, State: "open", URL: "https://github.com/acme/portal/pull/7",
 		Closes: []string{"5"}, ClosesRefs: []string{"acme/api#5"}})
 	row.Issue.URL = "https://github.com/acme/portal/issues/5"
-	if got := StatusTableRows([]ChangeTopology{row}, "")[0][0]; got != "#5 + api#5" {
+	if got := StatusTableRows([]ChangeTopology{row}, "", true)[0][0]; got != "#5 + api#5" {
 		t.Errorf("issue cell = %q, want %q", got, "#5 + api#5")
 	}
 	got := StatusTableURLs([]ChangeTopology{row})
@@ -270,7 +270,7 @@ func TestCrossRepoClosedIssueKeepsItsRepo(t *testing.T) {
 	// Same issue named both ways is one issue.
 	row.Issue = &TopologyIssue{ID: "5"}
 	row.PR.ClosesRefs = []string{"acme/portal#5"}
-	if got := StatusTableRows([]ChangeTopology{row}, "")[0][0]; got != "#5" {
+	if got := StatusTableRows([]ChangeTopology{row}, "", true)[0][0]; got != "#5" {
 		t.Errorf("same issue twice: cell = %q, want #5", got)
 	}
 }
@@ -278,7 +278,7 @@ func TestCrossRepoClosedIssueKeepsItsRepo(t *testing.T) {
 // Regression: a request with no state (an old cache, another provider) renders.
 func TestTableStateSurvivesAnEmptyRequestState(t *testing.T) {
 	row := tableRow("1", "x", &ChangeRequest{Number: 1})
-	if got := StatusTableRows([]ChangeTopology{row}, "")[0][3]; got != "Unknown" {
+	if got := StatusTableRows([]ChangeTopology{row}, "", true)[0][3]; got != "Unknown" {
 		t.Errorf("state cell = %q, want Unknown", got)
 	}
 }
@@ -330,7 +330,7 @@ func TestIssueInTrackerRepoIsNotCountedTwice(t *testing.T) {
 	row.Repo = "acme/api"
 	row.Issue.Provider = "github:acme/portal"
 	row.Issue.URL = "https://github.com/acme/portal/issues/9"
-	if got := StatusTableRows([]ChangeTopology{row}, "")[0][0]; got != "portal#9" {
+	if got := StatusTableRows([]ChangeTopology{row}, "", true)[0][0]; got != "portal#9" {
 		t.Errorf("issue cell = %q, want portal#9", got)
 	}
 	want := []string{
@@ -339,5 +339,85 @@ func TestIssueInTrackerRepoIsNotCountedTwice(t *testing.T) {
 	}
 	if got := StatusTableURLs([]ChangeTopology{row}); strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Errorf("urls\n got %q\nwant %q", got, want)
+	}
+}
+
+func TestStatusTableLocalStateWording(t *testing.T) {
+	row := func(l *LocalState) ChangeTopology { r := tableRow("42", "x", nil); r.Local = l; return r }
+	for want, l := range map[string]*LocalState{
+		"Local, upstream gone": {Upstream: "origin/x", UpstreamGone: true},
+		"Local, state unknown": {Upstream: "origin/x", StatusUnavailable: true},
+		"Local, clean":         {Upstream: "origin/x"},
+	} {
+		if got := tableState(row(l)); got != want {
+			t.Errorf("tableState = %q, want %q", got, want)
+		}
+	}
+}
+
+func TestStatusTableIssueRepoCaseAndControlChars(t *testing.T) {
+	r := tableRow("42", "evil\n\x1b]0;pwned\x07title", &ChangeRequest{Number: 7, State: "open",
+		URL: "https://github.com/Acme/Portal/pull/7", Closes: []string{"42"}, ClosesRefs: []string{"Acme/Portal#42"}})
+	cells := StatusTableRows([]ChangeTopology{r}, "", true)[0]
+	if cells[0] != "#42" {
+		t.Errorf("issue cell = %q, want one #42 despite repository name case", cells[0])
+	}
+	if strings.ContainsAny(cells[1], "\n\x1b\x07") {
+		t.Errorf("what cell keeps control characters: %q", cells[1])
+	}
+}
+
+// Without request lookups an absent request is unknown, not "not opened".
+func TestPRCellIsUnknownWhenRequestsWereNotLooked(t *testing.T) {
+	row := tableRow("1", "x", nil)
+	if got := StatusTableRows([]ChangeTopology{row}, "", false)[0][2]; got != "Unknown" {
+		t.Errorf("PR cell = %q, want Unknown", got)
+	}
+	if got := StatusTableRows([]ChangeTopology{row}, "", true)[0][2]; got != "Not opened" {
+		t.Errorf("PR cell = %q, want Not opened", got)
+	}
+}
+
+// ClosesRefs names a repository for only some of Closes; a number a reference
+// already placed elsewhere is not placed again here.
+func TestClosesWithoutRepoDoesNotDuplicateANamedOne(t *testing.T) {
+	row := tableRow("1", "x", &ChangeRequest{Number: 3, State: "open", URL: "https://github.com/acme/portal/pull/3",
+		Closes: []string{"5", "9"}, ClosesRefs: []string{"acme/other#5"}})
+	if got := StatusTableRows([]ChangeTopology{row}, "", true)[0][0]; got != "#1 + other#5 + #9" {
+		t.Errorf("issue cell = %q, want %q", got, "#1 + other#5 + #9")
+	}
+}
+
+func TestDisplayWidthCountsColumns(t *testing.T) {
+	for s, want := range map[string]int{"abc": 3, "日本語": 6, "✨ x": 4, "e\u0301": 1, "": 0} {
+		if got := displayWidth(s); got != want {
+			t.Errorf("displayWidth(%q) = %d, want %d", s, got, want)
+		}
+	}
+}
+
+// Wide characters take two columns, so a table with them still draws a box
+// whose every line is the same width.
+func TestGridStaysAlignedWithWideCharacters(t *testing.T) {
+	row := tableRow("1", "✨ 日本語のタイトル feat: add the thing", &ChangeRequest{Number: 2, State: "open"})
+	for _, width := range []int{0, 70} {
+		out := RenderStatusTable([]ChangeTopology{row}, "", width, false, true)
+		lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+		for _, l := range lines {
+			if displayWidth(l) != displayWidth(lines[0]) {
+				t.Fatalf("width %d: line is %d columns, first is %d:\n%s", width, displayWidth(l), displayWidth(lines[0]), out)
+			}
+		}
+		if width > 0 && displayWidth(lines[0]) > width {
+			t.Errorf("table is %d columns, want at most %d", displayWidth(lines[0]), width)
+		}
+	}
+}
+
+// Two links with the same label never nest, whatever order they come in.
+func TestLinkifyNeverNestsLinks(t *testing.T) {
+	got := linkify("#5", []tableLink{{Label: "#5", URL: "a"}, {Label: "#5", URL: "b"}})
+	if strings.Count(got, oscOpen+"a") != 1 || strings.Contains(got, oscOpen+"b") {
+		t.Errorf("linkify = %q, want one link, to a", got)
 	}
 }

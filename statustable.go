@@ -15,8 +15,9 @@ var StatusTableHeader = []string{"Issue", "What", "PR", "State", "Checks", "Revi
 // StatusTableRows turns work rows into table cells, one line per row. current
 // is the RowKey to mark with an arrow; empty marks nothing. Rows are shown in
 // the order given. The repository is named in the Issue cell only when the rows
-// span more than one.
-func StatusTableRows(rows []ChangeTopology, current string) [][]string {
+// span more than one. requestsKnown is false when pull requests were not looked
+// up, so a row without one reads "Unknown" instead of "Not opened".
+func StatusTableRows(rows []ChangeTopology, current string, requestsKnown bool) [][]string {
 	many := manyRepos(rows)
 	out := make([][]string, 0, len(rows))
 	for _, r := range rows {
@@ -24,10 +25,14 @@ func StatusTableRows(rows []ChangeTopology, current string) [][]string {
 		if current != "" && RowKey(r) == current {
 			mark = "▶ "
 		}
-		out = append(out, []string{
-			mark + tableIssue(r, many), tableWhat(r), tablePR(r), tableState(r),
+		cells := []string{
+			mark + tableIssue(r, many), tableWhat(r), tablePR(r, requestsKnown), tableState(r),
 			tableChecks(r.PR), tableReview(r.PR), tableSize(r),
-		})
+		}
+		for i := range cells {
+			cells[i] = plainCell(cells[i])
+		}
+		out = append(out, cells)
 	}
 	return out
 }
@@ -35,12 +40,12 @@ func StatusTableRows(rows []ChangeTopology, current string) [][]string {
 // RenderStatusTable draws rows as a box table no wider than width columns
 // (0 means no limit). Long cells wrap at spaces. With hyperlinks, issue and
 // request numbers are written as terminal hyperlinks (OSC 8) to their pages.
-func RenderStatusTable(rows []ChangeTopology, current string, width int, hyperlinks bool) string {
+func RenderStatusTable(rows []ChangeTopology, current string, width int, hyperlinks, requestsKnown bool) string {
 	var links []rowLinks
 	if hyperlinks {
 		links = statusTableLinks(rows)
 	}
-	return renderGrid(StatusTableHeader, StatusTableRows(rows, current), width, links)
+	return renderGrid(StatusTableHeader, StatusTableRows(rows, current, requestsKnown), width, links)
 }
 
 // tableLink is one number in a cell and the page it names.
@@ -111,6 +116,18 @@ func StatusTableURLs(rows []ChangeTopology) []string {
 	return out
 }
 
+// plainCell makes text safe for one table line: tracker-supplied titles and
+// names may hold newlines or terminal escape sequences, which would break the
+// grid or drive the terminal. Control characters become spaces.
+func plainCell(s string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return ' '
+		}
+		return r
+	}, s)
+}
+
 func manyRepos(rows []ChangeTopology) bool {
 	repos := map[string]bool{}
 	for _, r := range rows {
@@ -129,10 +146,11 @@ func issueLinks(r ChangeTopology, many bool) []tableLink {
 	var found []issue
 	seen := map[string]bool{}
 	add := func(repo, id, url string) {
-		if id == "" || seen[repo+"#"+id] {
+		key := strings.ToLower(repo) + "#" + id // GitHub repository names are case-insensitive
+		if id == "" || seen[key] {
 			return
 		}
-		seen[repo+"#"+id] = true
+		seen[key] = true
 		found = append(found, issue{repo, id, url})
 	}
 	if r.Issue != nil {
@@ -150,8 +168,15 @@ func issueLinks(r ChangeTopology, many bool) []tableLink {
 				closed = append(closed, issue{repo, id, ""})
 			}
 		}
-		if len(closed) < len(pr.Closes) { // the request named no repository for some
-			for _, id := range pr.Closes {
+		// Closes and ClosesRefs are not index-aligned: the request names a
+		// repository only for some. A number a reference already placed is not
+		// placed again in this repository.
+		named := map[string]bool{}
+		for _, c := range closed {
+			named[c.id] = true
+		}
+		for _, id := range pr.Closes {
+			if !named[id] {
 				closed = append(closed, issue{r.Repo, id, ""})
 			}
 		}
@@ -172,7 +197,7 @@ func issueLinks(r ChangeTopology, many bool) []tableLink {
 	}
 	out := make([]tableLink, len(found))
 	for i, f := range found {
-		other := f.repo != "" && f.repo != r.Repo
+		other := f.repo != "" && !strings.EqualFold(f.repo, r.Repo)
 		label := "#" + f.id
 		if (many || other) && f.repo != "" {
 			label = shortRepo(f.repo) + label
@@ -216,8 +241,11 @@ func tableWhat(r ChangeTopology) string {
 	return "–"
 }
 
-func tablePR(r ChangeTopology) string {
+func tablePR(r ChangeTopology, requestsKnown bool) string {
 	if r.PR == nil {
+		if !requestsKnown {
+			return "Unknown"
+		}
 		return "Not opened"
 	}
 	return fmt.Sprintf("#%d", r.PR.Number)
@@ -235,6 +263,10 @@ func tableState(r ChangeTopology) string {
 				state += fmt.Sprintf(", %d unpushed", l.Ahead)
 			case l.Upstream == "":
 				state += ", not pushed"
+			case l.UpstreamGone:
+				state += ", upstream gone"
+			case l.StatusUnavailable:
+				state += ", state unknown"
 			default:
 				state += ", clean"
 			}
@@ -368,7 +400,7 @@ func renderGrid(header []string, rows [][]string, width int, links []rowLinks) s
 	all := append([][]string{header}, rows...)
 	for _, row := range all {
 		for i, c := range row {
-			if l := utf8.RuneCountInString(c); l > w[i] {
+			if l := displayWidth(c); l > w[i] {
 				w[i] = l
 			}
 		}
@@ -417,7 +449,7 @@ func renderGrid(header []string, rows [][]string, width int, links []rowLinks) s
 				if h < len(cells[i]) {
 					text = cells[i][h]
 				}
-				fmt.Fprintf(&b, " %s%s │", linkify(text, cellLinks(rl, i)), strings.Repeat(" ", w[i]-utf8.RuneCountInString(text)))
+				fmt.Fprintf(&b, " %s%s │", linkify(text, cellLinks(rl, i)), strings.Repeat(" ", w[i]-displayWidth(text)))
 			}
 			b.WriteString("\n")
 		}
@@ -441,10 +473,10 @@ func renderGrid(header []string, rows [][]string, width int, links []rowLinks) s
 	return b.String()
 }
 
-// wrapCell splits text into lines of at most width runes, breaking at spaces;
-// a word longer than width is cut.
+// wrapCell splits text into lines at most width terminal columns wide, breaking
+// at spaces; a word longer than width is cut between characters.
 func wrapCell(text string, width int) []string {
-	if width <= 0 || utf8.RuneCountInString(text) <= width {
+	if width <= 0 || displayWidth(text) <= width {
 		return []string{text}
 	}
 	var lines []string
@@ -456,16 +488,23 @@ func wrapCell(text string, width int) []string {
 		}
 	}
 	for _, word := range strings.Fields(text) {
-		for utf8.RuneCountInString(word) > width {
+		for displayWidth(word) > width {
 			flush()
-			r := []rune(word)
-			lines = append(lines, string(r[:width]))
-			word = string(r[width:])
+			cut, cols := 0, 0
+			for i, r := range word {
+				if cols+runeWidth(r) > width && cols > 0 {
+					break
+				}
+				cols += runeWidth(r)
+				cut = i + utf8.RuneLen(r)
+			}
+			lines = append(lines, word[:cut])
+			word = word[cut:]
 		}
 		switch {
 		case cur == "":
 			cur = word
-		case utf8.RuneCountInString(cur)+1+utf8.RuneCountInString(word) <= width:
+		case displayWidth(cur)+1+displayWidth(word) <= width:
 			cur += " " + word
 		default:
 			flush()
@@ -474,6 +513,39 @@ func wrapCell(text string, width int) []string {
 	}
 	flush()
 	return lines
+}
+
+// displayWidth is how many terminal columns text takes.
+func displayWidth(s string) int {
+	n := 0
+	for _, r := range s {
+		n += runeWidth(r)
+	}
+	return n
+}
+
+// runeWidth is the columns one rune takes: 0 for combining marks and format
+// characters (joiners, variation selectors), 2 for East Asian wide characters
+// and emoji, else 1. It is a compact table, not the whole of Unicode.
+func runeWidth(r rune) int {
+	switch {
+	case unicode.Is(unicode.Mn, r), unicode.Is(unicode.Me, r), unicode.Is(unicode.Cf, r):
+		return 0
+	case r >= 0x1100 && r <= 0x115F,
+		r >= 0x2E80 && r <= 0xA4CF,
+		r >= 0xAC00 && r <= 0xD7A3,
+		r >= 0xF900 && r <= 0xFAFF,
+		r >= 0xFE30 && r <= 0xFE6F,
+		r >= 0xFF00 && r <= 0xFF60,
+		r >= 0xFFE0 && r <= 0xFFE6,
+		r >= 0x1F300 && r <= 0x1F64F,
+		r >= 0x1F680 && r <= 0x1F6FF,
+		r >= 0x1F900 && r <= 0x1F9FF,
+		r >= 0x20000 && r <= 0x3FFFD,
+		r == 0x2705, r == 0x2728, r == 0x274C, r == 0x274E, r == 0x2753, r == 0x2757, r == 0x26A1, r == 0x2B50:
+		return 2
+	}
+	return 1
 }
 
 // RelatedRows lists the rows for the status table: the current work first,
@@ -522,14 +594,18 @@ func cellLinks(rl *rowLinks, col int) []tableLink {
 
 // linkify wraps each label found in text in a terminal hyperlink. Only a whole
 // number counts: a label inside a longer word or number ("#7" in "#70" or in
-// "api#7") is left alone, and so is text already linked.
+// "api#7") is left alone. Matches are found in the plain text first and never
+// overlap, so no hyperlink is wrapped inside another.
 func linkify(text string, links []tableLink) string {
+	type hit struct {
+		start, end int
+		l          tableLink
+	}
+	var hits []hit
 	for _, l := range links {
-		if l.URL == "" {
+		if l.URL == "" || l.Label == "" {
 			continue
 		}
-		var b strings.Builder
-		from := 0 // bytes of text already copied
 		for at := 0; ; {
 			i := strings.Index(text[at:], l.Label)
 			if i < 0 {
@@ -540,16 +616,24 @@ func linkify(text string, links []tableLink) string {
 			before, _ := utf8.DecodeLastRuneInString(text[:i])
 			after, _ := utf8.DecodeRuneInString(text[end:])
 			if (i == 0 || !isLabelRune(before)) && (end == len(text) || !isLabelRune(after)) {
-				b.WriteString(text[from:i])
-				b.WriteString("\x1b]8;;" + l.URL + "\x1b\\" + l.Label + "\x1b]8;;\x1b\\")
-				from = end
+				hits = append(hits, hit{i, end, l})
 			}
 			at = end
 		}
-		b.WriteString(text[from:])
-		text = b.String()
 	}
-	return text
+	sort.SliceStable(hits, func(i, j int) bool { return hits[i].start < hits[j].start })
+	var b strings.Builder
+	from := 0
+	for _, h := range hits {
+		if h.start < from { // overlaps one already written
+			continue
+		}
+		b.WriteString(text[from:h.start])
+		b.WriteString("\x1b]8;;" + h.l.URL + "\x1b\\" + h.l.Label + "\x1b]8;;\x1b\\")
+		from = h.end
+	}
+	b.WriteString(text[from:])
+	return b.String()
 }
 
 func isLabelRune(r rune) bool {
