@@ -14,6 +14,7 @@ type ChangeRequest struct {
 	State          string              `json:"state"` // open, closed, merged
 	Draft          bool                `json:"draft"`
 	Branch         string              `json:"branch"` // head branch
+	Title          string              `json:"title,omitempty"`
 	Author         string              `json:"author,omitempty"`
 	Base           string              `json:"base,omitempty"`
 	ReviewDecision string              `json:"reviewDecision,omitempty"` // approved, changes_requested, review_required
@@ -32,6 +33,17 @@ type ChangeRequest struct {
 	// UnresolvedThreads is the count of unresolved review threads on an open
 	// request. nil means the provider did not say, which is not the same as 0.
 	UnresolvedThreads *int `json:"unresolvedThreads,omitempty"`
+	// ReviewRequests are the people and teams still asked to review, sorted.
+	ReviewRequests []string `json:"reviewRequests,omitempty"`
+	// Reviews are each reviewer's latest verdict, sorted by reviewer.
+	Reviews []ChangeRequestReview `json:"reviews,omitempty"`
+}
+
+// ChangeRequestReview is one reviewer's latest verdict: approved,
+// changes_requested, commented or dismissed.
+type ChangeRequestReview struct {
+	Reviewer string `json:"reviewer"`
+	State    string `json:"state"`
 }
 
 // ChangeRequestChecks summarises the request's checks.

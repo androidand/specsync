@@ -15,6 +15,7 @@ import (
 type overviewCmd struct {
 	root, epic, repo, stage, state      *string
 	mine, attention, unattached, asJSON *bool
+	table                               *bool
 	budget                              *string
 	exclude                             stringSlice
 	sessions                            sessionFlags
@@ -36,6 +37,7 @@ func (*overviewCmd) Spec() Spec {
 		Examples: []string{
 			"specsync overview",
 			"specsync overview -attention",
+			"specsync overview -table",
 			"specsync overview -repo api -attention",
 			"specsync overview -epic acme/web#1 -json",
 			"specsync overview -root ~/dev -unattached",
@@ -53,6 +55,7 @@ func (cm *overviewCmd) Flags(fs *flag.FlagSet) {
 	cm.attention = fs.Bool("attention", false, "only work that needs attention")
 	cm.unattached = fs.Bool("unattached", false, "only work under no epic")
 	cm.asJSON = fs.Bool("json", false, "output as JSON")
+	cm.table = fs.Bool("table", false, "print all work as one table with checks and review state")
 	cm.budget = fs.String("budget", "", "advisory size budget for the size flags, e.g. files=15,lines=400,commits=30 (default: each change's budget line, then $SPECSYNC_BUDGET, then built-in limits)")
 	fs.Var(&cm.exclude, "exclude", "glob of paths left out of the size counts (repeatable)")
 	cm.sessions = addSessionFlags(fs)
@@ -97,6 +100,16 @@ func (cm *overviewCmd) Run(_ context.Context, args []string) error {
 	}
 	if *cm.asJSON {
 		emitJSON(ov)
+		return nil
+	}
+	if *cm.table {
+		var rows []specsync.ChangeTopology
+		for _, g := range ov.Epics {
+			rows = append(rows, g.Items...)
+		}
+		rows = append(rows, ov.NoEpic...)
+		rows = append(rows, ov.Unlinked...)
+		printStatusTable(rows, "", ov.Status, "ok")
 		return nil
 	}
 	printOverview(ov)

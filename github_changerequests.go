@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -28,6 +29,7 @@ type ghCheck struct {
 type ghChangeRequest struct {
 	Number      int    `json:"number"`
 	URL         string `json:"url"`
+	Title       string `json:"title"`
 	State       string `json:"state"`
 	IsDraft     bool   `json:"isDraft"`
 	HeadRefName string `json:"headRefName"`
@@ -51,7 +53,18 @@ type ghChangeRequest struct {
 			} `json:"owner"`
 		} `json:"repository"`
 	} `json:"closingIssuesReferences"`
-	Checks []ghCheck `json:"statusCheckRollup"`
+	Checks         []ghCheck `json:"statusCheckRollup"`
+	ReviewRequests []struct {
+		Login string `json:"login"`
+		Slug  string `json:"slug"`
+		Name  string `json:"name"`
+	} `json:"reviewRequests"`
+	LatestReviews []struct {
+		Author struct {
+			Login string `json:"login"`
+		} `json:"author"`
+		State string `json:"state"`
+	} `json:"latestReviews"`
 }
 
 // ChangeRequests lists the repo's pull requests, all states, with one gh call.
@@ -89,8 +102,8 @@ func (p *GitHubProvider) ChangeRequests(ctx context.Context) (ChangeRequestSet, 
 func (p *GitHubProvider) listChangeRequests(ctx context.Context, state string, limit int) ([]ghChangeRequest, error) {
 	args := append([]string{"pr", "list"}, p.repoFlag()...)
 	args = append(args, "--state", state, "--limit", strconv.Itoa(limit), "--json",
-		"number,url,state,isDraft,headRefName,headRefOid,author,isCrossRepository,baseRefName,reviewDecision,mergeable,"+
-			"additions,deletions,changedFiles,closingIssuesReferences,statusCheckRollup")
+		"number,url,title,state,isDraft,headRefName,headRefOid,author,isCrossRepository,baseRefName,reviewDecision,mergeable,"+
+			"additions,deletions,changedFiles,closingIssuesReferences,statusCheckRollup,reviewRequests,latestReviews")
 	out, err := p.run(ctx, args...)
 	if err != nil {
 		return nil, err
@@ -176,6 +189,7 @@ func (r ghChangeRequest) toChangeRequest() ChangeRequest {
 	cr := ChangeRequest{
 		Number:         r.Number,
 		URL:            r.URL,
+		Title:          r.Title,
 		State:          strings.ToLower(r.State),
 		Draft:          r.IsDraft,
 		Branch:         r.HeadRefName,
@@ -207,6 +221,24 @@ func (r ghChangeRequest) toChangeRequest() ChangeRequest {
 		}
 	}
 	cr.Checks.Failing = sortedUnique(failing)
+	var asked []string
+	for _, q := range r.ReviewRequests {
+		switch {
+		case q.Login != "":
+			asked = append(asked, q.Login)
+		case q.Slug != "":
+			asked = append(asked, "team:"+q.Slug)
+		case q.Name != "":
+			asked = append(asked, "team:"+q.Name)
+		}
+	}
+	cr.ReviewRequests = sortedUnique(asked)
+	for _, v := range r.LatestReviews {
+		if v.Author.Login != "" {
+			cr.Reviews = append(cr.Reviews, ChangeRequestReview{Reviewer: v.Author.Login, State: strings.ToLower(v.State)})
+		}
+	}
+	sort.Slice(cr.Reviews, func(i, j int) bool { return cr.Reviews[i].Reviewer < cr.Reviews[j].Reviewer })
 	return cr
 }
 

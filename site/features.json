@@ -32,6 +32,12 @@
   {
     "group": "plan",
     "icon": "flow",
+    "title": "Status as a table",
+    "body": "<code>specsync status -table</code> prints the work, its related issues and their pull requests as one table: state, checks, requested reviewers, review verdicts and size. <code>overview -table</code> does the same across repositories."
+  },
+  {
+    "group": "plan",
+    "icon": "flow",
     "title": "All your work, across repos",
     "body": "<code>specsync overview</code> lists every change, worktree and open request in the clones under your workspace, grouped by epic, then work under no epic, then branches with no change. Scope it with <code>-repo</code>, <code>-epic</code>, <code>-mine</code>, <code>-attention</code>, <code>-stage</code> or <code>-unattached</code>. Read-only; <code>-json</code> for agents."
   },
