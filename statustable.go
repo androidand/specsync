@@ -136,7 +136,12 @@ func issueLinks(r ChangeTopology, many bool) []tableLink {
 		found = append(found, issue{repo, id, url})
 	}
 	if r.Issue != nil {
-		add(r.Repo, r.Issue.ID, r.Issue.URL)
+		// The issue may live in a tracker repository other than the code's.
+		repo := r.Repo
+		if tracker, ok := strings.CutPrefix(r.Issue.Provider, "github:"); ok && tracker != "" {
+			repo = tracker
+		}
+		add(repo, r.Issue.ID, r.Issue.URL)
 	}
 	if pr := r.PR; pr != nil {
 		var closed []issue

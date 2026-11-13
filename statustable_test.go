@@ -87,6 +87,7 @@ func TestStatusTableNamesRepoWhenRowsSpanRepos(t *testing.T) {
 	a := tableRow("1", "A", nil)
 	b := tableRow("2", "B", nil)
 	b.Repo = "acme/api"
+	b.Issue.Provider = "github:acme/api"
 	cells := StatusTableRows([]ChangeTopology{a, b}, RowKey(a))
 	if cells[0][0] != "▶ portal#1" || cells[1][0] != "api#2" {
 		t.Errorf("issue cells = %q, %q", cells[0][0], cells[1][0])
@@ -318,5 +319,25 @@ func TestToChangeRequestReadsReviewersFromGhJSON(t *testing.T) {
 	cr.Reviews = cr.Reviews[1:]
 	if got := tableReview(&cr); got != "No review; requested from bob, team:core-devs" && got != "requested from bob, team:core-devs" {
 		t.Errorf("review cell = %q", got)
+	}
+}
+
+// An issue tracked in another repository than the code's is that repository's
+// issue, so a request that closes it is not a second issue.
+func TestIssueInTrackerRepoIsNotCountedTwice(t *testing.T) {
+	row := tableRow("9", "Fix the thing", &ChangeRequest{Number: 9, State: "open", URL: "https://github.com/acme/api/pull/9",
+		Closes: []string{"9"}, ClosesRefs: []string{"acme/portal#9"}})
+	row.Repo = "acme/api"
+	row.Issue.Provider = "github:acme/portal"
+	row.Issue.URL = "https://github.com/acme/portal/issues/9"
+	if got := StatusTableRows([]ChangeTopology{row}, "")[0][0]; got != "portal#9" {
+		t.Errorf("issue cell = %q, want portal#9", got)
+	}
+	want := []string{
+		"portal issue #9  https://github.com/acme/portal/issues/9",
+		"PR #9            https://github.com/acme/api/pull/9",
+	}
+	if got := StatusTableURLs([]ChangeTopology{row}); strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("urls\n got %q\nwant %q", got, want)
 	}
 }
