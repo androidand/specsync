@@ -9,6 +9,9 @@ Asking "where does this work stand?" means one question per issue and per pull r
 - `specsync status -table` prints one row per issue and pull request tied to the current work: the change's issue, the issues related to it, and every pull request that closes one. Columns: issue, what, pull request, state, checks, review, size.
 - Each pull request carries the reviewers it requested and each reviewer's latest verdict, so the review column reads `approved`, `changes requested`, or `review requested from <login>`.
 - Issue and pull request numbers link to their pages: as terminal hyperlinks when output is a terminal, and with `-urls` as a plain `label  url` list under the table, for pasting into chat or a pull request. An issue in another repository than its request's is named with that repository.
+- Reviewers come from one extra provider call limited to open pull requests, made only for `-table` and `-json`, so `status`, `overview` and `cleanup` cost what they did. A reviewer's standing is their latest approval, change request or dismissal; a later comment does not hide an approval. When reviewers were not fetched the cell says `Unknown`, and so does a row whose pull request lookup was skipped.
+- The table reports what `status` reports for related work: the reasons a source was incomplete and related items that resolved to no row.
+- Text from the tracker is cleaned of control characters, only http(s) URLs become links, column widths count terminal columns (wide characters and emoji take two), and the width follows the terminal.
 - `-json` carries the same fields, so an agent can build any other view.
 - `overview -table` prints the same table for every repository it covers.
 - A row with no pull request says so (`not opened`) and still shows the local state of the branch.
@@ -16,6 +19,7 @@ Asking "where does this work stand?" means one question per issue and per pull r
 
 ## Out of scope
 
+- `-table` and `-json` cannot be combined.
 - It never changes an issue, a branch or a pull request.
 - It does not judge whether work is done; it shows the states the providers report.
 - Trackers without pull requests keep working: the review and checks columns stay empty.

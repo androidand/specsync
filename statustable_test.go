@@ -1,7 +1,9 @@
 package specsync
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 )
@@ -18,7 +20,7 @@ func tableRow(issue string, title string, pr *ChangeRequest) ChangeTopology {
 
 func TestStatusTableCells(t *testing.T) {
 	open := func(mod func(*ChangeRequest)) *ChangeRequest {
-		pr := &ChangeRequest{Number: 7, State: "open", Mergeable: "mergeable", Checks: ChangeRequestChecks{Pass: 3},
+		pr := &ChangeRequest{Number: 7, State: "open", ReviewersKnown: true, Mergeable: "mergeable", Checks: ChangeRequestChecks{Pass: 3},
 			Size: ChangeRequestSize{Files: 4, Additions: 50, Deletions: 6}}
 		if mod != nil {
 			mod(pr)
@@ -53,7 +55,7 @@ func TestStatusTableCells(t *testing.T) {
 		})), []string{"#42", "Add thing", "#7", "Open", "all 3 pass", "Approved by ann", "4 files, +50 -6"}},
 		{"merged", tableRow("42", "Add thing", &ChangeRequest{Number: 7, State: "merged"}),
 			[]string{"#42", "Add thing", "#7", "Merged", "–", "–", "–"}},
-		{"draft", tableRow("42", "Add thing", &ChangeRequest{Number: 7, State: "open", Draft: true}),
+		{"draft", tableRow("42", "Add thing", &ChangeRequest{Number: 7, State: "open", Draft: true, ReviewersKnown: true}),
 			[]string{"#42", "Add thing", "#7", "Draft", "none", "No review", "–"}},
 		{"not opened", func() ChangeTopology {
 			r := tableRow("42", "Add thing", nil)
@@ -61,7 +63,7 @@ func TestStatusTableCells(t *testing.T) {
 			return r
 		}(), []string{"#42", "Add thing", "Not opened", "Local, 2 unpushed", "–", "–", "3 files, +10 -1"}},
 		{"title from the request when there is no change", ChangeTopology{Repo: "acme/portal", Branch: "feat/9-y", NoChange: true,
-			PR: &ChangeRequest{Number: 9, State: "open", Title: "chore: bump", Closes: []string{"9", "8"}}},
+			PR: &ChangeRequest{Number: 9, State: "open", ReviewersKnown: true, Title: "chore: bump", Closes: []string{"9", "8"}}},
 			[]string{"#8 + #9", "chore: bump", "#9", "Open", "none", "No review", "–"}},
 	}
 	for _, c := range cases {
@@ -283,42 +285,71 @@ func TestTableStateSurvivesAnEmptyRequestState(t *testing.T) {
 	}
 }
 
-// The shapes below are what `gh pr list --json reviewRequests,latestReviews`
-// returns: a user request carries login, a team request carries name and slug.
-func TestToChangeRequestReadsReviewersFromGhJSON(t *testing.T) {
+// The shapes below are what `gh pr list --json reviewRequests,reviews` returns:
+// a user request carries login, a team request carries name and slug. A review
+// is a comment, an approval, a change request or a dismissal; only the last
+// three say what the reviewer thinks, and a later comment changes none of them.
+func TestReviewersStandingFromGhJSON(t *testing.T) {
 	const raw = `{
-	  "number": 5, "url": "https://github.com/acme/portal/pull/5", "title": "T", "state": "OPEN",
+	  "number": 5,
 	  "reviewRequests": [
 	    {"__typename": "User", "login": "bob"},
 	    {"__typename": "Team", "name": "Core Devs", "slug": "core-devs"}
 	  ],
-	  "latestReviews": [
-	    {"author": {"login": "zed"}, "state": "COMMENTED"},
-	    {"author": {"login": "ann"}, "state": "APPROVED"},
-	    {"author": {"login": "cy"}, "state": "DISMISSED"},
-	    {"author": {"login": ""}, "state": "APPROVED"}
+	  "reviews": [
+	    {"author": {"login": "ann"}, "state": "APPROVED", "submittedAt": "2026-11-10T10:00:00Z"},
+	    {"author": {"login": "ann"}, "state": "COMMENTED", "submittedAt": "2026-11-11T10:00:00Z"},
+	    {"author": {"login": "cy"}, "state": "CHANGES_REQUESTED", "submittedAt": "2026-11-10T10:00:00Z"},
+	    {"author": {"login": "cy"}, "state": "APPROVED", "submittedAt": "2026-11-12T10:00:00Z"},
+	    {"author": {"login": "di"}, "state": "APPROVED", "submittedAt": "2026-11-10T10:00:00Z"},
+	    {"author": {"login": "di"}, "state": "DISMISSED", "submittedAt": "2026-11-11T10:00:00Z"},
+	    {"author": {"login": "zed"}, "state": "COMMENTED", "submittedAt": "2026-11-10T10:00:00Z"},
+	    {"author": {"login": ""}, "state": "APPROVED", "submittedAt": "2026-11-10T10:00:00Z"}
 	  ]
 	}`
-	var gh ghChangeRequest
+	var gh ghReviewers
 	if err := json.Unmarshal([]byte(raw), &gh); err != nil {
 		t.Fatal(err)
 	}
-	cr := gh.toChangeRequest()
-	if strings.Join(cr.ReviewRequests, ",") != "bob,team:core-devs" {
-		t.Errorf("review requests = %v", cr.ReviewRequests)
+	asked, reviews := gh.standing()
+	if strings.Join(asked, ",") != "bob,team:core-devs" {
+		t.Errorf("review requests = %v", asked)
 	}
-	want := []ChangeRequestReview{{"ann", "approved"}, {"cy", "dismissed"}, {"zed", "commented"}}
-	if len(cr.Reviews) != 3 || cr.Reviews[0] != want[0] || cr.Reviews[1] != want[1] || cr.Reviews[2] != want[2] {
-		t.Errorf("reviews = %v, want %v", cr.Reviews, want)
+	want := []ChangeRequestReview{{"ann", "approved"}, {"cy", "approved"}, {"di", "dismissed"}}
+	if len(reviews) != 3 || reviews[0] != want[0] || reviews[1] != want[1] || reviews[2] != want[2] {
+		t.Errorf("reviews = %v, want %v", reviews, want)
 	}
-	if cr.Title != "T" {
-		t.Errorf("title = %q", cr.Title)
+}
+
+func TestWithReviewersFillsOpenRequestsOnly(t *testing.T) {
+	run := func(_ context.Context, args ...string) (string, error) {
+		if !strings.Contains(strings.Join(args, " "), "--state open") || !strings.Contains(strings.Join(args, " "), "number,reviewRequests,reviews") {
+			t.Errorf("unexpected gh call %v", args)
+		}
+		return `[{"number":1,"reviewRequests":[{"login":"bob"}],"reviews":[{"author":{"login":"ann"},"state":"APPROVED","submittedAt":"2026-11-10T10:00:00Z"}]}]`, nil
 	}
-	// Commented and dismissed reviews decide nothing.
-	cr.State = "open"
-	cr.Reviews = cr.Reviews[1:]
-	if got := tableReview(&cr); got != "No review; requested from bob, team:core-devs" && got != "requested from bob, team:core-devs" {
-		t.Errorf("review cell = %q", got)
+	set := ChangeRequestSet{Requests: []ChangeRequest{{Number: 1, State: "open"}, {Number: 2, State: "merged"}}}
+	got := NewGitHubProviderFuncWithRepo("acme/portal", run).WithReviewers(context.Background(), set)
+	if !got.Reviewers || !got.Requests[0].ReviewersKnown || got.Requests[0].Reviews[0].Reviewer != "ann" || got.Requests[0].ReviewRequests[0] != "bob" {
+		t.Errorf("open request not filled: %+v", got)
+	}
+	if got.Requests[1].ReviewersKnown || set.Requests[0].ReviewersKnown {
+		t.Errorf("a merged request was filled or the input was changed: %+v / %+v", got.Requests[1], set.Requests[0])
+	}
+	// A failed call claims nothing.
+	failing := func(context.Context, ...string) (string, error) { return "", errors.New("boom") }
+	if got := NewGitHubProviderFuncWithRepo("acme/portal", failing).WithReviewers(context.Background(), set); got.Reviewers || got.Requests[0].ReviewersKnown {
+		t.Errorf("a failed lookup marked reviewers known: %+v", got)
+	}
+}
+
+// Reviewers that were not fetched are unknown, not absent.
+func TestReviewCellIsUnknownWhenReviewersWereNotFetched(t *testing.T) {
+	if got := tableReview(&ChangeRequest{Number: 1, State: "open"}); got != "Unknown" {
+		t.Errorf("review cell = %q, want Unknown", got)
+	}
+	if got := tableReview(&ChangeRequest{Number: 1, State: "open", ReviewDecision: "approved"}); got != "Approved" {
+		t.Errorf("review cell = %q, want Approved", got)
 	}
 }
 
@@ -419,5 +450,107 @@ func TestLinkifyNeverNestsLinks(t *testing.T) {
 	got := linkify("#5", []tableLink{{Label: "#5", URL: "a"}, {Label: "#5", URL: "b"}})
 	if strings.Count(got, oscOpen+"a") != 1 || strings.Contains(got, oscOpen+"b") {
 		t.Errorf("linkify = %q, want one link, to a", got)
+	}
+}
+
+func TestTableStateOfRowsWithoutARequest(t *testing.T) {
+	for name, c := range map[string]struct {
+		local LocalState
+		want  string
+	}{
+		"status failed wins over everything": {LocalState{StatusUnavailable: true, Ahead: 2, Upstream: ""}, "Local, state unknown"},
+		"upstream gone":                      {LocalState{Upstream: "origin/x", UpstreamGone: true}, "Local, upstream gone"},
+		"uncommitted":                        {LocalState{Upstream: "origin/x", Modified: 1}, "Local, uncommitted"},
+		"clean":                              {LocalState{Upstream: "origin/x"}, "Local, clean"},
+	} {
+		row := tableRow("1", "x", nil)
+		row.Local = &c.local
+		if got := tableState(row); got != c.want {
+			t.Errorf("%s: state = %q, want %q", name, got, c.want)
+		}
+	}
+}
+
+func TestCellsDropControlCharacters(t *testing.T) {
+	row := tableRow("1", "evil\x1b]0;owned\x07 title\nline two", &ChangeRequest{Number: 2, State: "open"})
+	cell := StatusTableRows([]ChangeTopology{row}, "", true)[0][1]
+	if strings.ContainsAny(cell, "\x1b\x07\n") || !strings.Contains(cell, "title line two") {
+		t.Errorf("cell = %q", cell)
+	}
+}
+
+func TestSafeURLRefusesAnythingBut(t *testing.T) {
+	for url, ok := range map[string]bool{
+		"https://github.com/a/b/pull/1": true, "http://h/p": true,
+		"javascript:alert(1)": false, "https://h/\x1b]0;x\x07": false, "https://h/a b": false, "": false, "https://h/\x07": false,
+	} {
+		if got := safeURL(url) != ""; got != ok {
+			t.Errorf("safeURL(%q) accepted = %v, want %v", url, got, ok)
+		}
+	}
+	row := tableRow("1", "x", &ChangeRequest{Number: 2, State: "open", URL: "https://h/p\x1b\\evil"})
+	if out := RenderStatusTable([]ChangeTopology{row}, "", 0, true, true); strings.Contains(out, "\x1b") {
+		t.Errorf("an unsafe URL reached the output: %q", out)
+	}
+	if urls := StatusTableURLs([]ChangeTopology{row}); len(urls) != 0 {
+		t.Errorf("an unsafe URL was listed: %q", urls)
+	}
+}
+
+// Repository names are case-insensitive: the same issue spelt two ways is one
+// issue, and rows of one repository do not look like several.
+func TestRepositoryCaseDoesNotMatter(t *testing.T) {
+	row := tableRow("42", "x", &ChangeRequest{Number: 7, State: "open", Closes: []string{"42"}, ClosesRefs: []string{"acme/portal#42"}})
+	row.Repo = "Acme/Portal"
+	row.Issue.Provider = "github:Acme/Portal"
+	if got := StatusTableRows([]ChangeTopology{row}, "", true)[0][0]; got != "#42" {
+		t.Errorf("issue cell = %q, want #42", got)
+	}
+	a, b := tableRow("1", "a", nil), tableRow("2", "b", nil)
+	a.Repo, b.Repo = "Acme/Portal", "acme/portal"
+	if manyRepos([]ChangeTopology{a, b}) {
+		t.Error("one repository in two spellings counted as two")
+	}
+	set := ChangeRequestSet{Repo: "Acme/Portal", Requests: []ChangeRequest{{Number: 3, State: "open", Closes: []string{"9"}}, {Number: 4, State: "open", ClosesRefs: []string{"acme/portal#8"}}}}
+	if cr := set.ForIssue("acme/portal", "9"); cr == nil || cr.Number != 3 {
+		t.Errorf("ForIssue by bare number = %+v", cr)
+	}
+	if cr := set.ForIssue("Acme/Portal", "8"); cr == nil || cr.Number != 4 {
+		t.Errorf("ForIssue by ref = %+v", cr)
+	}
+}
+
+// me/api#3 and org/api#3 would both read "api#3": the labels name the owner.
+func TestClashingShortRepoNamesStayDistinct(t *testing.T) {
+	row := tableRow("3", "x", &ChangeRequest{Number: 7, State: "open", URL: "https://github.com/me/api/pull/7",
+		Closes: []string{"3"}, ClosesRefs: []string{"org/api#3"}})
+	row.Repo = "me/api"
+	row.Issue.Provider = "github:me/api"
+	row.Issue.URL = "https://github.com/me/api/issues/3"
+	cell := StatusTableRows([]ChangeTopology{row}, "", true)[0][0]
+	if cell != "#3 + org/api#3" {
+		t.Errorf("issue cell = %q, want the other repository's owner named", cell)
+	}
+	// Two foreign repositories that share a short name clash with each other.
+	row.PR.ClosesRefs = []string{"org/api#3", "x/api#3"}
+	row.PR.Closes = []string{"3", "3"}
+	if got := StatusTableRows([]ChangeTopology{row}, "", true)[0][0]; got != "#3 + org/api#3 + x/api#3" {
+		t.Errorf("issue cell = %q", got)
+	}
+	row.PR.ClosesRefs, row.PR.Closes = []string{"org/api#3"}, []string{"3"}
+	linked := RenderStatusTable([]ChangeTopology{row}, "", 0, true, true)
+	if strings.Count(linked, oscOpen+"https://github.com/me/api/issues/3") != 1 || strings.Count(linked, oscOpen+"https://github.com/org/api/issues/3") != 1 {
+		t.Errorf("each issue should link once to its own page:\n%q", linked)
+	}
+}
+
+func TestRelatedUnresolvedListsRowlessItems(t *testing.T) {
+	cur := tableRow("1", "cur", nil)
+	rel := &RelatedWork{Linked: []RelatedItem{{Key: "acme/x#9"}, {Key: RowKey(cur), Row: &cur}}, Blocks: []RelatedItem{{Key: "acme/x#9"}}}
+	if got := rel.Unresolved(); len(got) != 1 || got[0] != "acme/x#9" {
+		t.Errorf("unresolved = %v", got)
+	}
+	if (*RelatedWork)(nil).Unresolved() != nil {
+		t.Error("nil related has unresolved items")
 	}
 }

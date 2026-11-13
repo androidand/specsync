@@ -261,3 +261,26 @@ func rowDone(r ChangeTopology) bool {
 	}
 	return r.Tasks != nil && r.Tasks.Total > 0 && r.Tasks.Done == r.Tasks.Total
 }
+
+// Unresolved lists the related items no row was found for, as keys: work the
+// current work is said to relate to but the workspace has no clone or change of.
+func (r *RelatedWork) Unresolved() []string {
+	if r == nil {
+		return nil
+	}
+	var out []string
+	add := func(items []RelatedItem) {
+		for _, it := range items {
+			if it.Row == nil {
+				out = append(out, it.Key)
+			}
+		}
+	}
+	if r.Epic != nil {
+		add(r.Epic.Items)
+	}
+	add(r.BlockedBy)
+	add(r.Blocks)
+	add(r.Linked)
+	return sortedUnique(out)
+}

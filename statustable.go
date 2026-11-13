@@ -69,8 +69,8 @@ func statusTableLinks(rows []ChangeTopology) []rowLinks {
 	out := make([]rowLinks, len(rows))
 	for i, r := range rows {
 		out[i].Issues = issueLinks(r, many)
-		if r.PR != nil && r.PR.URL != "" {
-			out[i].PR = &tableLink{Label: fmt.Sprintf("#%d", r.PR.Number), URL: r.PR.URL, Kind: "PR",
+		if r.PR != nil && safeURL(r.PR.URL) != "" {
+			out[i].PR = &tableLink{Label: fmt.Sprintf("#%d", r.PR.Number), URL: safeURL(r.PR.URL), Kind: "PR",
 				Num: strconv.Itoa(r.PR.Number), Repo: shortRepo(r.Repo), ShowRepo: many}
 		}
 	}
@@ -93,7 +93,7 @@ func StatusTableURLs(rows []ChangeTopology) []string {
 		if l.ShowRepo && l.Repo != "" {
 			label = l.Repo + " " + label
 		}
-		labels, urls = append(labels, label), append(urls, l.URL)
+		labels, urls = append(labels, plainCell(label)), append(urls, l.URL)
 	}
 	for _, rl := range statusTableLinks(rows) {
 		for _, l := range rl.Issues {
@@ -118,20 +118,29 @@ func StatusTableURLs(rows []ChangeTopology) []string {
 
 // plainCell makes text safe for one table line: tracker-supplied titles and
 // names may hold newlines or terminal escape sequences, which would break the
-// grid or drive the terminal. Control characters become spaces.
-func plainCell(s string) string {
-	return strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) {
-			return ' '
+// grid or drive the terminal. It is SanitizeText: control characters are
+// dropped and whitespace runs become one space.
+func plainCell(s string) string { return SanitizeText(s, 1<<20) }
+
+// safeURL returns u when it is an http(s) URL made of printable characters,
+// else "": a URL goes unquoted into a terminal escape, so one holding ESC, BEL
+// or other control characters could end the escape early and run the rest.
+func safeURL(u string) string {
+	if !strings.HasPrefix(u, "https://") && !strings.HasPrefix(u, "http://") {
+		return ""
+	}
+	for _, r := range u {
+		if unicode.IsControl(r) || unicode.IsSpace(r) {
+			return ""
 		}
-		return r
-	}, s)
+	}
+	return u
 }
 
 func manyRepos(rows []ChangeTopology) bool {
 	repos := map[string]bool{}
 	for _, r := range rows {
-		repos[r.Repo] = true
+		repos[strings.ToLower(r.Repo)] = true // repository names are case-insensitive
 	}
 	return len(repos) > 1
 }
@@ -202,7 +211,21 @@ func issueLinks(r ChangeTopology, many bool) []tableLink {
 		if (many || other) && f.repo != "" {
 			label = shortRepo(f.repo) + label
 		}
-		out[i] = tableLink{Label: label, URL: f.url, Kind: "issue", Num: f.id, Repo: shortRepo(f.repo), ShowRepo: many || other}
+		out[i] = tableLink{Label: label, URL: safeURL(f.url), Kind: "issue", Num: f.id, Repo: shortRepo(f.repo), ShowRepo: many || other}
+	}
+	// Two repositories can share a short name ("me/api", "org/api"): then the
+	// labels that clash name the owner too, so they stay distinct.
+	count := map[string]int{}
+	for _, l := range out {
+		count[l.Label]++
+	}
+	for i, f := range found {
+		other := f.repo != "" && !strings.EqualFold(f.repo, r.Repo)
+		sameShortName := other && strings.EqualFold(shortRepo(f.repo), shortRepo(r.Repo))
+		if (count[out[i].Label] > 1 || sameShortName) && f.repo != "" {
+			out[i].Label = f.repo + "#" + f.id
+			out[i].Repo = f.repo
+		}
 	}
 	return out
 }
@@ -257,6 +280,8 @@ func tableState(r ChangeTopology) string {
 		state := "Local"
 		if l := r.Local; l != nil {
 			switch {
+			case l.StatusUnavailable: // git status failed, so the counts below mean nothing
+				state += ", state unknown"
 			case l.Modified+l.Untracked > 0:
 				state += ", uncommitted"
 			case l.Ahead > 0:
@@ -265,8 +290,6 @@ func tableState(r ChangeTopology) string {
 				state += ", not pushed"
 			case l.UpstreamGone:
 				state += ", upstream gone"
-			case l.StatusUnavailable:
-				state += ", state unknown"
 			default:
 				state += ", clean"
 			}
@@ -349,6 +372,8 @@ func tableReview(pr *ChangeRequest) string {
 			parts = append(parts, "Changes requested")
 		case len(approved) > 0:
 			parts = append(parts, "Approved")
+		case len(pr.ReviewRequests) == 0 && !pr.ReviewersKnown:
+			parts = append(parts, "Unknown") // reviewers were not fetched
 		case len(pr.ReviewRequests) == 0:
 			parts = append(parts, "No review")
 		}

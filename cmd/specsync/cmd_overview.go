@@ -71,6 +71,9 @@ func (cm *overviewCmd) Run(_ context.Context, args []string) error {
 	if *cm.urls && !*cm.table {
 		return fmt.Errorf("-urls needs -table")
 	}
+	if *cm.table && *cm.asJSON {
+		return fmt.Errorf("-table and -json can't be combined")
+	}
 	if !validState(*cm.state) {
 		return fmt.Errorf("-state must be on, fresh or off, got %q", *cm.state)
 	}
@@ -89,6 +92,7 @@ func (cm *overviewCmd) Run(_ context.Context, args []string) error {
 			LocalOnly:       *cm.state == "off",
 			Cache:           requestCache(),
 			RefreshRequests: *cm.state == "fresh",
+			Reviewers:       *cm.table || *cm.asJSON,
 			Budget:          *cm.budget,
 			Exclude:         cm.exclude,
 		},
@@ -113,7 +117,7 @@ func (cm *overviewCmd) Run(_ context.Context, args []string) error {
 		}
 		rows = append(rows, ov.NoEpic...)
 		rows = append(rows, ov.Unlinked...)
-		printStatusTable(rows, "", ov.Status, ov.RequestState, *cm.urls)
+		printStatusTable(rows, "", ov.Status, ov.RequestState, *cm.urls, nil)
 		return nil
 	}
 	printOverview(ov)

@@ -80,6 +80,9 @@ func (cm *statusCmd) run(args []string) {
 	if *cm.urls && !*cm.table {
 		fail(fmt.Errorf("-urls needs -table"))
 	}
+	if *cm.table && *asJSON {
+		fail(fmt.Errorf("-table and -json can't be combined"))
+	}
 	if !validState(*state) {
 		fail(fmt.Errorf("-state must be on, fresh or off, got %q", *state))
 	}
@@ -103,6 +106,7 @@ func (cm *statusCmd) run(args []string) {
 		LocalOnly:       *state == "off",
 		Cache:           requestCache(),
 		RefreshRequests: *state == "fresh",
+		Reviewers:       *cm.table || *asJSON,
 		Budget:          *cm.budget,
 		Exclude:         cm.exclude,
 	})
@@ -119,7 +123,7 @@ func (cm *statusCmd) run(args []string) {
 
 	var related *specsync.RelatedWork
 	if current && len(topo.Changes) == 1 && hasRelations(topo.Changes[0]) {
-		related = relatedWork(ctx, topo.Changes[0], *state)
+		related = relatedWork(ctx, topo.Changes[0], *state, *cm.table || *asJSON)
 	}
 
 	switch {
@@ -133,7 +137,7 @@ func (cm *statusCmd) run(args []string) {
 		if current && len(topo.Changes) == 1 {
 			rows, key = specsync.RelatedRows(topo.Changes[0], related), specsync.RowKey(topo.Changes[0])
 		}
-		printStatusTable(rows, key, topo.Status, topo.RequestState, *cm.urls)
+		printStatusTable(rows, key, topo.Status, topo.RequestState, *cm.urls, related)
 	case current && len(topo.Changes) == 1:
 		printCurrentStatus(topo.Changes[0], topo.RequestState == "ok")
 		printRelated(related)
@@ -418,12 +422,13 @@ func hasRelations(row specsync.ChangeTopology) bool {
 
 // relatedWork finds what relates to the current work across the workspace.
 // Sources that fail are carried as reasons, never hidden.
-func relatedWork(ctx context.Context, current specsync.ChangeTopology, state string) *specsync.RelatedWork {
+func relatedWork(ctx context.Context, current specsync.ChangeTopology, state string, reviewers bool) *specsync.RelatedWork {
 	work, err := specsync.CollectWorkRows(ctx, specsync.OverviewOptions{
 		Topology: specsync.TopologyOptions{
 			LocalOnly:       state == "off",
 			Cache:           requestCache(),
 			RefreshRequests: state == "fresh",
+			Reviewers:       reviewers,
 		},
 	})
 	if err != nil {
@@ -519,7 +524,7 @@ func tableWidth() int {
 
 // printStatusTable prints rows as the status table, then why anything is
 // missing. requestState "ok" is the only state in which "Not opened" is known.
-func printStatusTable(rows []specsync.ChangeTopology, current string, status []string, requestState string, urls bool) {
+func printStatusTable(rows []specsync.ChangeTopology, current string, status []string, requestState string, urls bool, related *specsync.RelatedWork) {
 	if len(rows) == 0 {
 		fmt.Println("No work resolved.")
 	} else {
@@ -532,6 +537,14 @@ func printStatusTable(rows []specsync.ChangeTopology, current string, status []s
 	}
 	if requestState != "" && requestState != "ok" {
 		fmt.Printf("status: pull requests were not looked up (%s), so \"Not opened\" may be wrong\n", requestState)
+	}
+	if related != nil {
+		for _, reason := range related.Incomplete {
+			fmt.Println("incomplete:", reason)
+		}
+		for _, key := range related.Unresolved() {
+			fmt.Printf("status: %s is related but was not found in the workspace, so it has no row\n", key)
+		}
 	}
 	for _, s := range status {
 		fmt.Println("status:", s)

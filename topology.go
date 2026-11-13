@@ -144,6 +144,10 @@ type TopologyOptions struct {
 	// RefreshRequests skips reading it (the fresh listing is still stored).
 	Cache           RequestCache
 	RefreshRequests bool
+	// Reviewers asks for who is asked to review each open request and each
+	// reviewer's verdict. It costs one more provider call per repository, so
+	// only the table and JSON output ask for it.
+	Reviewers bool
 
 	// changeRequests lists one repo's requests. nil set means the provider
 	// cannot list them, which is silent. The default asks the GitHub provider.
@@ -210,6 +214,9 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 			set, err := src.ChangeRequests(ctx)
 			if err != nil {
 				return nil, err
+			}
+			if gh, ok := src.(*GitHubProvider); ok && opts.Reviewers {
+				set = gh.WithReviewers(ctx, set)
 			}
 			return &set, nil
 		}
@@ -356,7 +363,7 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 		var got *ChangeRequestSet
 		var err error
 		if opts.Cache != nil && !opts.RefreshRequests {
-			if cached, ok := opts.Cache.Get(repo); ok {
+			if cached, ok := opts.Cache.Get(repo); ok && (cached.Reviewers || !opts.Reviewers) {
 				got = &cached
 			}
 		}

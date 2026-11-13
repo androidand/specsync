@@ -33,6 +33,9 @@ type ChangeRequest struct {
 	// UnresolvedThreads is the count of unresolved review threads on an open
 	// request. nil means the provider did not say, which is not the same as 0.
 	UnresolvedThreads *int `json:"unresolvedThreads,omitempty"`
+	// ReviewersKnown is true when ReviewRequests and Reviews were fetched for
+	// this request; without it, their being empty says nothing.
+	ReviewersKnown bool `json:"reviewersKnown,omitempty"`
 	// ReviewRequests are the people and teams still asked to review, sorted.
 	ReviewRequests []string `json:"reviewRequests,omitempty"`
 	// Reviews are each reviewer's latest verdict, sorted by reviewer.
@@ -69,6 +72,8 @@ type ChangeRequestSet struct {
 	Truncated bool
 	// Repo is the repository the listing came from.
 	Repo string
+	// Reviewers is true when the open requests carry reviewer data.
+	Reviewers bool
 }
 
 // ChangeRequestSource is an optional provider capability: list a repo's
@@ -197,10 +202,10 @@ func (s ChangeRequestSet) ForIssue(issueRepo, id string) *ChangeRequest {
 			continue
 		}
 		if len(c.ClosesRefs) > 0 {
-			if !containsString(c.ClosesRefs, issueRepo+"#"+id) {
+			if !containsRefFold(c.ClosesRefs, issueRepo+"#"+id) {
 				continue
 			}
-		} else if s.Repo != issueRepo || !containsString(c.Closes, id) {
+		} else if !strings.EqualFold(s.Repo, issueRepo) || !containsString(c.Closes, id) {
 			continue
 		}
 		switch {
@@ -219,4 +224,15 @@ func (s ChangeRequestSet) ForIssue(issueRepo, id string) *ChangeRequest {
 // number, such as "#42", "Closes #42" or "Part of #42".
 func PRBodyReferencesIssue(body, issueNum string) bool {
 	return strings.Contains(body, "#"+issueNum)
+}
+
+// containsRefFold reports whether refs holds ref, ignoring the case of the
+// repository name (GitHub treats owner/repo case-insensitively).
+func containsRefFold(refs []string, ref string) bool {
+	for _, r := range refs {
+		if strings.EqualFold(r, ref) {
+			return true
+		}
+	}
+	return false
 }

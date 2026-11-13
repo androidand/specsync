@@ -12,7 +12,7 @@ var updateStatusTableGolden = flag.Bool("update-status-table", false, "rewrite t
 // goldenRows is one row per state the table has to tell apart.
 func goldenRows() []ChangeTopology {
 	pr := func(n int, mod func(*ChangeRequest)) *ChangeRequest {
-		c := &ChangeRequest{Number: n, State: "open", Mergeable: "mergeable", Checks: ChangeRequestChecks{Pass: 18},
+		c := &ChangeRequest{Number: n, State: "open", ReviewersKnown: true, Mergeable: "mergeable", Checks: ChangeRequestChecks{Pass: 18},
 			Size: ChangeRequestSize{Files: 4, Additions: 50, Deletions: 6}}
 		mod(c)
 		return c

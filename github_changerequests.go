@@ -53,18 +53,7 @@ type ghChangeRequest struct {
 			} `json:"owner"`
 		} `json:"repository"`
 	} `json:"closingIssuesReferences"`
-	Checks         []ghCheck `json:"statusCheckRollup"`
-	ReviewRequests []struct {
-		Login string `json:"login"`
-		Slug  string `json:"slug"`
-		Name  string `json:"name"`
-	} `json:"reviewRequests"`
-	LatestReviews []struct {
-		Author struct {
-			Login string `json:"login"`
-		} `json:"author"`
-		State string `json:"state"`
-	} `json:"latestReviews"`
+	Checks []ghCheck `json:"statusCheckRollup"`
 }
 
 // ChangeRequests lists the repo's pull requests, all states, with one gh call.
@@ -103,7 +92,7 @@ func (p *GitHubProvider) listChangeRequests(ctx context.Context, state string, l
 	args := append([]string{"pr", "list"}, p.repoFlag()...)
 	args = append(args, "--state", state, "--limit", strconv.Itoa(limit), "--json",
 		"number,url,title,state,isDraft,headRefName,headRefOid,author,isCrossRepository,baseRefName,reviewDecision,mergeable,"+
-			"additions,deletions,changedFiles,closingIssuesReferences,statusCheckRollup,reviewRequests,latestReviews")
+			"additions,deletions,changedFiles,closingIssuesReferences,statusCheckRollup")
 	out, err := p.run(ctx, args...)
 	if err != nil {
 		return nil, err
@@ -221,24 +210,6 @@ func (r ghChangeRequest) toChangeRequest() ChangeRequest {
 		}
 	}
 	cr.Checks.Failing = sortedUnique(failing)
-	var asked []string
-	for _, q := range r.ReviewRequests {
-		switch {
-		case q.Login != "":
-			asked = append(asked, q.Login)
-		case q.Slug != "":
-			asked = append(asked, "team:"+q.Slug)
-		case q.Name != "":
-			asked = append(asked, "team:"+q.Name)
-		}
-	}
-	cr.ReviewRequests = sortedUnique(asked)
-	for _, v := range r.LatestReviews {
-		if v.Author.Login != "" {
-			cr.Reviews = append(cr.Reviews, ChangeRequestReview{Reviewer: v.Author.Login, State: strings.ToLower(v.State)})
-		}
-	}
-	sort.Slice(cr.Reviews, func(i, j int) bool { return cr.Reviews[i].Reviewer < cr.Reviews[j].Reviewer })
 	return cr
 }
 
@@ -263,4 +234,93 @@ func (c ghCheck) outcome() (name, outcome string) {
 		return c.Name, "pending"
 	}
 	return c.Name, "fail"
+}
+
+// ghReviewers is one open request's reviewer data from `gh pr list`.
+type ghReviewers struct {
+	Number         int `json:"number"`
+	ReviewRequests []struct {
+		Login string `json:"login"`
+		Slug  string `json:"slug"`
+		Name  string `json:"name"`
+	} `json:"reviewRequests"`
+	Reviews []struct {
+		Author struct {
+			Login string `json:"login"`
+		} `json:"author"`
+		State       string `json:"state"`
+		SubmittedAt string `json:"submittedAt"`
+	} `json:"reviews"`
+}
+
+// WithReviewers fills in who is asked to review each open request and each
+// reviewer's standing verdict, with one extra gh call limited to open requests.
+// The listing carries `latestReviews`, but that keeps a reviewer's latest
+// review of any kind, so a comment written after an approval would hide it;
+// here each reviewer's latest approval, change request or dismissal stands and
+// comments are ignored. A failed call leaves the requests as they were, with
+// ReviewersKnown false, rather than claiming nobody reviewed.
+func (p *GitHubProvider) WithReviewers(ctx context.Context, set ChangeRequestSet) ChangeRequestSet {
+	limit := p.changeRequestLimit
+	if limit == 0 {
+		limit = defaultChangeRequestLimit
+	}
+	args := append([]string{"pr", "list"}, p.repoFlag()...)
+	args = append(args, "--state", "open", "--limit", strconv.Itoa(limit), "--json", "number,reviewRequests,reviews")
+	out, err := p.run(ctx, args...)
+	if err != nil {
+		return set
+	}
+	var raw []ghReviewers
+	if err := json.Unmarshal([]byte(out), &raw); err != nil {
+		return set
+	}
+	by := map[int]ghReviewers{}
+	for _, r := range raw {
+		by[r.Number] = r
+	}
+	reqs := make([]ChangeRequest, len(set.Requests))
+	copy(reqs, set.Requests)
+	for i := range reqs {
+		r, ok := by[reqs[i].Number]
+		if !ok || reqs[i].State != "open" {
+			continue
+		}
+		reqs[i].ReviewersKnown = true
+		reqs[i].ReviewRequests, reqs[i].Reviews = r.standing()
+	}
+	set.Requests = reqs
+	set.Reviewers = true
+	return set
+}
+
+// standing is who is asked to review and each reviewer's latest opinionated review.
+func (r ghReviewers) standing() (asked []string, reviews []ChangeRequestReview) {
+	for _, q := range r.ReviewRequests {
+		switch {
+		case q.Login != "":
+			asked = append(asked, q.Login)
+		case q.Slug != "":
+			asked = append(asked, "team:"+q.Slug)
+		case q.Name != "":
+			asked = append(asked, "team:"+q.Name)
+		}
+	}
+	asked = sortedUnique(asked)
+	type verdict struct{ state, at string }
+	latest := map[string]verdict{}
+	for _, v := range r.Reviews {
+		state := strings.ToLower(v.State)
+		if v.Author.Login == "" || (state != "approved" && state != "changes_requested" && state != "dismissed") {
+			continue
+		}
+		if have, ok := latest[v.Author.Login]; !ok || v.SubmittedAt >= have.at {
+			latest[v.Author.Login] = verdict{state, v.SubmittedAt}
+		}
+	}
+	for who, v := range latest {
+		reviews = append(reviews, ChangeRequestReview{Reviewer: who, State: v.state})
+	}
+	sort.Slice(reviews, func(i, j int) bool { return reviews[i].Reviewer < reviews[j].Reviewer })
+	return asked, reviews
 }

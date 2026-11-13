@@ -42,6 +42,7 @@ func DefaultRequestCache() *FileRequestCache {
 type requestCacheFile struct {
 	FetchedAt time.Time       `json:"fetchedAt"`
 	Truncated bool            `json:"truncated,omitempty"`
+	Reviewers bool            `json:"reviewers,omitempty"`
 	Requests  []ChangeRequest `json:"requests"`
 }
 
@@ -71,12 +72,12 @@ func (c *FileRequestCache) Get(repo string) (ChangeRequestSet, bool) {
 	if age := c.clock().Sub(f.FetchedAt); age < 0 || age > c.TTL {
 		return ChangeRequestSet{}, false
 	}
-	return ChangeRequestSet{Requests: f.Requests, Truncated: f.Truncated}, true
+	return ChangeRequestSet{Requests: f.Requests, Truncated: f.Truncated, Reviewers: f.Reviewers}, true
 }
 
 // Put stores the listing. Failures are ignored.
 func (c *FileRequestCache) Put(repo string, set ChangeRequestSet) {
-	b, err := json.Marshal(requestCacheFile{FetchedAt: c.clock(), Truncated: set.Truncated, Requests: set.Requests})
+	b, err := json.Marshal(requestCacheFile{FetchedAt: c.clock(), Truncated: set.Truncated, Reviewers: set.Reviewers, Requests: set.Requests})
 	if err != nil || os.MkdirAll(c.Dir, 0o700) != nil {
 		return
 	}
