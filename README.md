@@ -72,8 +72,9 @@ Run it from a repo that has an `openspec/` directory (no OpenSpec yet? see
 `gh` authenticated for that repo's `origin` (`gh auth login` if `gh auth
 status` fails).
 
-**Always `-dry-run` first** in a new repo — it makes zero API calls and never
-touches local state:
+**Always `-dry-run` first** in a new repo — it writes nothing (it only reads issues, to tell a create from an
+update and to list open issues a new one might duplicate) and never touches
+local state:
 
 ```bash
 specsync -dry-run            # preview the gh commands + rendered issue bodies (safe)
@@ -180,7 +181,7 @@ changes, only syncs them):
 
 ```bash
 cd your-repo                    # has openspec/ and a gh-authenticated origin
-specsync -dry-run -change dark-mode   # preview: no API calls, no local state touched
+specsync -dry-run -change dark-mode   # preview: no writes, no local state touched
 specsync -change dark-mode            # specsync: 1 created, 0 updated
 ```
 

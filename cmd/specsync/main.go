@@ -661,7 +661,14 @@ func dryRunner(ctx context.Context, args ...string) (string, error) {
 
 	switch {
 	case len(args) >= 2 && args[0] == "issue" && args[1] == "list":
-		return "[]", nil // pretend no existing issue
+		// Read-only, so run it for real: a canned empty list made a dry run
+		// preview "created" for a change a real run would find and update, and
+		// left nothing to base a duplicate warning on. Offline degrades to empty.
+		out, err := exec.CommandContext(ctx, "gh", args...).Output()
+		if err != nil {
+			return "[]", nil
+		}
+		return strings.TrimSpace(string(out)), nil
 	case len(args) >= 2 && args[0] == "issue" && args[1] == "create":
 		return "https://github.com/<owner>/<repo>/issues/0", nil
 	case len(args) >= 2 && args[0] == "issue" && args[1] == "view":

@@ -110,6 +110,7 @@ type ProviderResult struct {
 	Slug           string
 	URL            string
 	Created        bool
+	PriorArt       []PriorArtMatch // open issues that may already cover a created change
 	Flips          []TaskFlip
 	Error          error
 	ClosedDeferred string // reason specsync left the item's closed state alone
@@ -117,10 +118,11 @@ type ProviderResult struct {
 
 // ItemResult records the outcome for one change.
 type ItemResult struct {
-	Slug    string
-	URL     string
-	Created bool
-	Flips   []TaskFlip // task states merged in from the issue (reconcile)
+	Slug     string
+	URL      string
+	Created  bool
+	PriorArt []PriorArtMatch // open issues that may already cover a created change
+	Flips    []TaskFlip      // task states merged in from the issue (reconcile)
 	// TitleSuggestion is a tighter variant of the change's title, set only
 	// when shortenTitle would modify it. Sync always pushes the proposal H1
 	// verbatim — the title is the author's content, not specsync's to edit —
@@ -189,6 +191,7 @@ func Sync(ctx context.Context, opts Options) (Result, error) {
 		var allFlips []TaskFlip
 		var firstRef Ref
 		var firstCreated bool
+		var firstPriorArt []PriorArtMatch
 		var firstClosedDeferred string
 		var boardPlan BoardPlan
 		providerResults := make([]ProviderResult, 0, len(providers))
@@ -271,6 +274,16 @@ func Sync(ctx context.Context, opts Options) (Result, error) {
 					}
 				}
 			}
+			// Before a create, look for open issues that may already cover this.
+			// Advisory: any failure leaves the sync untouched.
+			var priorArt []PriorArtMatch
+			if existingPtr == nil {
+				if lister, ok := prov.(PriorArtLister); ok {
+					if open, lerr := lister.OpenIssues(ctx); lerr == nil {
+						priorArt = RankPriorArt(c.Title, open, 3)
+					}
+				}
+			}
 			ref, perr := prov.Push(ctx, item, existingPtr)
 			if perr != nil {
 				providerResults = append(providerResults, ProviderResult{
@@ -281,10 +294,15 @@ func Sync(ctx context.Context, opts Options) (Result, error) {
 				continue
 			}
 
-			created := !hadRef
+			// Push may adopt an issue it finds by marker; that is an update.
+			created := existingPtr == nil && !ref.Adopted
+			if !created {
+				priorArt = nil
+			}
 			if firstRef.URL == "" {
 				firstRef = ref
 				firstCreated = created
+				firstPriorArt = priorArt
 				firstClosedDeferred = ref.ClosedDeferred
 			}
 
@@ -329,6 +347,7 @@ func Sync(ctx context.Context, opts Options) (Result, error) {
 				Slug:           c.Slug,
 				URL:            ref.URL,
 				Created:        created,
+				PriorArt:       priorArt,
 				ClosedDeferred: ref.ClosedDeferred,
 			})
 
@@ -386,6 +405,7 @@ func Sync(ctx context.Context, opts Options) (Result, error) {
 			Slug:            c.Slug,
 			URL:             firstRef.URL,
 			Created:         firstCreated,
+			PriorArt:        firstPriorArt,
 			Flips:           allFlips,
 			TitleSuggestion: suggestion,
 			BoardConfigured: opts.Project.Configured(),

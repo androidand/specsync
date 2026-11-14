@@ -104,6 +104,11 @@ type Ref struct {
 	// external close (e.g., "externally closed by merged PR", "never asserted").
 	// It is not persisted to the ref cache — only a transient notification.
 	ClosedDeferred string `json:"-"`
+
+	// Adopted is set when Push found an existing item by its identity marker
+	// instead of creating one, so a run with no cached ref still reports an
+	// update as an update. Transient, like ClosedDeferred.
+	Adopted bool `json:"-"`
 }
 
 // WorkProvider projects WorkItems outward. Implementations must be idempotent:
@@ -316,4 +321,11 @@ const (
 // CloseReasoner marks a provider that can close an issue with a reason.
 type CloseReasoner interface {
 	SupportsCloseReason() bool
+}
+
+// PriorArtLister is an optional provider capability: list the open items in
+// the target, so a sync that is about to create one can point at what it might
+// duplicate. Advisory only; a failure here is never worth failing a sync over.
+type PriorArtLister interface {
+	OpenIssues(ctx context.Context) ([]OpenIssue, error)
 }
