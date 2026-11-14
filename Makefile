@@ -1,10 +1,20 @@
 BIN    ?= specsync
 PREFIX ?= $(HOME)/.local/bin
 
-.PHONY: build test vet install clean sync-skill
+# Version stamped into the binary: the nearest tag plus distance and commit
+# (0.15.0, or 0.15.0-3-gabc1234, with -dirty for local edits). No --always:
+# without a tag the stamp is empty and the binary stays "dev" rather than
+# reporting a bare commit id. Override with VERSION=x.y.z.
+VERSION ?= $(shell git describe --tags --dirty 2>/dev/null | sed 's/^v//')
+LDFLAGS := $(if $(VERSION),-X main.version=$(VERSION))
+
+.PHONY: build test vet install clean sync-skill version
 
 build:
-	go build -o $(BIN) ./cmd/specsync
+	go build -ldflags "$(LDFLAGS)" -o $(BIN) ./cmd/specsync
+
+version:
+	@echo $(VERSION)
 
 test:
 	go test ./...

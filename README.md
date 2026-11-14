@@ -1014,7 +1014,7 @@ restores the bundled copy over local edits.
 ### `version`
 
 `specsync version` (also `-version` / `--version`) prints the binary version.
-Release builds stamp the real version; source builds print `dev` and the VCS revision.
+Release builds stamp the real version. `make build` and `make install` stamp one from `git describe` (for example `0.15.0-3-gabc1234`; override with `VERSION=`). A plain `go build` prints `dev` and the VCS revision.
 
 ## OpenSpec Workflow (Teams)
 
