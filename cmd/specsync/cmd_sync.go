@@ -133,7 +133,7 @@ func (cm *syncCmd) run(args []string) {
 	var providers []specsync.WorkProvider
 	if len(targetRepos) > 0 && len(providerNames) == 0 {
 		if *dryRun {
-			fmt.Printf("DRY RUN — no github calls are made\n")
+			fmt.Printf("DRY RUN — nothing is written (issues are only read, to tell a create from an update)\n")
 		}
 		for _, tr := range targetRepos {
 			providers = append(providers, makeProvider(tr, *dryRun, "github", *mcpConfig))
@@ -272,7 +272,7 @@ func (cm *syncCmd) run(args []string) {
 		fail(err)
 	}
 	if *dryRun && *reconcile {
-		fmt.Println("(reconcile applies on a real sync — dry-run makes no issue reads)")
+		fmt.Println("(reconcile applies on a real sync — it merges task state from the issue)")
 	}
 	fmt.Println()
 	sliceFailed := false
@@ -285,11 +285,16 @@ func (cm *syncCmd) run(args []string) {
 					failed = append(failed, fmt.Sprintf("%s [%s]: %v", pr.Slug, pr.ProviderName, pr.Error))
 					continue
 				}
-				verb := "updated"
-				if pr.Created {
-					verb = "created"
+				if pr.Created && *dryRun {
+					fmt.Printf("  %-8s no issue exists yet  [%s] (%s)\n", "NEW", pr.ProviderName, pr.Slug)
+				} else {
+					verb := "updated"
+					if pr.Created {
+						verb = "created"
+					}
+					fmt.Printf("  %-8s %s  [%s] (%s)\n", verb, pr.URL, pr.ProviderName, pr.Slug)
 				}
-				fmt.Printf("  %-8s %s  [%s] (%s)\n", verb, pr.URL, pr.ProviderName, pr.Slug)
+				printPriorArt(pr.PriorArt, pr.Slug, *dryRun)
 				if pr.ClosedDeferred != "" {
 					fmt.Printf("               • closed state left unchanged (%s)\n", pr.ClosedDeferred)
 				}
@@ -303,11 +308,16 @@ func (cm *syncCmd) run(args []string) {
 				fmt.Printf("           ↳ reconciled: %s → %s\n", f.Text, state)
 			}
 		} else {
-			verb := "updated"
-			if it.Created {
-				verb = "created"
+			if it.Created && *dryRun {
+				fmt.Printf("  %-8s no issue exists yet  (%s)\n", "NEW", it.Slug)
+			} else {
+				verb := "updated"
+				if it.Created {
+					verb = "created"
+				}
+				fmt.Printf("  %-8s %s  (%s)\n", verb, it.URL, it.Slug)
 			}
-			fmt.Printf("  %-8s %s  (%s)\n", verb, it.URL, it.Slug)
+			printPriorArt(it.PriorArt, it.Slug, *dryRun)
 			for _, f := range it.Flips {
 				state := "unchecked"
 				if f.Checked {
@@ -337,6 +347,9 @@ func (cm *syncCmd) run(args []string) {
 		}
 	}
 	summary := fmt.Sprintf("specsync: %d created, %d updated", res.Created, res.Updated)
+	if *dryRun {
+		summary = fmt.Sprintf("specsync: %d would be created as new issues, %d updated", res.Created, res.Updated)
+	}
 	if len(failed) > 0 {
 		summary += fmt.Sprintf(", %d failed", len(failed))
 	}
@@ -352,4 +365,21 @@ func (cm *syncCmd) run(args []string) {
 		fmt.Fprintln(os.Stderr, "specsync: some slice steps failed; run again to retry them")
 		os.Exit(1)
 	}
+}
+
+// printPriorArt lists open issues a newly created (or about-to-be-created)
+// issue may duplicate, with the adopt command that binds to one instead.
+func printPriorArt(matches []specsync.PriorArtMatch, slug string, dryRun bool) {
+	if len(matches) == 0 {
+		return
+	}
+	lead := "may already cover this"
+	if !dryRun {
+		lead = "may have covered this (a new issue was opened)"
+	}
+	fmt.Printf("           %d open issue(s) %s:\n", len(matches), lead)
+	for _, m := range matches {
+		fmt.Printf("             #%d  %s  (shared: %s)\n", m.Number, m.Title, m.SharedList())
+	}
+	fmt.Printf("           → bind instead with:  specsync adopt -issue %d -change %s\n", matches[0].Number, slug)
 }

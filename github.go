@@ -410,6 +410,9 @@ func (p *GitHubProvider) Push(ctx context.Context, item WorkItem, existing *Ref)
 		if err != nil {
 			return Ref{}, err
 		}
+		if found != nil {
+			found.Adopted = true
+		}
 		existing = found
 	}
 
@@ -1097,4 +1100,19 @@ func (p *GitHubProvider) BlockedByRefs(ctx context.Context, issue Ref) ([]Ref, e
 		refs = append(refs, e.Ref)
 	}
 	return refs, nil
+}
+
+// OpenIssues lists the open issues in the target repo (capped).
+func (p *GitHubProvider) OpenIssues(ctx context.Context) ([]OpenIssue, error) {
+	args := append([]string{"issue", "list"}, p.repoFlag()...)
+	args = append(args, "--state", "open", "--json", "number,title,url", "--limit", "200")
+	out, err := p.run(ctx, args...)
+	if err != nil {
+		return nil, err
+	}
+	var issues []OpenIssue
+	if err := json.Unmarshal([]byte(out), &issues); err != nil {
+		return nil, err
+	}
+	return issues, nil
 }
