@@ -4,21 +4,21 @@ Task 1 is the bug. Tasks 4–6 are the size-limit symptom that exposed it, and a
 worth less on their own — a pre-flight check that still exits 0 when it refuses has
 not fixed anything.
 
-- [ ] 1. Exit non-zero when any change fails to sync. A bulk run that syncs 44 of 45
+- [x] 1. Exit non-zero when any change fails to sync. A bulk run that syncs 44 of 45
        must not exit 0. Reproduced 2026-08-14: `specsync -change
        host-model-management-api` printed a GraphQL error, reported
        `0 created, 0 updated`, and exited **0**.
        Validation: a test forcing one per-change failure asserts a non-zero exit;
        `specsync -change <oversized>` exits non-zero.
 
-- [ ] 2. Add a failure count to the summary — `27 created, 16 updated, 1 failed` —
+- [x] 2. Add a failure count to the summary — `27 created, 16 updated, 1 failed` —
        and list the failed slugs at the end of the run, not inline where they scroll
        past. In the original bulk run the error appeared 40 lines above a final line
        reading `27 created, 16 updated`.
        Validation: a bulk run with one failure prints the count and the slug in a
        trailing block.
 
-- [ ] 3. Decide what counts as "failed" for the exit code (Open Question 4). A
+- [x] 3. Decide what counts as "failed" for the exit code (Open Question 4). A
        notes-only directory with no `proposal.md` is skipped rather than failed —
        `muse-glimmer-30b-gguf` in llama-skein was skipped silently and sat untracked
        for months, so skips need reporting too, but conflating them with errors
@@ -26,7 +26,7 @@ not fixed anything.
        Validation: `design.md` states the taxonomy — failed vs skipped vs no-op —
        and which of them affect the exit code.
 
-- [ ] 4. Measure the rendered body before sending and refuse locally above GitHub's
+- [x] 4. Measure the rendered body before sending and refuse locally above GitHub's
        65,536-character limit. The message must name the change, the byte count, the
        limit, and the largest contributing section — `host-model-management-api` was
        71,175 bytes, of which `tasks.md` alone was 68,798.
@@ -41,7 +41,7 @@ not fixed anything.
        Validation: decisions recorded in `design.md`; `-dry-run` reports the body
        size for every change it would write.
 
-- [ ] 6. State the remedy in the refusal message rather than only the problem. An
+- [x] 6. State the remedy in the refusal message rather than only the problem. An
        oversized change is nearly always one whose `tasks.md` has accumulated
        completion evidence under finished sections. Point at
        `epic-scaffold-command` / `epic-and-subissue-projection` for the structural
@@ -53,3 +53,7 @@ not fixed anything.
        exceeds the limit is refused with an actionable message and a non-zero exit,
        and the same change after splitting syncs cleanly.
        Validation: both halves of that assertion pass in one test.
+
+Open: task 5 (`-dry-run` does not yet print the body size of every change it would
+write; it does refuse an oversized one) and the second half of task 7 (a split change
+syncing cleanly is covered only by a small change syncing alongside the refused one).
