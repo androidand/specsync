@@ -12,6 +12,8 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the changelog gate needs tags and history
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -21,7 +23,7 @@ jobs:
       - name: Enforce OpenSpec archive hygiene
         run: go run ./cmd/specsync release-plan -fail-on-archive-candidates
       - name: Enforce changelog commit linking
-        run: go run ./cmd/specsync changelog -resolve-refs
+        run: go run ./cmd/specsync changelog -resolve-refs -fail-on-unlinked-commits
       - name: Enforce task-dogfooding hygiene
         run: go run ./cmd/specsync audit-tasks -fail-on-mismatch
       - name: Validate OpenSpec change structure
