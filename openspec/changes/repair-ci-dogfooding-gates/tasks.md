@@ -1,34 +1,15 @@
 # Tasks
 
-## Fixes
+## 1. Enforce the gate
 
-- [ ] Fix YAML indentation in `.github/workflows/ci.yml` line 21
-  - [ ] Verify correct indentation matches other steps
-  - [ ] Test YAML parses correctly
+- [x] 1.1 Check out full history and tags in CI
+- [x] 1.2 Run `changelog -resolve-refs -fail-on-unlinked-commits`
 
-## Verification
+## 2. Keep it enforced
 
-- [ ] Verify all dogfooding gates work in CI
-  - [ ] build gate
-  - [ ] vet gate
-  - [ ] test gate
-  - [ ] archive-hygiene gate
-  - [ ] changelog-linking gate
-  - [ ] task-dogfooding gate
-  - [ ] structure-validation gate
+- [x] 2.1 A test fails if the flag, the full checkout, or consistent step indentation is lost
 
-- [ ] Run local test of workflow validation
-  - [ ] Try: `gh workflow view ci.yml`
-  - [ ] Try: `yamllint .github/workflows/ci.yml` (if available)
-  - [ ] Try: running the workflow manually
+## 3. Validation
 
-## Documentation
-
-- [ ] Update README if it mentions CI gates (verify they're accurate)
-- [ ] Add comment to ci.yml if helpful
-
-## Validation
-
-- [ ] `make test` passes
-- [ ] CI passes
-- [ ] No regressions
+- [x] 3.1 `go test ./...` passes
+- [ ] 3.2 CI passes on the PR (it runs the new gate on the merge ref)
