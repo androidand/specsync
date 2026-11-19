@@ -60,6 +60,10 @@ type ChangeTopology struct {
 	dir string
 	// PR is the change request on the row's branch, from the work provider.
 	PR *ChangeRequest `json:"pr,omitempty"`
+	// RequestsUnknown is true when the row's branch or issue could have a request
+	// but the lookup did not happen or failed (-state=off, no remote, a failed
+	// call), so a missing PR block means "unknown", not "none".
+	RequestsUnknown bool `json:"requestsUnknown,omitempty"`
 	// LastNote is the last line of the change's discoveries.md.
 	LastNote string `json:"lastNote,omitempty"`
 	// Sessions are the provider's sessions whose cwd is inside Worktree, most
@@ -394,6 +398,8 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 			if set := requestsFor(row.Repo); set != nil {
 				cr = set.ForBranch(row.Branch)
 				row.PR = cr
+			} else {
+				row.RequestsUnknown = true
 			}
 		}
 
@@ -509,6 +515,8 @@ func BuildTopology(ctx context.Context, opts TopologyOptions) (*Topology, error)
 		}
 		if row.Branch != "" {
 			enrich(&row)
+		} else if row.Issue != nil && requestsFor(row.Repo) == nil {
+			row.RequestsUnknown = true // a request could exist for the issue, but could not be looked up
 		}
 
 		for _, link := range c.Links {

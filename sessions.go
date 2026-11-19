@@ -180,6 +180,14 @@ const SessionsSkippedOffline = "session provider skipped with -state=off (offlin
 // maxShownText bounds any provider or repository text printed to a terminal.
 const maxShownText = 120
 
+// dropFormatRune reports format characters (Unicode Cf) that must not reach a
+// terminal: bidirectional overrides and isolates reorder a line, so a row can be
+// made to read as something else. The zero width joiners that emoji and some
+// scripts need are kept.
+func dropFormatRune(r rune) bool {
+	return unicode.Is(unicode.Cf, r) && r != 0x200D && r != 0x200C
+}
+
 // SanitizeText makes text from a provider or a repository file safe to print:
 // control and escape characters are dropped, whitespace runs collapse to one
 // space, and the result is cut to max runes.
@@ -190,7 +198,7 @@ func SanitizeText(s string, max int) string {
 		switch {
 		case unicode.IsSpace(r):
 			space = true
-		case unicode.IsControl(r):
+		case unicode.IsControl(r), dropFormatRune(r):
 		default:
 			if space && b.Len() > 0 {
 				b.WriteByte(' ')

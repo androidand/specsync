@@ -15,6 +15,7 @@ import (
 type overviewCmd struct {
 	root, epic, repo, stage, state      *string
 	mine, attention, unattached, asJSON *bool
+	table, urls                         *bool
 	budget                              *string
 	exclude                             stringSlice
 	sessions                            sessionFlags
@@ -36,6 +37,7 @@ func (*overviewCmd) Spec() Spec {
 		Examples: []string{
 			"specsync overview",
 			"specsync overview -attention",
+			"specsync overview -table",
 			"specsync overview -repo api -attention",
 			"specsync overview -epic acme/web#1 -json",
 			"specsync overview -root ~/dev -unattached",
@@ -53,6 +55,8 @@ func (cm *overviewCmd) Flags(fs *flag.FlagSet) {
 	cm.attention = fs.Bool("attention", false, "only work that needs attention")
 	cm.unattached = fs.Bool("unattached", false, "only work under no epic")
 	cm.asJSON = fs.Bool("json", false, "output as JSON")
+	cm.table = fs.Bool("table", false, "print all work as one table with checks and review state")
+	cm.urls = fs.Bool("urls", false, "with -table, list the issue and pull request URLs under the table")
 	cm.budget = fs.String("budget", "", "advisory size budget for the size flags, e.g. files=15,lines=400,commits=30 (default: each change's budget line, then $SPECSYNC_BUDGET, then built-in limits)")
 	fs.Var(&cm.exclude, "exclude", "glob of paths left out of the size counts (repeatable)")
 	cm.sessions = addSessionFlags(fs)
@@ -64,6 +68,12 @@ func (cm *overviewCmd) Run(_ context.Context, args []string) error {
 		return err
 	}
 	checkArgs(fs, args, 0)
+	if *cm.urls && !*cm.table {
+		return fmt.Errorf("-urls needs -table")
+	}
+	if *cm.table && *cm.asJSON {
+		return fmt.Errorf("-table and -json can't be combined")
+	}
 	if !validState(*cm.state) {
 		return fmt.Errorf("-state must be on, fresh or off, got %q", *cm.state)
 	}
@@ -95,8 +105,16 @@ func (cm *overviewCmd) Run(_ context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	rows := overviewRows(ov)
+	if *cm.table || *cm.asJSON {
+		ov.Status = append(ov.Status, attachReviewers(context.Background(), rows, true, *cm.state)...)
+	}
 	if *cm.asJSON {
 		emitJSON(ov)
+		return nil
+	}
+	if *cm.table {
+		printStatusTable(rows, "", ov.Status, *cm.urls, nil)
 		return nil
 	}
 	printOverview(ov)
@@ -190,4 +208,14 @@ func printWorkRow(r specsync.ChangeTopology, indent, mark string) {
 	if r.LastNote != "" {
 		fmt.Println(sub + "note: " + r.LastNote)
 	}
+}
+
+// overviewRows is every row of an overview, in the order it prints them.
+func overviewRows(ov *specsync.Overview) []specsync.ChangeTopology {
+	var rows []specsync.ChangeTopology
+	for _, g := range ov.Epics {
+		rows = append(rows, g.Items...)
+	}
+	rows = append(rows, ov.NoEpic...)
+	return append(rows, ov.Unlinked...)
 }
