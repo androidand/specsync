@@ -177,20 +177,24 @@ func manyRepos(rows []ChangeTopology) bool {
 func shortRepo(repo string) string { return repo[strings.LastIndex(repo, "/")+1:] }
 
 // rowIssue is one issue a row stands for, in the repository that holds it.
-type rowIssue struct{ repo, id, url string }
+// closed is set only for the row's own issue, whose state the tracker reported.
+type rowIssue struct {
+	repo, id, url string
+	closed        bool
+}
 
 // rowIssues lists the issues a row stands for: its own and those its request
 // closes. An issue is the same issue only if repository and number both match.
 func rowIssues(r ChangeTopology) []rowIssue {
 	var found []rowIssue
 	seen := map[string]bool{}
-	add := func(repo, id, url string) {
+	add := func(repo, id, url string, closed bool) {
 		key := strings.ToLower(repo) + "#" + id // GitHub repository names are case-insensitive
 		if id == "" || seen[key] {
 			return
 		}
 		seen[key] = true
-		found = append(found, rowIssue{repo, id, url})
+		found = append(found, rowIssue{repo: repo, id: id, url: url, closed: closed})
 	}
 	if r.Issue != nil {
 		// The issue may live in a tracker repository other than the code's.
@@ -198,13 +202,13 @@ func rowIssues(r ChangeTopology) []rowIssue {
 		if tracker, ok := strings.CutPrefix(r.Issue.Provider, "github:"); ok && tracker != "" {
 			repo = tracker
 		}
-		add(repo, r.Issue.ID, r.Issue.URL)
+		add(repo, r.Issue.ID, r.Issue.URL, strings.EqualFold(r.Issue.State, "closed"))
 	}
 	if pr := r.PR; pr != nil {
 		var closed []rowIssue
 		for _, ref := range pr.ClosesRefs {
 			if repo, id, ok := strings.Cut(ref, "#"); ok {
-				closed = append(closed, rowIssue{repo, id, ""})
+				closed = append(closed, rowIssue{repo: repo, id: id})
 			}
 		}
 		// Closes and ClosesRefs are not index-aligned: the request names a
@@ -216,7 +220,7 @@ func rowIssues(r ChangeTopology) []rowIssue {
 		}
 		for _, id := range pr.Closes {
 			if !named[id] {
-				closed = append(closed, rowIssue{r.Repo, id, ""})
+				closed = append(closed, rowIssue{repo: r.Repo, id: id})
 			}
 		}
 		sort.SliceStable(closed, func(i, j int) bool {
@@ -231,7 +235,7 @@ func rowIssues(r ChangeTopology) []rowIssue {
 			return a < b
 		})
 		for _, c := range closed {
-			add(c.repo, c.id, issuePageURL(pr.URL, c.repo, c.id))
+			add(c.repo, c.id, issuePageURL(pr.URL, c.repo, c.id), false)
 		}
 	}
 	return found
@@ -304,6 +308,9 @@ func tableIssue(found []rowIssue, r ChangeTopology, many bool, clash map[string]
 	labels := make([]string, len(links))
 	for i, l := range links {
 		labels[i] = l.Label
+		if found[i].closed {
+			labels[i] += " closed"
+		}
 	}
 	return strings.Join(labels, " + ")
 }

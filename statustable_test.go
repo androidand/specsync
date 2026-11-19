@@ -59,6 +59,16 @@ func TestStatusTableCells(t *testing.T) {
 		})), []string{"#42", "Add thing", "#7", "Open", "all 3 pass", "Approved by ann", "4 files, +50 -6"}},
 		{"merged", tableRow("42", "Add thing", &ChangeRequest{Number: 7, State: "merged"}),
 			[]string{"#42", "Add thing", "#7", "Merged", "–", "–", "–"}},
+		{"closed issue", func() ChangeTopology {
+			r := tableRow("42", "Add thing", &ChangeRequest{Number: 7, State: "merged", Closes: []string{"9"}})
+			r.Issue.State = "CLOSED"
+			return r
+		}(), []string{"#42 closed + #9", "Add thing", "#7", "Merged", "–", "–", "–"}},
+		{"open issue stays unmarked", func() ChangeTopology {
+			r := tableRow("42", "Add thing", nil)
+			r.Issue.State = "open"
+			return r
+		}(), []string{"#42", "Add thing", "Not opened", "Local", "–", "–", "–"}},
 		{"draft", tableRow("42", "Add thing", &ChangeRequest{Number: 7, State: "open", Draft: true, ReviewersKnown: true}),
 			[]string{"#42", "Add thing", "#7", "Draft", "none", "No review", "–"}},
 		{"not opened", func() ChangeTopology {
@@ -958,5 +968,14 @@ func TestRenderStatusTableOfManyRowsIsFast(t *testing.T) {
 	}
 	if strings.Count(out, "\n") < 400 {
 		t.Error("rows are missing")
+	}
+}
+
+func TestClosedMarkerStaysOutsideTheLink(t *testing.T) {
+	r := linkedRow()
+	r.Issue.State = "closed"
+	out := RenderStatusTable([]ChangeTopology{r}, "", 0, true)
+	if !strings.Contains(out, "\x1b]8;;https://github.com/acme/portal/issues/42\x1b\\#42\x1b]8;;\x1b\\ closed") {
+		t.Errorf("closed marker not right after the linked number:\n%q", out)
 	}
 }

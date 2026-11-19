@@ -49,7 +49,11 @@ func goldenRows() []ChangeTopology {
 			r.Branch = ""
 			return r
 		}(),
-		row("8", "Already merged", &ChangeRequest{Number: 18, State: "merged", Size: ChangeRequestSize{Files: 1, Additions: 3}}),
+		func() ChangeTopology {
+			r := row("8", "Already merged", &ChangeRequest{Number: 18, State: "merged", Size: ChangeRequestSize{Files: 1, Additions: 3}})
+			r.Issue.State = "closed"
+			return r
+		}(),
 	}
 }
 
