@@ -58,11 +58,12 @@ func (cm *epicCmd) Run(_ context.Context, args []string) error {
 func (cm *epicCmd) run(args []string) {
 	fs := flagSetFor(cm)
 	openspec, storeFlag, repo, dryRun := cm.openspec, cm.storeFlag, cm.repo, cm.dryRun
-	_ = fs.Parse(args)
+	// The documented form puts the title first (`specsync epic "Title"
+	// --child a --child b`), so flags must be accepted after it.
+	positional := parseInterspersed(fs, args)
 	children := cm.children
-	checkArgs(fs, args, -1) // the title is a free-form positional
 
-	title := strings.TrimSpace(strings.Join(fs.Args(), " "))
+	title := strings.TrimSpace(strings.Join(positional, " "))
 	if title == "" {
 		fail(fmt.Errorf("epic: usage: specsync epic <title> [--repo owner/name] [--child <slug|owner/repo#N|url>]..."))
 	}

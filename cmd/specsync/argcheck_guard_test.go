@@ -17,6 +17,7 @@ import (
 var subcommandsExemptFromArgCheck = map[string]string{
 	"doctorCmd":    "reorders flags first (reorderFlagsFirst) and errors loudly on any unrecognized subcommand word — the silent-drop failure mode doesn't apply",
 	"agentHelpCmd": "reorders flags first (reorderFlagsFirst) and errors loudly on any unrecognized subcommand word — the silent-drop failure mode doesn't apply",
+	"epicCmd":      "parses flags anywhere (parseInterspersed), so no flag can be shadowed and the title is free-form text",
 }
 
 // TestEveryRunFuncChecksArgs guards against the exact way this incident's

@@ -179,7 +179,7 @@ func classifyArg(arg, openspecDir, repo string) (linkEntry, error) {
 	if len(refs) == 0 {
 		return linkEntry{}, fmt.Errorf("change %q has no synced ref; run specsync -change %s first", arg, arg)
 	}
-	_, ref := firstRef(refs)
+	_, ref := changeRef(c.Dir, refs)
 	return linkEntry{kind: kindSlug, ref: ref, slug: c.Slug, slugDir: c.Dir}, nil
 }
 
@@ -284,6 +284,20 @@ func refLabels(links []Ref) []string {
 // first (the bare "github" key is a pre-migration relic and may be stale),
 // then the bare key, then anything else. Keys are scanned in sorted order so
 // the pick is deterministic when several remain.
+// changeRef picks the ref for the change in changeDir: the first target its
+// committed specsync.yml declares that has a cached ref, else firstRef. The
+// local ref cache can hold refs for other trackers (a sync run against
+// another repo leaves one behind), and the alphabetically first one is not
+// necessarily the change's own issue.
+func changeRef(changeDir string, refs map[string]Ref) (string, Ref) {
+	for _, target := range ChangeTargets(changeDir) {
+		if r, ok := refs[target]; ok {
+			return target, r
+		}
+	}
+	return firstRef(refs)
+}
+
 func firstRef(refs map[string]Ref) (string, Ref) {
 	keys := make([]string, 0, len(refs))
 	for k := range refs {
