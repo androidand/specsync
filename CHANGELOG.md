@@ -4,6 +4,29 @@ All notable changes to this project are documented here. One entry per shipped
 OpenSpec change — see the linked issues for the full spec and discussion.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.16.0] - 2026-11-26
+
+### Added
+
+- Run `specsync gates -if-stale` in a pre-push hook to check a commit only when it has no passing stamp. (#238)
+- Unified agent skill installation to follow the Agent Skills standard. `specsync install-skill --all` now installs to `~/.claude/skills/specsync/` (Claude Code) and `~/.agents/skills/specsync/` (Codex, OpenCode, and other Agent Skills hosts). `--codex` and `--opencode` are now aliases for `--agents`. CLAUDE.md imports AGENTS.md so Claude Code receives the same canonical repository policy as other agents. Run `specsync doctor` to check your installation. (#131)
+- Choose where `start` and `pull -worktree` put worktrees with `worktrees.path`, for example `{dir}/{repo}/{name}`. (#237)
+
+### Changed
+
+- `specsync epic "Title" --child …` now works as documented, and a child slug always wires the change's own issue rather than a stray cached ref. (#247)
+- `specsync` with no command prints its commands instead of syncing; syncing every change now needs `-all`. (#235)
+- `make build` and `make install` now report the real version, such as `0.15.0-3-gabc1234`, instead of `dev`. (#232)
+
+### Fixed
+
+- release/claim must not create a phantom change directory (#207)
+- A sync that fails must fail loudly (#130)
+- CI now fails a pull request that contains a commit not linked to its change's issue. (#119)
+- Say when a sync is about to open a new issue, and what it might duplicate (#164)
+
+<!-- 4 internal commit(s) omitted (chore/docs/ci/...) -->
+
 ## [0.15.0] - 2026-11-11
 
 ### Changed
