@@ -167,25 +167,27 @@ func reorderFlagsFirst(args []string) []string {
 }
 
 // parseInterspersed parses fs from args while letting flags appear before,
-// between or after positional arguments, and returns the positionals in
-// order. Go's flag package stops at the first positional token, so for a
-// command whose documented form is `cmd <free-form text> -flag value ...`
-// (epic's title first, then its -child flags) the flags would otherwise never
-// be parsed. Unlike reorderFlagsFirst this is safe for value flags: fs.Parse
-// itself decides which tokens a flag consumes. A literal "--" ends flag
-// parsing; everything after it is positional. Because every flag is parsed,
-// callers must not run checkArgs on the raw args afterwards — it would report
-// the trailing flags as shadowed.
-func parseInterspersed(fs *flag.FlagSet, args []string) []string {
-	var positional []string
+// between or after positional arguments. It returns the positionals in order,
+// and separately the arguments after the first literal "--", which are taken
+// as text without being parsed or checked. Go's flag package stops at the
+// first positional token, so for a command whose documented form is
+// `cmd <free-form text> -flag value ...` (epic's title first, then its -child
+// flags) the flags would otherwise never be parsed. Unlike reorderFlagsFirst
+// this is safe for value flags: fs.Parse decides which tokens a flag consumes.
+// A "--" is always the terminator, never a flag value. Every flag is parsed,
+// so callers need not run checkArgs afterwards: nothing can be shadowed.
+func parseInterspersed(fs *flag.FlagSet, args []string) (positional, literal []string) {
+	for i, a := range args {
+		if a == "--" {
+			args, literal = args[:i], args[i+1:]
+			break
+		}
+	}
 	for {
 		_ = fs.Parse(args) // fs is ExitOnError: a bad flag exits here
 		rest := fs.Args()
-		if consumed := len(args) - len(rest); consumed > 0 && args[consumed-1] == "--" {
-			return append(positional, rest...)
-		}
 		if len(rest) == 0 {
-			return positional
+			return positional, literal
 		}
 		positional = append(positional, rest[0])
 		args = rest[1:]

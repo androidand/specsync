@@ -23,9 +23,11 @@ same resolution backs `specsync link`.
   parsing, so a title word may start with a dash.
 - `epic` refuses a title that contains one of its own flags. zsh does not word-split an unquoted
   `$args`, so `-child a -child b` can arrive as one argument; it used to become part of the title
-  and the epic got no children.
+  and the epic got no children. Words after `--` are taken as text without the check.
 - A change slug given to `epic` or `link` resolves to the ref for a target its `specsync.yml`
-  declares, and falls back to the old choice only when none of the declared targets has a ref.
+  declares. When none of them has a ref, a stray ref for another repo is not used: `link` reports
+  that the change has no synced ref and `epic` syncs it first. A change with no declared targets
+  keeps the old choice.
 
 ## Non-Goals
 

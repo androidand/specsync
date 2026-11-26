@@ -17,7 +17,6 @@ import (
 var subcommandsExemptFromArgCheck = map[string]string{
 	"doctorCmd":    "reorders flags first (reorderFlagsFirst) and errors loudly on any unrecognized subcommand word — the silent-drop failure mode doesn't apply",
 	"agentHelpCmd": "reorders flags first (reorderFlagsFirst) and errors loudly on any unrecognized subcommand word — the silent-drop failure mode doesn't apply",
-	"epicCmd":      "parses flags anywhere (parseInterspersed), so no flag can be shadowed and the title is free-form text",
 }
 
 // TestEveryRunFuncChecksArgs guards against the exact way this incident's
@@ -65,7 +64,7 @@ func TestEveryRunFuncChecksArgs(t *testing.T) {
 			}
 			checked++
 			if !callsCheckArgs(fn.Body) {
-				t.Errorf("%s (%s) parses a flag.FlagSet from an `args []string` parameter but never calls checkArgs after fs.Parse — call it, or add %q to subcommandsExemptFromArgCheck with a reason", name, path, name)
+				t.Errorf("%s (%s) parses a flag.FlagSet from an `args []string` parameter but never calls checkArgs after fs.Parse (or parses with parseInterspersed) — call it, or add %q to subcommandsExemptFromArgCheck with a reason", name, path, name)
 			}
 		}
 	}
@@ -88,12 +87,14 @@ func takesArgsSlice(fn *ast.FuncDecl) bool {
 	return ok && ident.Name == "string"
 }
 
-// callsCheckArgs reports whether body contains a call to checkArgs anywhere.
+// callsCheckArgs reports whether body contains a call to checkArgs anywhere,
+// or to parseInterspersed, which parses every flag wherever it appears and so
+// cannot shadow one.
 func callsCheckArgs(body ast.Node) bool {
 	found := false
 	ast.Inspect(body, func(n ast.Node) bool {
 		if call, ok := n.(*ast.CallExpr); ok {
-			if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "checkArgs" {
+			if ident, ok := call.Fun.(*ast.Ident); ok && (ident.Name == "checkArgs" || ident.Name == "parseInterspersed") {
 				found = true
 			}
 		}

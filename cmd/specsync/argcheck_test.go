@@ -199,6 +199,7 @@ func TestParseInterspersed(t *testing.T) {
 		name     string
 		args     []string
 		wantPos  []string
+		wantLit  []string
 		children []string
 		repo     string
 		dryRun   bool
@@ -225,10 +226,17 @@ func TestParseInterspersed(t *testing.T) {
 			children: []string{"a", "b"},
 		},
 		{
-			name:    "double dash keeps dash-leading words as title",
-			args:    []string{"-dry-run", "--", "-weird", "title"},
-			wantPos: []string{"-weird", "title"},
+			name:    "double dash keeps dash-leading words as literal text",
+			args:    []string{"-dry-run", "Drop", "--", "--child", "flag"},
+			wantPos: []string{"Drop"},
+			wantLit: []string{"--child", "flag"},
 			dryRun:  true,
+		},
+		{
+			name:     "-- is the terminator even where a value is expected",
+			args:     []string{"-repo", "--", "Title", "-child", "a"},
+			wantLit:  []string{"Title", "-child", "a"},
+			children: nil,
 		},
 	}
 	for _, tc := range tests {
@@ -239,9 +247,12 @@ func TestParseInterspersed(t *testing.T) {
 			repo := fs.String("repo", "", "")
 			dryRun := fs.Bool("dry-run", false, "")
 
-			got := parseInterspersed(fs, tc.args)
+			got, lit := parseInterspersed(fs, tc.args)
 			if strings.Join(got, "|") != strings.Join(tc.wantPos, "|") {
 				t.Errorf("positional = %q, want %q", got, tc.wantPos)
+			}
+			if strings.Join(lit, "|") != strings.Join(tc.wantLit, "|") {
+				t.Errorf("literal = %q, want %q", lit, tc.wantLit)
 			}
 			if strings.Join(children, "|") != strings.Join(tc.children, "|") {
 				t.Errorf("children = %q, want %q", children, tc.children)

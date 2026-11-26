@@ -410,3 +410,22 @@ func TestClassifyArgPrefersDeclaredTarget(t *testing.T) {
 		t.Errorf("slug resolved to %s, want the declared target's issue", e.ref.URL)
 	}
 }
+
+// TestClassifyArgIgnoresStrayOnlyCache: when the only cached ref belongs to
+// another repo, the slug has no ref of its own and must say so instead of
+// resolving to the stray issue.
+func TestClassifyArgIgnoresStrayOnlyCache(t *testing.T) {
+	openspecDir := filepath.Join(t.TempDir(), "openspec")
+	cdir := filepath.Join(openspecDir, "changes", "my-change")
+	os.MkdirAll(filepath.Join(cdir, ".specsync"), 0o755)
+	os.WriteFile(filepath.Join(cdir, "proposal.md"), []byte("# my-change\n\nbody\n"), 0o644)
+	os.WriteFile(filepath.Join(cdir, "tasks.md"), []byte("- [ ] task\n"), 0o644)
+	os.WriteFile(filepath.Join(cdir, "specsync.yml"), []byte("targets:\n  - github:zeta/own\n"), 0o644)
+	os.WriteFile(filepath.Join(cdir, ".specsync", "refs.json"), []byte(`{
+  "github:alpha/stray": {"provider": "github:alpha/stray", "id": "4370", "url": "https://github.com/alpha/stray/issues/4370"}
+}`), 0o644)
+
+	if e, err := classifyArg("my-change", openspecDir, ""); err == nil {
+		t.Fatalf("resolved to %s, want a no-synced-ref error", e.ref.URL)
+	}
+}

@@ -60,14 +60,14 @@ func (cm *epicCmd) run(args []string) {
 	openspec, storeFlag, repo, dryRun := cm.openspec, cm.storeFlag, cm.repo, cm.dryRun
 	// The documented form puts the title first (`specsync epic "Title"
 	// --child a --child b`), so flags must be accepted after it.
-	positional := parseInterspersed(fs, args)
+	positional, literal := parseInterspersed(fs, args)
 	children := cm.children
 	if stray := flagsInPositionals(fs, positional); len(stray) > 0 {
-		fail(fmt.Errorf("epic: the title contains flag(s) %s — they reached specsync inside one argument and were not applied; pass each flag and value as separate arguments (in zsh, build them in an array: args+=(-child $s); specsync epic \"$title\" $args)",
+		fail(fmt.Errorf("epic: the title contains flag(s) %s — they reached specsync inside one argument and were not applied; pass each flag and value as separate arguments (in zsh, build them in an array: args+=(-child $s); specsync epic \"$title\" $args), or put the title after -- if those words belong in it",
 			strings.Join(stray, ", ")))
 	}
 
-	title := strings.TrimSpace(strings.Join(positional, " "))
+	title := strings.TrimSpace(strings.Join(append(positional, literal...), " "))
 	if title == "" {
 		fail(fmt.Errorf("epic: usage: specsync epic <title> [--repo owner/name] [--child <slug|owner/repo#N|url>]..."))
 	}
