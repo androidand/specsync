@@ -5,6 +5,7 @@
 - [x] 1.1 `parseInterspersed` parses value and boolean flags anywhere and honours `--`
 - [x] 1.2 `epic` uses it; the title is every positional word joined
 - [x] 1.3 Tests cover title-first, flags-first, flags between title words, and `--`
+- [x] 1.4 A title word that is a registered flag (an unsplit shell variable such as `" -child a -child b"`) fails instead of becoming part of the title
 
 ## 2. Slug resolves to the declared target
 

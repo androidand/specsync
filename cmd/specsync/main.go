@@ -192,6 +192,32 @@ func parseInterspersed(fs *flag.FlagSet, args []string) []string {
 	}
 }
 
+// flagsInPositionals reports registered flag names that appear as words
+// inside positional arguments, e.g. the single argument " -child a -child b".
+// That shape comes from a shell that did not split a variable (zsh does not
+// word-split an unquoted $args), and without this check the flags would
+// silently become part of free-form text such as an epic title.
+func flagsInPositionals(fs *flag.FlagSet, positional []string) []string {
+	var found []string
+	seen := map[string]bool{}
+	for _, p := range positional {
+		for _, word := range strings.Fields(p) {
+			if !strings.HasPrefix(word, "-") {
+				continue
+			}
+			name := strings.TrimPrefix(strings.TrimPrefix(word, "-"), "-")
+			if idx := strings.Index(name, "="); idx != -1 {
+				name = name[:idx]
+			}
+			if fs.Lookup(name) != nil && !seen[word] {
+				seen[word] = true
+				found = append(found, word)
+			}
+		}
+	}
+	return found
+}
+
 // checkArgs fails loudly, naming the exact problem, when args left over
 // after fs.Parse indicate a mistake rather than legitimate input: either a
 // registered flag shadowed by an earlier positional token (see

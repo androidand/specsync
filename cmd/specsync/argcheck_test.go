@@ -252,3 +252,21 @@ func TestParseInterspersed(t *testing.T) {
 		})
 	}
 }
+
+// TestFlagsInPositionals pins the unsplit-shell-variable case: zsh passes an
+// unquoted $args as one argument, so " -child a -child b" arrives as a single
+// positional and would otherwise end up in an epic's title.
+func TestFlagsInPositionals(t *testing.T) {
+	fs := flag.NewFlagSet("epic", flag.ContinueOnError)
+	var children stringSlice
+	fs.Var(&children, "child", "")
+	fs.Bool("dry-run", false, "")
+
+	got := flagsInPositionals(fs, []string{"Epic: Atlas", " -child a -child b --dry-run=true"})
+	if strings.Join(got, " ") != "-child --dry-run=true" {
+		t.Errorf("found %q, want [-child --dry-run=true]", got)
+	}
+	if got := flagsInPositionals(fs, []string{"Q3 auth rework", "-not-a-flag", "re-run"}); len(got) != 0 {
+		t.Errorf("plain title words flagged: %q", got)
+	}
+}

@@ -62,6 +62,10 @@ func (cm *epicCmd) run(args []string) {
 	// --child a --child b`), so flags must be accepted after it.
 	positional := parseInterspersed(fs, args)
 	children := cm.children
+	if stray := flagsInPositionals(fs, positional); len(stray) > 0 {
+		fail(fmt.Errorf("epic: the title contains flag(s) %s — they reached specsync inside one argument and were not applied; pass each flag and value as separate arguments (in zsh, build them in an array: args+=(-child $s); specsync epic \"$title\" $args)",
+			strings.Join(stray, ", ")))
+	}
 
 	title := strings.TrimSpace(strings.Join(positional, " "))
 	if title == "" {
