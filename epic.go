@@ -174,7 +174,7 @@ func classifyChild(ctx context.Context, arg, openspecDir, repo string, dryRun bo
 	if err != nil {
 		return linkEntry{}, false, err
 	}
-	if len(refs) > 0 {
+	if _, _, ok := changeRef(c.Targets, refs); ok {
 		e, err := classifyArg(arg, openspecDir, repo)
 		return e, false, err
 	}

@@ -166,6 +166,60 @@ func reorderFlagsFirst(args []string) []string {
 	return append(flags, positional...)
 }
 
+// parseInterspersed parses fs from args while letting flags appear before,
+// between or after positional arguments. It returns the positionals in order,
+// and separately the arguments after the first literal "--", which are taken
+// as text without being parsed or checked. Go's flag package stops at the
+// first positional token, so for a command whose documented form is
+// `cmd <free-form text> -flag value ...` (epic's title first, then its -child
+// flags) the flags would otherwise never be parsed. Unlike reorderFlagsFirst
+// this is safe for value flags: fs.Parse decides which tokens a flag consumes.
+// A "--" is always the terminator, never a flag value. Every flag is parsed,
+// so callers need not run checkArgs afterwards: nothing can be shadowed.
+func parseInterspersed(fs *flag.FlagSet, args []string) (positional, literal []string) {
+	for i, a := range args {
+		if a == "--" {
+			args, literal = args[:i], args[i+1:]
+			break
+		}
+	}
+	for {
+		_ = fs.Parse(args) // fs is ExitOnError: a bad flag exits here
+		rest := fs.Args()
+		if len(rest) == 0 {
+			return positional, literal
+		}
+		positional = append(positional, rest[0])
+		args = rest[1:]
+	}
+}
+
+// flagsInPositionals reports registered flag names that appear as words
+// inside positional arguments, e.g. the single argument " -child a -child b".
+// That shape comes from a shell that did not split a variable (zsh does not
+// word-split an unquoted $args), and without this check the flags would
+// silently become part of free-form text such as an epic title.
+func flagsInPositionals(fs *flag.FlagSet, positional []string) []string {
+	var found []string
+	seen := map[string]bool{}
+	for _, p := range positional {
+		for _, word := range strings.Fields(p) {
+			if !strings.HasPrefix(word, "-") {
+				continue
+			}
+			name := strings.TrimPrefix(strings.TrimPrefix(word, "-"), "-")
+			if idx := strings.Index(name, "="); idx != -1 {
+				name = name[:idx]
+			}
+			if fs.Lookup(name) != nil && !seen[word] {
+				seen[word] = true
+				found = append(found, word)
+			}
+		}
+	}
+	return found
+}
+
 // checkArgs fails loudly, naming the exact problem, when args left over
 // after fs.Parse indicate a mistake rather than legitimate input: either a
 // registered flag shadowed by an earlier positional token (see

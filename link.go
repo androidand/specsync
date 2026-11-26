@@ -176,10 +176,10 @@ func classifyArg(arg, openspecDir, repo string) (linkEntry, error) {
 	if err != nil {
 		return linkEntry{}, err
 	}
-	if len(refs) == 0 {
+	_, ref, ok := changeRef(c.Targets, refs)
+	if !ok {
 		return linkEntry{}, fmt.Errorf("change %q has no synced ref; run specsync -change %s first", arg, arg)
 	}
-	_, ref := firstRef(refs)
 	return linkEntry{kind: kindSlug, ref: ref, slug: c.Slug, slugDir: c.Dir}, nil
 }
 
@@ -284,6 +284,35 @@ func refLabels(links []Ref) []string {
 // first (the bare "github" key is a pre-migration relic and may be stale),
 // then the bare key, then anything else. Keys are scanned in sorted order so
 // the pick is deterministic when several remain.
+// changeRef picks a change's own ref from its cached refs, given the targets
+// its committed specsync.yml declares. With declared targets it takes the
+// first one that has a ref (or a legacy plain "github" ref for a GitHub
+// target) and reports ok=false when none has: the cache can hold refs for
+// other trackers (a sync run against another repo leaves one behind), and
+// those are never the change's own issue. With no declared targets it falls
+// back to firstRef.
+func changeRef(targets []string, refs map[string]Ref) (string, Ref, bool) {
+	if len(targets) == 0 {
+		key, ref := firstRef(refs)
+		return key, ref, len(refs) > 0
+	}
+	for _, target := range targets {
+		if r, ok := refs[target]; ok {
+			return target, r, true
+		}
+	}
+	// A plain "github" key is a ref synced against the auto-detected repo,
+	// written before targets were recorded; it is still the change's own.
+	if r, ok := refs["github"]; ok {
+		for _, target := range targets {
+			if strings.HasPrefix(target, "github:") {
+				return "github", r, true
+			}
+		}
+	}
+	return "", Ref{}, false
+}
+
 func firstRef(refs map[string]Ref) (string, Ref) {
 	keys := make([]string, 0, len(refs))
 	for k := range refs {

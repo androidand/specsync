@@ -190,3 +190,94 @@ func TestIncidentRegression(t *testing.T) {
 		t.Fatalf("expected zero gh calls, got:\n%s", logged)
 	}
 }
+
+// TestParseInterspersed pins epic's documented form: the title comes first
+// and its value flags after it. Plain fs.Parse stops at the title and never
+// applies -child, -repo or -dry-run.
+func TestParseInterspersed(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		wantPos  []string
+		wantLit  []string
+		children []string
+		repo     string
+		dryRun   bool
+	}{
+		{
+			name:     "title first, flags after (documented form)",
+			args:     []string{"Feature X", "--repo", "owner/planning", "--child", "owner/backend#12", "--child", "frontend-slug", "--dry-run"},
+			wantPos:  []string{"Feature X"},
+			children: []string{"owner/backend#12", "frontend-slug"},
+			repo:     "owner/planning",
+			dryRun:   true,
+		},
+		{
+			name:     "flags first, unquoted multi-word title",
+			args:     []string{"-dry-run", "-child", "a", "Q3", "auth", "rework"},
+			wantPos:  []string{"Q3", "auth", "rework"},
+			children: []string{"a"},
+			dryRun:   true,
+		},
+		{
+			name:     "flags between title words",
+			args:     []string{"Q3", "-child", "a", "rework", "-child=b"},
+			wantPos:  []string{"Q3", "rework"},
+			children: []string{"a", "b"},
+		},
+		{
+			name:    "double dash keeps dash-leading words as literal text",
+			args:    []string{"-dry-run", "Drop", "--", "--child", "flag"},
+			wantPos: []string{"Drop"},
+			wantLit: []string{"--child", "flag"},
+			dryRun:  true,
+		},
+		{
+			name:     "-- is the terminator even where a value is expected",
+			args:     []string{"-repo", "--", "Title", "-child", "a"},
+			wantLit:  []string{"Title", "-child", "a"},
+			children: nil,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			fs := flag.NewFlagSet("epic", flag.ContinueOnError)
+			var children stringSlice
+			fs.Var(&children, "child", "")
+			repo := fs.String("repo", "", "")
+			dryRun := fs.Bool("dry-run", false, "")
+
+			got, lit := parseInterspersed(fs, tc.args)
+			if strings.Join(got, "|") != strings.Join(tc.wantPos, "|") {
+				t.Errorf("positional = %q, want %q", got, tc.wantPos)
+			}
+			if strings.Join(lit, "|") != strings.Join(tc.wantLit, "|") {
+				t.Errorf("literal = %q, want %q", lit, tc.wantLit)
+			}
+			if strings.Join(children, "|") != strings.Join(tc.children, "|") {
+				t.Errorf("children = %q, want %q", children, tc.children)
+			}
+			if *repo != tc.repo || *dryRun != tc.dryRun {
+				t.Errorf("repo=%q dryRun=%v, want %q %v", *repo, *dryRun, tc.repo, tc.dryRun)
+			}
+		})
+	}
+}
+
+// TestFlagsInPositionals pins the unsplit-shell-variable case: zsh passes an
+// unquoted $args as one argument, so " -child a -child b" arrives as a single
+// positional and would otherwise end up in an epic's title.
+func TestFlagsInPositionals(t *testing.T) {
+	fs := flag.NewFlagSet("epic", flag.ContinueOnError)
+	var children stringSlice
+	fs.Var(&children, "child", "")
+	fs.Bool("dry-run", false, "")
+
+	got := flagsInPositionals(fs, []string{"Epic: Atlas", " -child a -child b --dry-run=true"})
+	if strings.Join(got, " ") != "-child --dry-run=true" {
+		t.Errorf("found %q, want [-child --dry-run=true]", got)
+	}
+	if got := flagsInPositionals(fs, []string{"Q3 auth rework", "-not-a-flag", "re-run"}); len(got) != 0 {
+		t.Errorf("plain title words flagged: %q", got)
+	}
+}

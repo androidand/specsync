@@ -386,3 +386,46 @@ func containsAt(s, sub string) bool {
 	}
 	return false
 }
+
+// TestClassifyArgPrefersDeclaredTarget pins the stray-ref case: the ref cache
+// holds a ref for another repo that sorts first, and a slug must still
+// resolve to the issue in the target its specsync.yml declares.
+func TestClassifyArgPrefersDeclaredTarget(t *testing.T) {
+	openspecDir := filepath.Join(t.TempDir(), "openspec")
+	cdir := filepath.Join(openspecDir, "changes", "my-change")
+	os.MkdirAll(filepath.Join(cdir, ".specsync"), 0o755)
+	os.WriteFile(filepath.Join(cdir, "proposal.md"), []byte("# my-change\n\nbody\n"), 0o644)
+	os.WriteFile(filepath.Join(cdir, "tasks.md"), []byte("- [ ] task\n"), 0o644)
+	os.WriteFile(filepath.Join(cdir, "specsync.yml"), []byte("targets:\n  - github:zeta/own\n"), 0o644)
+	os.WriteFile(filepath.Join(cdir, ".specsync", "refs.json"), []byte(`{
+  "github:alpha/stray": {"provider": "github:alpha/stray", "id": "4370", "url": "https://github.com/alpha/stray/issues/4370"},
+  "github:zeta/own": {"provider": "github:zeta/own", "id": "7", "url": "https://github.com/zeta/own/issues/7"}
+}`), 0o644)
+
+	e, err := classifyArg("my-change", openspecDir, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e.ref.URL != "https://github.com/zeta/own/issues/7" {
+		t.Errorf("slug resolved to %s, want the declared target's issue", e.ref.URL)
+	}
+}
+
+// TestClassifyArgIgnoresStrayOnlyCache: when the only cached ref belongs to
+// another repo, the slug has no ref of its own and must say so instead of
+// resolving to the stray issue.
+func TestClassifyArgIgnoresStrayOnlyCache(t *testing.T) {
+	openspecDir := filepath.Join(t.TempDir(), "openspec")
+	cdir := filepath.Join(openspecDir, "changes", "my-change")
+	os.MkdirAll(filepath.Join(cdir, ".specsync"), 0o755)
+	os.WriteFile(filepath.Join(cdir, "proposal.md"), []byte("# my-change\n\nbody\n"), 0o644)
+	os.WriteFile(filepath.Join(cdir, "tasks.md"), []byte("- [ ] task\n"), 0o644)
+	os.WriteFile(filepath.Join(cdir, "specsync.yml"), []byte("targets:\n  - github:zeta/own\n"), 0o644)
+	os.WriteFile(filepath.Join(cdir, ".specsync", "refs.json"), []byte(`{
+  "github:alpha/stray": {"provider": "github:alpha/stray", "id": "4370", "url": "https://github.com/alpha/stray/issues/4370"}
+}`), 0o644)
+
+	if e, err := classifyArg("my-change", openspecDir, ""); err == nil {
+		t.Fatalf("resolved to %s, want a no-synced-ref error", e.ref.URL)
+	}
+}
