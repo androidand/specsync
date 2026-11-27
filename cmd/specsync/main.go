@@ -19,6 +19,34 @@ import (
 // version is the binary version, stamped at release time via -ldflags "-X main.version=...".
 var version = "dev"
 
+<<<<<<< HEAD
+=======
+// knownSubcommands lists every recognized subcommand name. Anything else
+// that doesn't start with "-" is an unrecognized bare word, not a flag set
+// for the default sync action.
+var knownSubcommands = map[string]bool{
+	"pull": true, "link": true, "scan": true, "trace": true,
+	"release-plan": true, "changelog": true, "install-skill": true,
+	"changes": true, "set-stage": true, "set-priority": true, "note": true,
+	"sync": true, "audit": true, "audit-tasks": true, "validate": true,
+	"spinoff": true, "pr-body": true, "verify": true,
+	"agent-help": true, "doctor": true, "idea": true, "ideas": true, "archive": true,
+	"epic": true, "adopt": true, "topology": true, "start": true,
+}
+
+// knownConfusions maps a word someone might reach for by habit (e.g. git's
+// "push") to the actual subcommand it's confused with, purely to make the
+// unknown-subcommand error more helpful. It is NOT an alias: the word still
+// fails to dispatch. Deliberately not an alias — specsync's default action
+// reconciles tracker state back into tasks.md before writing out (-reconcile
+// defaults to true), so it is not a one-way push the way git's is, and
+// "sync" is the more honest name; teach that instead of encoding the
+// git-habit word permanently into the tool.
+var knownConfusions = map[string]string{
+	"push": "sync",
+}
+
+>>>>>>> c45e981 (feat: start a synced change in its own workspace (#201))
 // resolveSubcommand decides which subcommand os.Args[1:] selects and returns
 // its remaining arguments. A missing first argument, or one starting with
 // "-", both select "sync" (bare invocation with flags only) — that keeps
@@ -72,12 +100,78 @@ func deprecatedSlugFlag(args []string) error {
 func main() {
 	cmd, rest, err := resolveSubcommand(os.Args[1:])
 	if err != nil {
+<<<<<<< HEAD
 		fmt.Fprintf(os.Stderr, "specsync: %v\n\nRun specsync with no arguments to list the commands, or use one of: %s\n", err, strings.Join(commandNames(), ", "))
 		os.Exit(2)
 	}
 	if cmd == "help" {
 		fmt.Print(renderUsage())
 		return
+=======
+		fmt.Fprintf(os.Stderr, "specsync: %v\n\nRun with no subcommand (optionally with flags) to sync, or use one of: pull, adopt, link, scan, trace, release-plan, changelog, install-skill, changes, set-stage, set-priority, note, audit, audit-tasks, validate, spinoff, pr-body, verify, idea, ideas, archive, epic, topology, start\n", err)
+		os.Exit(2)
+	}
+
+	switch cmd {
+	case "version":
+		fmt.Println("specsync " + versionString())
+	case "pull":
+		runPull(rest)
+	case "adopt":
+		runAdopt(rest)
+	case "link":
+		runLink(rest)
+	case "scan":
+		runScan(rest)
+	case "trace":
+		runTrace(rest)
+	case "release-plan":
+		runReleasePlan(rest)
+	case "changelog":
+		runChangelog(rest)
+	case "install-skill":
+		runInstallSkill(rest)
+	case "changes":
+		runChanges(rest)
+	case "set-stage":
+		runSetStage(rest)
+	case "set-priority":
+		runSetPriority(rest)
+	case "note":
+		runNote(rest)
+	case "sync":
+		runSync(rest)
+	case "audit":
+		runAudit(rest)
+	case "audit-tasks":
+		runAuditTasks(rest)
+	case "validate":
+		runValidate(rest)
+	case "spinoff":
+		runSpinoff(rest)
+	case "pr-body":
+		runPRBody(rest)
+	case "verify":
+		runVerify(rest)
+	case "agent-help":
+		runAgentHelp(rest)
+	case "doctor":
+		runDoctor(rest)
+	case "idea":
+		runIdea(rest)
+	case "ideas":
+		runIdeas(rest)
+	case "archive":
+		runArchive(rest)
+	case "epic":
+		runEpic(rest)
+	case "topology":
+		runTopology(rest)
+	case "start":
+		runStart(rest)
+	default:
+		runSync(rest)
+>>>>>>> c45e981 (feat: start a synced change in its own workspace (#201))
 	}
 
 	if c, ok := lookupCommand(cmd); ok {
@@ -298,6 +392,7 @@ func runPullWithWorktree(issue, change, repo string, dryRun bool, project specsy
 	if err != nil {
 		fail(fmt.Errorf("worktree: %w", err))
 	}
+<<<<<<< HEAD
 
 	// The same config `start` reads: worktrees.dir, worktrees.path and worktrees.branch. The
 	// -worktree-dir flag and $SPECSYNC_WORKTREE_DIR still win over worktrees.dir.
@@ -310,6 +405,14 @@ func runPullWithWorktree(issue, change, repo string, dryRun bool, project specsy
 		fail(fmt.Errorf("fix the config first (specsync doctor config): %s", issues[0]))
 	}
 	worktreePath, branchName := specsync.PullWorktreePlan(ways, specsync.MainCheckout(cwd0), repoName, issue, change, worktreeDir, os.Getenv("SPECSYNC_WORKTREE_DIR"))
+=======
+	mainRoot, err := mainCheckoutRoot(realStartEnv())
+	if err != nil {
+		fail(fmt.Errorf("worktree: %w", err))
+	}
+	worktreePath, branchName := worktreeLayout(
+		resolveWorktreeDir(worktreeDir, os.Getenv, mainRoot), repoName, issue, change)
+>>>>>>> c45e981 (feat: start a synced change in its own workspace (#201))
 
 	if dryRun {
 		fmt.Printf("DRY RUN — worktree setup:\n")

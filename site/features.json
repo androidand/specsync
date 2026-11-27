@@ -78,6 +78,7 @@
   },
   {
     "group": "collaborate",
+<<<<<<< HEAD
     "icon": "state",
     "title": "The branch names the change",
     "body": "Inside a change's worktree, <code>set-stage</code>, <code>note</code> and <code>archive</code> find the change from the branch — <code>feat/42-my-change</code> or an Orca workspace's <code>user/my-change</code>. On <code>main</code> nothing resolves, so an agent there can't act on a change by accident."
@@ -92,6 +93,11 @@
     "group": "collaborate",
     "title": "Choose where worktrees go",
     "body": "Set <code>worktrees.path</code> to a template such as <code>{dir}/{repo}/{name}</code>. <code>start</code> and <code>pull -worktree</code> then read the same config, so one change gets one worktree whichever command made it, and Orca's workspace name follows the template."
+=======
+    "icon": "flow",
+    "title": "One change, one workspace",
+    "body": "<code>specsync start my-change</code> opens a synced change in its own worktree on <code>feat/&lt;issue&gt;-my-change</code>, cut from the remote default branch — through Orca when it is installed, so the agent gets the issue as its brief."
+>>>>>>> c45e981 (feat: start a synced change in its own workspace (#201))
   },
   {
     "group": "collaborate",
