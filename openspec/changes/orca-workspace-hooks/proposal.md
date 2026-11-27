@@ -26,6 +26,7 @@ Depends on `infer-change-from-branch`.
 ## What Changes
 
 - New `specsync workspace setup`, meant to run from a workspace hook:
+<<<<<<< HEAD
   1. Find the change from the branch. Failing that, ask Orca for the
      workspace's linked issue (`orca worktree current --json`, field
      `result.worktree.linkedIssue`, a GitHub issue number or null) and find
@@ -46,6 +47,20 @@ Depends on `infer-change-from-branch`.
   kept per checkout in gitignored metadata, and Orca removes the worktree on
   archive, so `workspace archive` only has an effect with `-sync`; the recipe
   uses it there.
+=======
+  1. Find the change from the branch; failing that, from the workspace's
+     linked issue (via `orca worktree current --json` when running under
+     Orca); failing that, do nothing and exit 0, so an unrelated workspace is
+     never blocked.
+  2. If the linked issue has no local change, pull it into one
+     (`specsync pull -issue <n>`), so issue-first work becomes a change.
+  3. Set the change's stage to `active`.
+- New `specsync workspace archive`: finds the change the same way and sets its
+  stage back to `auto` (derived from tasks), so an abandoned workspace does
+  not leave the change stuck `active`.
+- Both print what they did and never sync the tracker; the agent or a human
+  syncs as usual.
+>>>>>>> 29abd3a (openspec: plan Orca workspace start and lifecycle hooks (#201, #202))
 - Document an `orca.yaml` recipe:
 
   ```yaml
@@ -53,7 +68,11 @@ Depends on `infer-change-from-branch`.
     setup: |
       specsync workspace setup
     archive: |
+<<<<<<< HEAD
       specsync workspace archive -sync
+=======
+      specsync workspace archive
+>>>>>>> 29abd3a (openspec: plan Orca workspace start and lifecycle hooks (#201, #202))
   ```
 
 - Document one writer for tracker status: Orca's opt-in Linear status sync and
@@ -73,10 +92,14 @@ Depends on `infer-change-from-branch`.
 ## Impact
 
 - New `workspace` subcommand in `cmd/specsync/`, registered in `agent-help`.
+<<<<<<< HEAD
 - Shells out to Orca only when it resolves (same resolution as `start`,
   shared in `cmd/specsync/orca.go`).
 - Orca's `linkedIssue` is a GitHub issue number; Linear and GitLab links are
   separate fields and are not read.
+=======
+- Shells out to Orca only when it resolves (same resolution as `start`).
+>>>>>>> 29abd3a (openspec: plan Orca workspace start and lifecycle hooks (#201, #202))
 - README "Working with Orca" section, `site/features.json`, specsync skill.
 - Edits `openspec/changes/in-flight-work-claims/`.
 
