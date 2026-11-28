@@ -82,7 +82,8 @@ func (cm *pullCmd) run(args []string) {
 	if *worktree && *initFlag {
 		fail(fmt.Errorf("-init cannot be combined with -worktree: run specsync init inside the worktree, then pull there"))
 	}
-	abs := resolveRootInit(fs, openspec, storeFlag, *initFlag, *dryRun).Dir
+	// -worktree pulls inside a new worktree, which makes its own folders: leave this checkout alone.
+	abs := resolveRootInit(fs, openspec, storeFlag, *initFlag, *dryRun, *worktree).Dir
 	repoRoot := filepath.Dir(abs)
 
 	resolvedBoard, err := specsync.ResolveBoard(*project, repoRoot)

@@ -29,10 +29,12 @@ func resolveRoot(fs *flag.FlagSet, openspec, store *string) specsync.ResolvedRoo
 	return root
 }
 
-// resolveRootInit is resolveRoot for commands that accept -init: when the
-// repo-local spec root is missing it creates a scratch one (specsync init),
-// and only when initFlag is set. A dry run reports the plan and creates nothing.
-func resolveRootInit(fs *flag.FlagSet, openspec, store *string, initFlag, dryRun bool) specsync.ResolvedRoot {
+// resolveRootInit is resolveRoot for pull. When the repo-local spec root is
+// missing and initFlag is set it creates a scratch one (specsync init); when
+// openspec/ exists without changes/ it creates changes/. A dry run reports the
+// plan and creates nothing; so does leaveAlone (pull -worktree, which fills a
+// different checkout).
+func resolveRootInit(fs *flag.FlagSet, openspec, store *string, initFlag, dryRun, leaveAlone bool) specsync.ResolvedRoot {
 	if initFlag && !flagVisited(fs, "openspec") && *store == "" {
 		cwd, err := os.Getwd()
 		if err != nil {
@@ -47,7 +49,31 @@ func resolveRootInit(fs *flag.FlagSet, openspec, store *string, initFlag, dryRun
 			return specsync.ResolvedRoot{Dir: res.Dir, Rule: specsync.RootRuleLocal}
 		}
 	}
-	return resolveRoot(fs, openspec, store)
+	return resolveRootCreatingChanges(fs, openspec, store, dryRun || leaveAlone)
+}
+
+// resolveRootCreatingChanges is resolveRoot for pull: an existing openspec/
+// without a changes/ directory is normal on a first pull, so the directory is
+// created rather than reported as an error. A missing openspec/ still fails.
+// With noCreate it creates nothing and does not require changes/.
+func resolveRootCreatingChanges(fs *flag.FlagSet, openspec, store *string, noCreate bool) specsync.ResolvedRoot {
+	root := resolveRootUnchecked(fs, openspec, store)
+	if info, err := os.Stat(root.Dir); err == nil && info.IsDir() {
+		changes := filepath.Join(root.Dir, "changes")
+		if _, err := os.Stat(changes); os.IsNotExist(err) && !noCreate {
+			if err := os.MkdirAll(changes, 0o755); err != nil {
+				fail(err)
+			}
+			fmt.Fprintf(os.Stderr, "specsync: created %s\n", changes)
+		}
+		if noCreate {
+			return root
+		}
+	}
+	if err := root.Validate(); err != nil {
+		fail(err)
+	}
+	return root
 }
 
 func flagVisited(fs *flag.FlagSet, name string) bool {
