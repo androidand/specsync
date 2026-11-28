@@ -146,15 +146,18 @@ func TestPullInitWithWorktreeIsRejectedBeforeAnythingIsCreated(t *testing.T) {
 	}
 }
 
-func TestPullInitOnExistingOpenspecWithoutChangesReportsTheRealProblem(t *testing.T) {
+func TestPullInitOnExistingOpenspecWithoutChangesCreatesChanges(t *testing.T) {
 	bin := buildSpecsyncBinary(t)
 	repo, env := firstUseEnv(t)
 	if err := os.MkdirAll(filepath.Join(repo, "openspec"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	out, err := runIn(t, bin, repo, env, "pull", "-issue", "7", "-init")
-	if err == nil || !strings.Contains(out, "changes") || strings.Contains(out, "is tracked") {
-		t.Fatalf("want the missing changes/ error, got err=%v out=%s", err, out)
+	if err != nil || strings.Contains(out, "is tracked") {
+		t.Fatalf("want a successful pull that creates changes/, got err=%v out=%s", err, out)
+	}
+	if _, statErr := os.Stat(filepath.Join(repo, "openspec", "changes", "fix-the-thing")); statErr != nil {
+		t.Fatalf("change not written: %v", statErr)
 	}
 }
 
@@ -167,5 +170,44 @@ func TestPullInitDoesNotPrintTheInitHint(t *testing.T) {
 	}
 	if strings.Contains(out, "next: specsync pull") {
 		t.Fatalf("the init hint belongs to the standalone command only:\n%s", out)
+	}
+}
+
+func TestPullCreatesMissingChangesDirectory(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env := firstUseEnv(t)
+	if err := os.Mkdir(filepath.Join(repo, "openspec"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := runIn(t, bin, repo, env, "pull", "-dry-run", "-issue", "7", "-repo", "o/r"); err != nil {
+		t.Fatalf("dry run failed: %v\n%s", err, out)
+	}
+	if _, err := os.Stat(filepath.Join(repo, "openspec", "changes")); err == nil {
+		t.Fatal("dry run created changes/")
+	}
+	out, err := runIn(t, bin, repo, env, "pull", "-issue", "7", "-repo", "o/r")
+	if err != nil {
+		t.Fatalf("pull with openspec/ but no changes/ must succeed: %v\n%s", err, out)
+	}
+	if _, err := os.Stat(filepath.Join(repo, "openspec", "changes", "fix-the-thing", "proposal.md")); err != nil {
+		t.Errorf("proposal.md missing: %v\n%s", err, out)
+	}
+}
+
+func TestPullCreatesChangesInExplicitOpenspecDir(t *testing.T) {
+	bin := buildSpecsyncBinary(t)
+	repo, env := firstUseEnv(t)
+	if err := os.MkdirAll(filepath.Join(repo, "specs-here"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	out, err := runIn(t, bin, repo, env, "pull", "-openspec", "specs-here", "-issue", "7", "-repo", "o/r")
+	if err != nil {
+		t.Fatalf("pull -openspec dir without changes/ must succeed: %v\n%s", err, out)
+	}
+	if _, err := os.Stat(filepath.Join(repo, "specs-here", "changes", "fix-the-thing", "proposal.md")); err != nil {
+		t.Errorf("proposal.md missing: %v\n%s", err, out)
+	}
+	if _, err := os.Stat(filepath.Join(repo, "openspec")); err == nil {
+		t.Error("the default openspec/ must not be created when -openspec names another dir")
 	}
 }
