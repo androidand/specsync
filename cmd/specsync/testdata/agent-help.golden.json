@@ -1463,11 +1463,25 @@
           "description": "on (default), fresh to bypass the request cache, or off for local facts only"
         },
         {
+          "name": "table",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "print all work as one table with checks and review state"
+        },
+        {
           "name": "unattached",
           "type": "boolean",
           "required": false,
           "default": false,
           "description": "only work under no epic"
+        },
+        {
+          "name": "urls",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "with -table, list the issue and pull request URLs under the table"
         }
       ],
       "safety_rules": [
@@ -1477,6 +1491,7 @@
       "examples": [
         "specsync overview",
         "specsync overview -attention",
+        "specsync overview -table",
         "specsync overview -repo api -attention",
         "specsync overview -epic acme/web#1 -json",
         "specsync overview -root ~/dev -unattached"
@@ -2782,6 +2797,20 @@
           "required": false,
           "default": "on",
           "description": "on (default) reuses pull request data for up to a minute; fresh refetches it; off skips the tracker and pull request lookups: local git facts only, offline"
+        },
+        {
+          "name": "table",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "print the work, its related issues and their pull requests as one table with checks and review state"
+        },
+        {
+          "name": "urls",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "with -table, list the issue and pull request URLs under the table (the table links them itself on a terminal)"
         }
       ],
       "safety_rules": [
@@ -2790,6 +2819,8 @@
       "examples": [
         "specsync status",
         "specsync status -everything",
+        "specsync status -table",
+        "specsync status -table -urls",
         "specsync status -change my-change -json",
         "specsync status -state=off",
         "specsync status -state=fresh",

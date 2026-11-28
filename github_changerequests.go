@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -28,6 +29,7 @@ type ghCheck struct {
 type ghChangeRequest struct {
 	Number      int    `json:"number"`
 	URL         string `json:"url"`
+	Title       string `json:"title"`
 	State       string `json:"state"`
 	IsDraft     bool   `json:"isDraft"`
 	HeadRefName string `json:"headRefName"`
@@ -89,7 +91,7 @@ func (p *GitHubProvider) ChangeRequests(ctx context.Context) (ChangeRequestSet, 
 func (p *GitHubProvider) listChangeRequests(ctx context.Context, state string, limit int) ([]ghChangeRequest, error) {
 	args := append([]string{"pr", "list"}, p.repoFlag()...)
 	args = append(args, "--state", state, "--limit", strconv.Itoa(limit), "--json",
-		"number,url,state,isDraft,headRefName,headRefOid,author,isCrossRepository,baseRefName,reviewDecision,mergeable,"+
+		"number,url,title,state,isDraft,headRefName,headRefOid,author,isCrossRepository,baseRefName,reviewDecision,mergeable,"+
 			"additions,deletions,changedFiles,closingIssuesReferences,statusCheckRollup")
 	out, err := p.run(ctx, args...)
 	if err != nil {
@@ -176,6 +178,7 @@ func (r ghChangeRequest) toChangeRequest() ChangeRequest {
 	cr := ChangeRequest{
 		Number:         r.Number,
 		URL:            r.URL,
+		Title:          r.Title,
 		State:          strings.ToLower(r.State),
 		Draft:          r.IsDraft,
 		Branch:         r.HeadRefName,
@@ -231,4 +234,125 @@ func (c ghCheck) outcome() (name, outcome string) {
 		return c.Name, "pending"
 	}
 	return c.Name, "fail"
+}
+
+// reviewersBatch is how many requests one reviewers query names.
+const reviewersBatch = 40
+
+// reviewerFields is what is asked of each request. A requested reviewer is a
+// User, a Mannequin, a Bot (a code reviewer such as Copilot) or a Team.
+const reviewerFields = `number ` +
+	`reviewRequests(first:30){totalCount nodes{requestedReviewer{__typename ... on User{login} ... on Mannequin{login} ... on Bot{login} ... on Team{name slug}}}} ` +
+	`latestOpinionatedReviews(first:50){totalCount nodes{author{login} state}}`
+
+// reviewersQuery names each request by number, as pr<number>.
+func reviewersQuery(numbers []int) string {
+	var b strings.Builder
+	b.WriteString("query($owner:String!,$name:String!){repository(owner:$owner,name:$name){")
+	for _, n := range numbers {
+		fmt.Fprintf(&b, "pr%d:pullRequest(number:%d){%s} ", n, n, reviewerFields)
+	}
+	b.WriteString("}}")
+	return b.String()
+}
+
+// Reviewers returns, for the given requests, who is asked to review each and
+// each reviewer's standing verdict, with one GraphQL call per batch of requests.
+// It uses latestOpinionatedReviews, a reviewer's latest approval, change request
+// or dismissal, so a later comment does not hide an approval and the list does
+// not run into the 100-review cap of `gh pr list --json reviews`, which returns
+// the oldest 100 reviews of a request. Asking for exactly the requests shown is
+// cheaper than listing the repository's open ones, and exact.
+func (p *GitHubProvider) Reviewers(ctx context.Context, numbers []int) (map[int]RequestReviewers, error) {
+	repo := p.resolved.Repo
+	if repo == "" {
+		resolved, err := NewRepoResolverFunc(p.explicit, p.run).Resolve(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("resolve the repository: %w", err)
+		}
+		repo = resolved.Repo
+	}
+	owner, name, ok := strings.Cut(repo, "/")
+	if !ok {
+		return nil, fmt.Errorf("repository %q is not owner/name", repo)
+	}
+	res := map[int]RequestReviewers{}
+	for start := 0; start < len(numbers); start += reviewersBatch {
+		batch := numbers[start:min(start+reviewersBatch, len(numbers))]
+		out, err := p.run(ctx, "api", "graphql", "-f", "query="+reviewersQuery(batch), "-f", "owner="+owner, "-f", "name="+name)
+		if err != nil {
+			return nil, err
+		}
+		got, err := parseReviewers(out)
+		if err != nil {
+			return nil, err
+		}
+		for n, rr := range got {
+			res[n] = rr
+		}
+	}
+	return res, nil
+}
+
+type ghReviewerNode struct {
+	Number         int `json:"number"`
+	ReviewRequests struct {
+		TotalCount int `json:"totalCount"`
+		Nodes      []struct {
+			Reviewer struct {
+				Login string `json:"login"`
+				Name  string `json:"name"`
+				Slug  string `json:"slug"`
+			} `json:"requestedReviewer"`
+		} `json:"nodes"`
+	} `json:"reviewRequests"`
+	Latest struct {
+		TotalCount int `json:"totalCount"`
+		Nodes      []struct {
+			Author struct {
+				Login string `json:"login"`
+			} `json:"author"`
+			State string `json:"state"`
+		} `json:"nodes"`
+	} `json:"latestOpinionatedReviews"`
+}
+
+// parseReviewers reads a reviewersQuery response: a repository whose fields are
+// the aliased requests. A request that was not found is null and left out.
+func parseReviewers(out string) (map[int]RequestReviewers, error) {
+	var resp struct {
+		Data struct {
+			Repository map[string]*ghReviewerNode `json:"repository"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(out), &resp); err != nil {
+		return nil, fmt.Errorf("parse graphql: %w", err)
+	}
+	res := map[int]RequestReviewers{}
+	for _, pr := range resp.Data.Repository {
+		if pr == nil {
+			continue
+		}
+		var rr RequestReviewers
+		for _, q := range pr.ReviewRequests.Nodes {
+			switch {
+			case q.Reviewer.Login != "":
+				rr.Requested = append(rr.Requested, q.Reviewer.Login)
+			case q.Reviewer.Slug != "":
+				rr.Requested = append(rr.Requested, "team:"+q.Reviewer.Slug)
+			case q.Reviewer.Name != "":
+				rr.Requested = append(rr.Requested, "team:"+q.Reviewer.Name)
+			}
+		}
+		rr.Requested = sortedUnique(rr.Requested)
+		for _, v := range pr.Latest.Nodes {
+			if v.Author.Login != "" {
+				rr.Reviews = append(rr.Reviews, ChangeRequestReview{Reviewer: v.Author.Login, State: strings.ToLower(v.State)})
+			}
+		}
+		sort.Slice(rr.Reviews, func(i, j int) bool { return rr.Reviews[i].Reviewer < rr.Reviews[j].Reviewer })
+		rr.Incomplete = pr.ReviewRequests.TotalCount > len(pr.ReviewRequests.Nodes) || pr.Latest.TotalCount > len(pr.Latest.Nodes)
+		res[pr.Number] = rr
+	}
+	return res, nil
 }

@@ -71,12 +71,12 @@ func (c *FileRequestCache) Get(repo string) (ChangeRequestSet, bool) {
 	if age := c.clock().Sub(f.FetchedAt); age < 0 || age > c.TTL {
 		return ChangeRequestSet{}, false
 	}
-	return ChangeRequestSet{Requests: f.Requests, Truncated: f.Truncated}, true
+	return ChangeRequestSet{Requests: withoutReviewers(f.Requests), Truncated: f.Truncated}, true
 }
 
 // Put stores the listing. Failures are ignored.
 func (c *FileRequestCache) Put(repo string, set ChangeRequestSet) {
-	b, err := json.Marshal(requestCacheFile{FetchedAt: c.clock(), Truncated: set.Truncated, Requests: set.Requests})
+	b, err := json.Marshal(requestCacheFile{FetchedAt: c.clock(), Truncated: set.Truncated, Requests: withoutReviewers(set.Requests)})
 	if err != nil || os.MkdirAll(c.Dir, 0o700) != nil {
 		return
 	}
@@ -87,6 +87,82 @@ func (c *FileRequestCache) Put(repo string, set ChangeRequestSet) {
 	_, werr := tmp.Write(b)
 	cerr := tmp.Close()
 	if werr != nil || cerr != nil || os.Chmod(tmp.Name(), 0o600) != nil || os.Rename(tmp.Name(), c.path(repo)) != nil {
+		os.Remove(tmp.Name())
+	}
+}
+
+// withoutReviewers returns the requests with the reviewer fields cleared. The
+// listing cache never holds them: they are cached on their own (ReviewerCache),
+// and a listing entry written by an older binary must not show reviewers that
+// nothing in this run fetched.
+func withoutReviewers(in []ChangeRequest) []ChangeRequest {
+	out := make([]ChangeRequest, len(in))
+	copy(out, in)
+	for i := range out {
+		out[i].ReviewersKnown, out[i].ReviewRequests, out[i].Reviews = false, nil, nil
+	}
+	return out
+}
+
+// ReviewerCache holds one repo's reviewer data for a short time, apart from the
+// request listing. A cache is only a shortcut, as for RequestCache.
+type ReviewerCache interface {
+	Get(repo string) (map[int]RequestReviewers, bool)
+	Put(repo string, by map[int]RequestReviewers)
+}
+
+type reviewerCacheFile struct {
+	FetchedAt time.Time                `json:"fetchedAt"`
+	Reviewers map[int]RequestReviewers `json:"reviewers"`
+}
+
+// FileReviewerCache stores reviewer data beside the request listings.
+type FileReviewerCache struct{ FileRequestCache }
+
+// DefaultReviewerCache returns a cache under the user's cache directory, or nil
+// when there is none.
+func DefaultReviewerCache() *FileReviewerCache {
+	c := DefaultRequestCache()
+	if c == nil {
+		return nil
+	}
+	return &FileReviewerCache{*c}
+}
+
+func (c *FileReviewerCache) file(repo string) string {
+	sum := sha256.Sum256([]byte(repo))
+	return filepath.Join(c.Dir, "reviewers-"+hex.EncodeToString(sum[:8])+".json")
+}
+
+// Get returns the cached reviewer data when it is younger than the TTL.
+func (c *FileReviewerCache) Get(repo string) (map[int]RequestReviewers, bool) {
+	b, err := os.ReadFile(c.file(repo))
+	if err != nil {
+		return nil, false
+	}
+	var f reviewerCacheFile
+	if json.Unmarshal(b, &f) != nil || f.FetchedAt.IsZero() {
+		return nil, false
+	}
+	if age := c.clock().Sub(f.FetchedAt); age < 0 || age > c.TTL {
+		return nil, false
+	}
+	return f.Reviewers, true
+}
+
+// Put stores the reviewer data. Failures are ignored.
+func (c *FileReviewerCache) Put(repo string, by map[int]RequestReviewers) {
+	b, err := json.Marshal(reviewerCacheFile{FetchedAt: c.clock(), Reviewers: by})
+	if err != nil || os.MkdirAll(c.Dir, 0o700) != nil {
+		return
+	}
+	tmp, err := os.CreateTemp(c.Dir, ".tmp-*")
+	if err != nil {
+		return
+	}
+	_, werr := tmp.Write(b)
+	cerr := tmp.Close()
+	if werr != nil || cerr != nil || os.Chmod(tmp.Name(), 0o600) != nil || os.Rename(tmp.Name(), c.file(repo)) != nil {
 		os.Remove(tmp.Name())
 	}
 }

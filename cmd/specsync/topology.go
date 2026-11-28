@@ -5,6 +5,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
+	"strconv"
 	"strings"
 
 	specsync "github.com/androidand/specsync"
@@ -21,6 +23,7 @@ type statusCmd struct {
 	all, asJSON      *bool
 	state            *string
 	everything       *bool
+	table, urls      *bool
 	budget           *string
 	exclude          stringSlice
 	sessions         sessionFlags
@@ -38,6 +41,8 @@ func (*statusCmd) Spec() Spec {
 		Examples: []string{
 			"specsync status",
 			"specsync status -everything",
+			"specsync status -table",
+			"specsync status -table -urls",
 			"specsync status -change my-change -json",
 			"specsync status -state=off",
 			"specsync status -state=fresh",
@@ -51,6 +56,8 @@ func (cm *statusCmd) Flags(fs *flag.FlagSet) {
 	cm.change = fs.String("change", "", "scope to one change (default: every change)")
 	cm.all = fs.Bool("all", false, "include archived changes")
 	cm.asJSON = fs.Bool("json", false, "output as JSON")
+	cm.table = fs.Bool("table", false, "print the work, its related issues and their pull requests as one table with checks and review state")
+	cm.urls = fs.Bool("urls", false, "with -table, list the issue and pull request URLs under the table (the table links them itself on a terminal)")
 	cm.everything = fs.Bool("everything", false, "list every change instead of the current work")
 	cm.budget = fs.String("budget", "", "advisory size budget for the size flags, e.g. files=15,lines=400,commits=30 (default: the change's budget line, then $SPECSYNC_BUDGET, then built-in limits)")
 	fs.Var(&cm.exclude, "exclude", "glob of paths left out of the size counts (repeatable), e.g. go.sum")
@@ -70,6 +77,12 @@ func (cm *statusCmd) run(args []string) {
 		fail(err)
 	}
 	checkArgs(fs, args, 0)
+	if *cm.urls && !*cm.table {
+		fail(fmt.Errorf("-urls needs -table"))
+	}
+	if *cm.table && *asJSON {
+		fail(fmt.Errorf("-table and -json can't be combined"))
+	}
 	if !validState(*state) {
 		fail(fmt.Errorf("-state must be on, fresh or off, got %q", *state))
 	}
@@ -112,12 +125,27 @@ func (cm *statusCmd) run(args []string) {
 		related = relatedWork(ctx, topo.Changes[0], *state)
 	}
 
+	{
+		// Reviewers are fetched for the rows that will be shown, and no others.
+		shown := append([]specsync.ChangeTopology(nil), topo.Changes...)
+		if related != nil {
+			shown = specsync.RelatedRows(topo.Changes[0], related)
+		}
+		topo.Status = append(topo.Status, attachReviewers(ctx, shown, *cm.table || *asJSON, *state)...)
+	}
+
 	switch {
 	case *asJSON:
 		emitJSON(struct {
 			*specsync.Topology
 			Related *specsync.RelatedWork `json:"related,omitempty"`
 		}{topo, related})
+	case *cm.table:
+		rows, key := topo.Changes, ""
+		if current && len(topo.Changes) == 1 {
+			rows, key = specsync.RelatedRows(topo.Changes[0], related), specsync.RowKey(topo.Changes[0])
+		}
+		printStatusTable(rows, key, topo.Status, *cm.urls, related)
 	case current && len(topo.Changes) == 1:
 		printCurrentStatus(topo.Changes[0], topo.RequestState == "ok")
 		printRelated(related)
@@ -478,4 +506,85 @@ func printRelatedItem(it specsync.RelatedItem, branch, current string) {
 		mark = "◄ you are here"
 	}
 	printWorkRow(*it.Row, branch, mark)
+}
+
+// tableWidth is the widest the status table may be: $COLUMNS when set, else the
+// terminal's width when output goes to one, else 140. Shells set COLUMNS but
+// rarely export it, so the terminal is asked directly; an explicit COLUMNS wins.
+func tableWidth() int {
+	return pickTableWidth(os.Getenv("COLUMNS"), func() int {
+		if !stdoutIsTerminal() {
+			return 0
+		}
+		cmd := exec.Command("stty", "size")
+		cmd.Stdin = os.Stdout
+		out, err := cmd.Output()
+		if err != nil {
+			return 0
+		}
+		if f := strings.Fields(string(out)); len(f) == 2 {
+			if n, err := strconv.Atoi(f[1]); err == nil {
+				return n
+			}
+		}
+		return 0
+	})
+}
+
+// pickTableWidth applies the order: a positive columns value, then the
+// terminal's width (0 when unknown or not a terminal), then 140. The terminal
+// is only asked when columns says nothing.
+func pickTableWidth(columns string, terminal func() int) int {
+	if n, err := strconv.Atoi(columns); err == nil && n > 0 {
+		return n
+	}
+	if n := terminal(); n > 0 {
+		return n
+	}
+	return 140
+}
+
+// printStatusTable prints rows as the status table, then what is missing or
+// uncertain about it.
+func printStatusTable(rows []specsync.ChangeTopology, current string, status []string, urls bool, related *specsync.RelatedWork) {
+	if len(rows) == 0 {
+		fmt.Println("No work resolved.")
+	} else {
+		fmt.Print(specsync.RenderStatusTable(rows, current, tableWidth(), stdoutIsTerminal()))
+		if urls {
+			for _, u := range specsync.StatusTableURLs(rows) {
+				fmt.Println(u)
+			}
+		}
+	}
+	for _, n := range specsync.StatusTableNotes(rows, status, related) {
+		fmt.Println(n)
+	}
+}
+
+// stdoutIsTerminal reports whether output goes to a terminal, where hyperlink
+// escapes work; piped or redirected output stays plain text.
+func stdoutIsTerminal() bool {
+	fi, err := os.Stdout.Stat()
+	return err == nil && fi.Mode()&os.ModeCharDevice != 0 && os.Getenv("TERM") != "dumb"
+}
+
+func reviewerCache() specsync.ReviewerCache {
+	if c := specsync.DefaultReviewerCache(); c != nil {
+		return c
+	}
+	return nil
+}
+
+// attachReviewers fills in reviewers for rows when the output needs them (the
+// table and JSON), under the same -state rule as the request listing: on reuses
+// recent data, fresh refetches, off asks nobody. Both status and overview call
+// it, so they cannot disagree.
+func attachReviewers(ctx context.Context, rows []specsync.ChangeTopology, wanted bool, state string) []string {
+	if !wanted {
+		return nil
+	}
+	return specsync.AttachReviewers(ctx, rows, specsync.ReviewerOptions{
+		Cache: reviewerCache(), Refresh: state == "fresh", Offline: state == "off",
+	})
 }
